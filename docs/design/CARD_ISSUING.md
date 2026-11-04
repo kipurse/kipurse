@@ -23,3 +23,24 @@ Also: a card balance is held by the issuer (prepaid / collateral), i.e. leaves s
 ## Owner decisions needed
 - Accept issuer-hosted KYC (issuer collects phone/address, Kipurse never stores it)?
 - Which entity applies; who signs program agreements; any setup fee.
+
+---
+# Decision update (t972, 2026-11-04) — owner approved issuer-hosted KYC, Kipurse stores nothing
+## Recommendation: Stripe Issuing + Bridge stablecoin-backed cards (backup: Rain)
+Why (sources read 2026-11-04):
+- **Lowest published cost:** Stripe Issuing virtual card $0.10 each (US/UK/EU), dispute $15, cross-border 1% + $0.30 (+1% FX) — docs.stripe.com/issuing/choose-cards; Lithic Starter also ~$0.10 but stablecoin is pilot and US/Canada only; Rain pricing is contract-only (not published).
+- **Widest acceptance/coverage:** Visa acceptance worldwide; stablecoin cards for cardholders in 60+ countries (US, LatAm, Caribbean, Africa, Asia) — docs.stripe.com/issuing/stablecoin-cards; Bridge blog 2026-04-29 (30 countries, 100+ planned by end of 2026).
+- **Keeps self-custody:** "Non-custodial wallet" funding source — Bridge pulls funds from the user's own wallet at authorization (no pooled Kipurse balance). Matches our no-pooled-custody rule.
+- **KYC fits the rule:** Bridge hosted KYC link (Persona) with `?endorsement=cards`; Kipurse stores only the Bridge customer id + Stripe cardholder id. Note: endorsement must be re-confirmed if no card is created within 24 h.
+- Built-in disputes/chargebacks on card payments (Stripe Issuing disputes) — also closes our "no chargeback protection" gap for card spend.
+To verify on the sales call: Base + USDC support for non-custodial funding (chain list), consumer-program availability for our cardholders' countries, Bridge fees on top of Stripe's, monthly minimums.
+
+Backup: **Rain** — Visa Principal Member, 150M+ merchants, Rain-managed per-user smart contract collateral (self-custody), ~6-week launch; pricing by contract.
+
+## Signup steps (company: Blessbridge Global Trading LLC)
+1. Stripe: use existing or new Stripe account for the company → Dashboard → Issuing → "Stablecoin-backed cards" → contact sales (public preview access). Needs: company KYB (EIN, registered address, beneficial owners), website (kipurse.com), program description (consumer prepaid/debit virtual cards for AI-agent purchases, self-custodial USDC funding, issuer-hosted KYC).
+2. Bridge: bridge.xyz → "Get started" developer account → sandbox API keys → request cards endorsement for production with the Stripe account linked.
+3. Compliance pack to send: docs/compliance/MONEY_TRANSMISSION.md, PRIVACY_TERMS_REVIEW.md, this plan, fee table (docs/fees/FEES.md).
+4. Sandbox build (no money): add `bridge-stripe` provider to server/src/v5/cards.mjs (single-use, amount- and merchant-locked virtual card, JIT funding from the AI's capped USDC), test in Bridge sandbox + Stripe test mode.
+5. Owner decisions at signing: contract terms, any minimums; card costs passed through in USDC from the wallet at actual cost (no new Kipurse fee).
+Owner action needed: the Stripe/Bridge signups are company accounts (new accounts) — I prepare everything, owner does the account creation and KYB.
