@@ -1,0 +1,41 @@
+name: contracts-security
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && bash install-deps.sh && forge test -vv
+  slither:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && bash install-deps.sh
+      - uses: crytic/slither-action@v0.4.0
+        with: {target: contracts, fail-on: high, slither-args: --filter-paths "lib|test|shim"}
+  echidna:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && bash install-deps.sh
+      - uses: crytic/echidna-action@v2
+        with: {files: contracts, contract: KipurseCapsEchidna, config: contracts/echidna.yaml, crytic-args: --foundry-ignore-compile}
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24}
+      - run: cd server && npm ci && npm test
+      - run: cd server/sdk && npm pack --dry-run
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
