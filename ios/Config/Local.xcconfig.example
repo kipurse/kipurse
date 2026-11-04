@@ -1,0 +1,9 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+KIPURSE_TEAM_ID = ABCDE12345
+KIPURSE_BUNDLE_ID_PREFIX = com.yourname.kipurse
+KIPURSE_SERVER = https:/$()/kipurse.example.com
+
+KIPURSE_MAINNET_SERVER = https:/$()/your-gateway.example
+KIPURSE_MAINNET_WALLET =
+KIPURSE_OWNER_ACCOUNT =
+KIPURSE_OWNER_PAY = NO

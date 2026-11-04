@@ -1,0 +1,836 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		085270EAC5F5125474FFA4E6 /* PhoneSigner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F89712D615EA903DB34501B8 /* PhoneSigner.swift */; };
+		09C4656B448640796C535213 /* ApplePayBuy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82FF6BBD380785348F389838 /* ApplePayBuy.swift */; };
+		0D09FFEC939FFDB1AC95FF96 /* KipurseWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544DE9EC147AE8C5ED3FF0C3 /* KipurseWidget.swift */; };
+		190200DA45BA9260505F2D56 /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C624B19DD6DF94179819DB /* Screens.swift */; };
+		1BED83179528500570E7CCF0 /* AssistantIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79CAF96997AD46E3271726F /* AssistantIntents.swift */; };
+		2A72CD8C510F019E70593D64 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 85A59316ED4B7F7B805DB92A /* PrivacyInfo.xcprivacy */; };
+		2BA1695CCF99BEEEA7189AD9 /* LifeTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A68F27E43DADFB69692A28 /* LifeTab.swift */; };
+		2F949E1C76F9793558FC6583 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A92422E979FDFFCE2C77D7A2 /* Assets.xcassets */; };
+		39B0D2A484A4C38205BB483A /* T934SecurityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC30CEF2C7BAB2962927EC8 /* T934SecurityUITests.swift */; };
+		3A2A9CB9FEF6541C6D1D74FD /* KipurseWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E70E3F61B68197B1B651F254 /* KipurseWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3B80737CED188C76D5906A63 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8769D4AD047FB563457EAE /* Theme.swift */; };
+		498768068D5F0B94AE3201FF /* AppShortcuts.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = EEDEAB2312153977A5CCA40E /* AppShortcuts.xcstrings */; };
+		4B28392EBB30A0485C61635F /* AppAttest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAA94647BC179D3125F507F /* AppAttest.swift */; };
+		534EC603A0B821A3B20FFDFD /* KipurseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4286CD038A07D3F65F15BC1A /* KipurseUITests.swift */; };
+		54B8C9CF97F95E688C153AD7 /* GasPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCE6B9E9CAEB316D6A0E8B7 /* GasPreflight.swift */; };
+		55C9FB70F18A5C2676122F0A /* PushBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8920AB7344DB8120795B4DA /* PushBridge.swift */; };
+		5851E5AA5D495E428EB11DA3 /* DemoGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060794A1318BAC056C1D0601 /* DemoGuard.swift */; };
+		61E435D468CA4EE653C4E1B8 /* BeginnerAuditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B333A1089615059D2313168E /* BeginnerAuditUITests.swift */; };
+		6404B6DA21CF5A5856D7BCC1 /* GasPreflightUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28A71C3FF8B99D66A157627B /* GasPreflightUITests.swift */; };
+		6A968AA09710B3E3A79ACE96 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = FA4F0C0CB6310733890652B6 /* InfoPlist.strings */; };
+		6E4776AFFC3BFA57C8A3FCF2 /* AllowancesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12B3E4799DD50E32B90D811 /* AllowancesView.swift */; };
+		6F51A8634856C2EAC14B979C /* MainnetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08977773B1A809D9E29FB42A /* MainnetViews.swift */; };
+		707AB496C10105069DE72A15 /* OfflineRescue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC227DB73A6A402E24F745A /* OfflineRescue.swift */; };
+		793E25D061CEA501EFF3D0B0 /* FirstUse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D1C11361CB36FBF633F5471 /* FirstUse.swift */; };
+		7C0AD7B6C55D71B3A7A3B5E9 /* SiriPay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5793E0897604DEEAC7BA645 /* SiriPay.swift */; };
+		7CB627523DC8ED9C4ABA887E /* I18nUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662FEDAA82E06B24995A4F1B /* I18nUITests.swift */; };
+		7DC76387EDC98D35BBF5804E /* SharedSpend.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8989895B19F27D2A589D8B3 /* SharedSpend.swift */; };
+		820FCCFCF747FB6AD1088DFB /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF29C06E634E06999FE4A4EC /* Platform.swift */; };
+		83165D81436D981A00451A88 /* Awareness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A419CFC0A6711C97EF597E9 /* Awareness.swift */; };
+		840022E2DB7C6F36D40FE759 /* ConnectApprove.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0097A9CB818EB0EBA3411B07 /* ConnectApprove.swift */; };
+		8C215F59BB37490D5F0A6AC6 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3875DBAED8E9B6C772AEF486 /* AppModel.swift */; };
+		923F2C2C774437ED6F2C8F25 /* DeleteAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D48113EEA12AB1DDFB876D /* DeleteAccount.swift */; };
+		9C4128965BF85D61088AF2FA /* AssistantEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4E3ED7C6BB1C947BD8A9BD /* AssistantEntities.swift */; };
+		A40D32A8EBB38C0DB993AC39 /* MuseConnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F949780F6985508F3DC472F /* MuseConnect.swift */; };
+		A4230B0EF8713526725AAE5E /* AssistantHooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE053823CA65D9186F37DF9 /* AssistantHooks.swift */; };
+		AB64927FDACEBACA31A9096C /* AppModelDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE200A261DAC42C9B68ACE4 /* AppModelDemo.swift */; };
+		AD29F5903E827393B25E0594 /* Batch2UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCDAFBB70A39FB6581B5C071 /* Batch2UITests.swift */; };
+		AD5B4DA354F269E897CC08CE /* T927AuditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00BB8F496A02B96D121B8136 /* T927AuditUITests.swift */; };
+		AE67EA21A9DD8420C7503B31 /* UITourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4276D9FF9370AB58E53C44AF /* UITourUITests.swift */; };
+		AEF0E2ED1110B3809083E3D8 /* AssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C283DFC62AD6F23F57E9D34D /* AssistantUITests.swift */; };
+		B1031CC46A42BD36BCF1E6EA /* SiriIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = C359B9890CBD4DD6A3E7C6B7 /* SiriIntro.swift */; };
+		B2C60B00CBF5EAC0BB5684E3 /* AssistantStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61693299059230B651D8F90E /* AssistantStore.swift */; };
+		B426C77BF74B006BFE4BED58 /* CoinbaseVerifyGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C48E2650B5778AA5FAE589 /* CoinbaseVerifyGuide.swift */; };
+		B497C2BD33A7D587DF7C84CB /* T820OutageDrillUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36089BFED07F6E1AFA4734BD /* T820OutageDrillUITests.swift */; };
+		B6AEC5B5A5340BAC0D1DA1B8 /* Tutorials.swift in Sources */ = {isa = PBXBuildFile; fileRef = F628F7B591B1F4F26E919ABB /* Tutorials.swift */; };
+		B8D09D443C2BA3722FF19DC1 /* PhoneReplaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B393911D9A9DA63084200BB /* PhoneReplaceUITests.swift */; };
+		BB42F082A13A1F3CDA93DF47 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C603E34F86D182BCB5FFAD /* Components.swift */; };
+		C0EFBB90EEA5F3D4128EC1F8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7FFFA0E1C7018ADCDA2B7786 /* Localizable.xcstrings */; };
+		C428466CF7F301D45CFC7A92 /* SimpleMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730086D83A6EF00788DE449F /* SimpleMode.swift */; };
+		C7D629324C63A50BBE3086DD /* AssistantPayIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C7FF6B7FC519480FA93A538 /* AssistantPayIntents.swift */; };
+		CE19BD62820FC039CE3EA45D /* SharedSpend.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8989895B19F27D2A589D8B3 /* SharedSpend.swift */; };
+		D0F3F1A1E44682F7E927BDDC /* ReviewDemoUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D699F4C0560847754AE5437 /* ReviewDemoUITests.swift */; };
+		D559CBD362C6DCC9F4B39EB4 /* SafetyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3613F5E1897F47FB1ED592C5 /* SafetyPanel.swift */; };
+		D6CEB484818F2E8F54A17814 /* MoneyFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C34DE0ED5748781AB62C0F7B /* MoneyFlows.swift */; };
+		DD2A4313B17DEA4A5BA3A861 /* KipurseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D6A82FECE22029346AD38E /* KipurseApp.swift */; };
+		E83F6B4D249DBBCAE2DEB43F /* KipurseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8550105EFB5125E3550E6D07 /* KipurseCore */; };
+		F458E9332CADB146C56FDC82 /* CoinbaseSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA1B510922582764B78320D /* CoinbaseSignIn.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3333153FDF1733C344D3247D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 350EDB3030ED9325C355D32B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9ADF437013C1E6E1C10EEE4D;
+			remoteInfo = Kipurse;
+		};
+		3AE33EF2DD789779281AC0D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 350EDB3030ED9325C355D32B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 280952352B9C1CAAFA83A0DD;
+			remoteInfo = KipurseWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		28E06305A4B44B458600ED5B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3A2A9CB9FEF6541C6D1D74FD /* KipurseWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0097A9CB818EB0EBA3411B07 /* ConnectApprove.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectApprove.swift; sourceTree = "<group>"; };
+		00BB8F496A02B96D121B8136 /* T927AuditUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T927AuditUITests.swift; sourceTree = "<group>"; };
+		03C48E2650B5778AA5FAE589 /* CoinbaseVerifyGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinbaseVerifyGuide.swift; sourceTree = "<group>"; };
+		060794A1318BAC056C1D0601 /* DemoGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoGuard.swift; sourceTree = "<group>"; };
+		08977773B1A809D9E29FB42A /* MainnetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainnetViews.swift; sourceTree = "<group>"; };
+		0B393911D9A9DA63084200BB /* PhoneReplaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneReplaceUITests.swift; sourceTree = "<group>"; };
+		0FC30CEF2C7BAB2962927EC8 /* T934SecurityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T934SecurityUITests.swift; sourceTree = "<group>"; };
+		25D48113EEA12AB1DDFB876D /* DeleteAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccount.swift; sourceTree = "<group>"; };
+		28A71C3FF8B99D66A157627B /* GasPreflightUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GasPreflightUITests.swift; sourceTree = "<group>"; };
+		2FA1B510922582764B78320D /* CoinbaseSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinbaseSignIn.swift; sourceTree = "<group>"; };
+		36089BFED07F6E1AFA4734BD /* T820OutageDrillUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T820OutageDrillUITests.swift; sourceTree = "<group>"; };
+		3613F5E1897F47FB1ED592C5 /* SafetyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyPanel.swift; sourceTree = "<group>"; };
+		3875DBAED8E9B6C772AEF486 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		38F366FA787A715F79A49A74 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3C4E3ED7C6BB1C947BD8A9BD /* AssistantEntities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantEntities.swift; sourceTree = "<group>"; };
+		3FC227DB73A6A402E24F745A /* OfflineRescue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRescue.swift; sourceTree = "<group>"; };
+		4276D9FF9370AB58E53C44AF /* UITourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITourUITests.swift; sourceTree = "<group>"; };
+		4286CD038A07D3F65F15BC1A /* KipurseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KipurseUITests.swift; sourceTree = "<group>"; };
+		4F949780F6985508F3DC472F /* MuseConnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuseConnect.swift; sourceTree = "<group>"; };
+		544DE9EC147AE8C5ED3FF0C3 /* KipurseWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KipurseWidget.swift; sourceTree = "<group>"; };
+		59A68F27E43DADFB69692A28 /* LifeTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeTab.swift; sourceTree = "<group>"; };
+		5D699F4C0560847754AE5437 /* ReviewDemoUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDemoUITests.swift; sourceTree = "<group>"; };
+		5F0B01AE0FC944A295DF1923 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		61693299059230B651D8F90E /* AssistantStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantStore.swift; sourceTree = "<group>"; };
+		662FEDAA82E06B24995A4F1B /* I18nUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = I18nUITests.swift; sourceTree = "<group>"; };
+		6EE7616671B8F4402F702FA5 /* Kipurse.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Kipurse.xcconfig; sourceTree = "<group>"; };
+		730086D83A6EF00788DE449F /* SimpleMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleMode.swift; sourceTree = "<group>"; };
+		74D6A82FECE22029346AD38E /* KipurseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KipurseApp.swift; sourceTree = "<group>"; };
+		77628BFF5D1AFAEFF176B19B /* KipurseWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KipurseWidget.entitlements; sourceTree = "<group>"; };
+		79ACC71016845989184D7D45 /* Kipurse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kipurse.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C7FF6B7FC519480FA93A538 /* AssistantPayIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantPayIntents.swift; sourceTree = "<group>"; };
+		7FFFA0E1C7018ADCDA2B7786 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		82FF6BBD380785348F389838 /* ApplePayBuy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplePayBuy.swift; sourceTree = "<group>"; };
+		85A59316ED4B7F7B805DB92A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		8A419CFC0A6711C97EF597E9 /* Awareness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Awareness.swift; sourceTree = "<group>"; };
+		8AE200A261DAC42C9B68ACE4 /* AppModelDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelDemo.swift; sourceTree = "<group>"; };
+		9D1C11361CB36FBF633F5471 /* FirstUse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstUse.swift; sourceTree = "<group>"; };
+		9DCE6B9E9CAEB316D6A0E8B7 /* GasPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GasPreflight.swift; sourceTree = "<group>"; };
+		A12B3E4799DD50E32B90D811 /* AllowancesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllowancesView.swift; sourceTree = "<group>"; };
+		A5793E0897604DEEAC7BA645 /* SiriPay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriPay.swift; sourceTree = "<group>"; };
+		A79CAF96997AD46E3271726F /* AssistantIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantIntents.swift; sourceTree = "<group>"; };
+		A92422E979FDFFCE2C77D7A2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B333A1089615059D2313168E /* BeginnerAuditUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeginnerAuditUITests.swift; sourceTree = "<group>"; };
+		BC622BE3F247C97E8B409657 /* KipurseUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KipurseUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C283DFC62AD6F23F57E9D34D /* AssistantUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantUITests.swift; sourceTree = "<group>"; };
+		C34DE0ED5748781AB62C0F7B /* MoneyFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyFlows.swift; sourceTree = "<group>"; };
+		C359B9890CBD4DD6A3E7C6B7 /* SiriIntro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriIntro.swift; sourceTree = "<group>"; };
+		C8920AB7344DB8120795B4DA /* PushBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushBridge.swift; sourceTree = "<group>"; };
+		C8989895B19F27D2A589D8B3 /* SharedSpend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpend.swift; sourceTree = "<group>"; };
+		CCDAFBB70A39FB6581B5C071 /* Batch2UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Batch2UITests.swift; sourceTree = "<group>"; };
+		CF8769D4AD047FB563457EAE /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		DF29C06E634E06999FE4A4EC /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
+		DF3266D9018A52DC2D1CDCA6 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = .; sourceTree = SOURCE_ROOT; };
+		E08D3B824DC532F7A059BED5 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		E1C624B19DD6DF94179819DB /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
+		E70E3F61B68197B1B651F254 /* KipurseWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = KipurseWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EBE053823CA65D9186F37DF9 /* AssistantHooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantHooks.swift; sourceTree = "<group>"; };
+		EEDEAB2312153977A5CCA40E /* AppShortcuts.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = AppShortcuts.xcstrings; sourceTree = "<group>"; };
+		F2C603E34F86D182BCB5FFAD /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		F628F7B591B1F4F26E919ABB /* Tutorials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tutorials.swift; sourceTree = "<group>"; };
+		F89712D615EA903DB34501B8 /* PhoneSigner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSigner.swift; sourceTree = "<group>"; };
+		FDAA94647BC179D3125F507F /* AppAttest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttest.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1DE7EAB189EA4A50C853C3EC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E83F6B4D249DBBCAE2DEB43F /* KipurseCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05D53684D133A81EAB32608F /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A12B3E4799DD50E32B90D811 /* AllowancesView.swift */,
+				FDAA94647BC179D3125F507F /* AppAttest.swift */,
+				82FF6BBD380785348F389838 /* ApplePayBuy.swift */,
+				3875DBAED8E9B6C772AEF486 /* AppModel.swift */,
+				8AE200A261DAC42C9B68ACE4 /* AppModelDemo.swift */,
+				EBE053823CA65D9186F37DF9 /* AssistantHooks.swift */,
+				8A419CFC0A6711C97EF597E9 /* Awareness.swift */,
+				2FA1B510922582764B78320D /* CoinbaseSignIn.swift */,
+				03C48E2650B5778AA5FAE589 /* CoinbaseVerifyGuide.swift */,
+				F2C603E34F86D182BCB5FFAD /* Components.swift */,
+				0097A9CB818EB0EBA3411B07 /* ConnectApprove.swift */,
+				25D48113EEA12AB1DDFB876D /* DeleteAccount.swift */,
+				060794A1318BAC056C1D0601 /* DemoGuard.swift */,
+				9D1C11361CB36FBF633F5471 /* FirstUse.swift */,
+				9DCE6B9E9CAEB316D6A0E8B7 /* GasPreflight.swift */,
+				74D6A82FECE22029346AD38E /* KipurseApp.swift */,
+				59A68F27E43DADFB69692A28 /* LifeTab.swift */,
+				08977773B1A809D9E29FB42A /* MainnetViews.swift */,
+				C34DE0ED5748781AB62C0F7B /* MoneyFlows.swift */,
+				4F949780F6985508F3DC472F /* MuseConnect.swift */,
+				3FC227DB73A6A402E24F745A /* OfflineRescue.swift */,
+				F89712D615EA903DB34501B8 /* PhoneSigner.swift */,
+				DF29C06E634E06999FE4A4EC /* Platform.swift */,
+				C8920AB7344DB8120795B4DA /* PushBridge.swift */,
+				3613F5E1897F47FB1ED592C5 /* SafetyPanel.swift */,
+				E1C624B19DD6DF94179819DB /* Screens.swift */,
+				730086D83A6EF00788DE449F /* SimpleMode.swift */,
+				C359B9890CBD4DD6A3E7C6B7 /* SiriIntro.swift */,
+				A5793E0897604DEEAC7BA645 /* SiriPay.swift */,
+				CF8769D4AD047FB563457EAE /* Theme.swift */,
+				F628F7B591B1F4F26E919ABB /* Tutorials.swift */,
+			);
+			name = Sources;
+			path = App/Sources;
+			sourceTree = "<group>";
+		};
+		078B03991A5CFD831E50D21A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				79ACC71016845989184D7D45 /* Kipurse.app */,
+				BC622BE3F247C97E8B409657 /* KipurseUITests.xctest */,
+				E70E3F61B68197B1B651F254 /* KipurseWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2727641FBFC95D9859E6870A /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				C8989895B19F27D2A589D8B3 /* SharedSpend.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		606A0BBE49C000B6B90B270E /* Assistant */ = {
+			isa = PBXGroup;
+			children = (
+				3C4E3ED7C6BB1C947BD8A9BD /* AssistantEntities.swift */,
+				A79CAF96997AD46E3271726F /* AssistantIntents.swift */,
+				7C7FF6B7FC519480FA93A538 /* AssistantPayIntents.swift */,
+				61693299059230B651D8F90E /* AssistantStore.swift */,
+			);
+			name = Assistant;
+			path = App/Assistant;
+			sourceTree = "<group>";
+		};
+		72E810E8A676754BA4070709 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				C283DFC62AD6F23F57E9D34D /* AssistantUITests.swift */,
+				CCDAFBB70A39FB6581B5C071 /* Batch2UITests.swift */,
+				B333A1089615059D2313168E /* BeginnerAuditUITests.swift */,
+				28A71C3FF8B99D66A157627B /* GasPreflightUITests.swift */,
+				662FEDAA82E06B24995A4F1B /* I18nUITests.swift */,
+				4286CD038A07D3F65F15BC1A /* KipurseUITests.swift */,
+				0B393911D9A9DA63084200BB /* PhoneReplaceUITests.swift */,
+				5D699F4C0560847754AE5437 /* ReviewDemoUITests.swift */,
+				36089BFED07F6E1AFA4734BD /* T820OutageDrillUITests.swift */,
+				00BB8F496A02B96D121B8136 /* T927AuditUITests.swift */,
+				0FC30CEF2C7BAB2962927EC8 /* T934SecurityUITests.swift */,
+				4276D9FF9370AB58E53C44AF /* UITourUITests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		768C6FFC20526D4C1F9605C4 /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				38F366FA787A715F79A49A74 /* Info.plist */,
+				77628BFF5D1AFAEFF176B19B /* KipurseWidget.entitlements */,
+				544DE9EC147AE8C5ED3FF0C3 /* KipurseWidget.swift */,
+			);
+			path = Widget;
+			sourceTree = "<group>";
+		};
+		7BCE75951DA3E16ECCD4FD15 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				EEDEAB2312153977A5CCA40E /* AppShortcuts.xcstrings */,
+				A92422E979FDFFCE2C77D7A2 /* Assets.xcassets */,
+				7FFFA0E1C7018ADCDA2B7786 /* Localizable.xcstrings */,
+				85A59316ED4B7F7B805DB92A /* PrivacyInfo.xcprivacy */,
+				FA4F0C0CB6310733890652B6 /* InfoPlist.strings */,
+			);
+			name = Resources;
+			path = App/Resources;
+			sourceTree = "<group>";
+		};
+		935B534F05D7F75D6BB446CE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				6EE7616671B8F4402F702FA5 /* Kipurse.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		A27346DBBE9B01E8FBE12AC7 = {
+			isa = PBXGroup;
+			children = (
+				606A0BBE49C000B6B90B270E /* Assistant */,
+				935B534F05D7F75D6BB446CE /* Config */,
+				F1B5475276A9674BC6E68020 /* Packages */,
+				7BCE75951DA3E16ECCD4FD15 /* Resources */,
+				2727641FBFC95D9859E6870A /* Shared */,
+				05D53684D133A81EAB32608F /* Sources */,
+				72E810E8A676754BA4070709 /* UITests */,
+				768C6FFC20526D4C1F9605C4 /* Widget */,
+				078B03991A5CFD831E50D21A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F1B5475276A9674BC6E68020 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				DF3266D9018A52DC2D1CDCA6 /* ios */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		280952352B9C1CAAFA83A0DD /* KipurseWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 96237FFC3F38E3935D56B103 /* Build configuration list for PBXNativeTarget "KipurseWidget" */;
+			buildPhases = (
+				04B44CE172E53A5178F04522 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KipurseWidget;
+			packageProductDependencies = (
+			);
+			productName = KipurseWidget;
+			productReference = E70E3F61B68197B1B651F254 /* KipurseWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		9092A590B9AEEFD5BBCE4794 /* KipurseUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ECE36C381C3E66E624D69540 /* Build configuration list for PBXNativeTarget "KipurseUITests" */;
+			buildPhases = (
+				F88A8BB0AEC69DD79944DCE8 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B560C2DD8655C98BDB865B16 /* PBXTargetDependency */,
+			);
+			name = KipurseUITests;
+			packageProductDependencies = (
+			);
+			productName = KipurseUITests;
+			productReference = BC622BE3F247C97E8B409657 /* KipurseUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9ADF437013C1E6E1C10EEE4D /* Kipurse */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D61B4EC976C69E4599BD59F4 /* Build configuration list for PBXNativeTarget "Kipurse" */;
+			buildPhases = (
+				C6A53AF682A02943761605CE /* Sources */,
+				48F1B74289CDDDF8E6DDC9C8 /* Resources */,
+				1DE7EAB189EA4A50C853C3EC /* Frameworks */,
+				28E06305A4B44B458600ED5B /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DF2DC80DF0206514AAEEE494 /* PBXTargetDependency */,
+			);
+			name = Kipurse;
+			packageProductDependencies = (
+				8550105EFB5125E3550E6D07 /* KipurseCore */,
+			);
+			productName = Kipurse;
+			productReference = 79ACC71016845989184D7D45 /* Kipurse.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		350EDB3030ED9325C355D32B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					280952352B9C1CAAFA83A0DD = {
+						DevelopmentTeam = "$(KIPURSE_TEAM_ID)";
+						ProvisioningStyle = Automatic;
+					};
+					9092A590B9AEEFD5BBCE4794 = {
+						DevelopmentTeam = "$(KIPURSE_TEAM_ID)";
+						ProvisioningStyle = Automatic;
+						TestTargetID = 9ADF437013C1E6E1C10EEE4D;
+					};
+					9ADF437013C1E6E1C10EEE4D = {
+						DevelopmentTeam = "$(KIPURSE_TEAM_ID)";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6FDD3B541372F6148C0C82C0 /* Build configuration list for PBXProject "Kipurse" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				"zh-Hans",
+			);
+			mainGroup = A27346DBBE9B01E8FBE12AC7;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AAB72E13E5F2BF944C9E0F76 /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 078B03991A5CFD831E50D21A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9ADF437013C1E6E1C10EEE4D /* Kipurse */,
+				9092A590B9AEEFD5BBCE4794 /* KipurseUITests */,
+				280952352B9C1CAAFA83A0DD /* KipurseWidget */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		48F1B74289CDDDF8E6DDC9C8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				498768068D5F0B94AE3201FF /* AppShortcuts.xcstrings in Resources */,
+				2F949E1C76F9793558FC6583 /* Assets.xcassets in Resources */,
+				6A968AA09710B3E3A79ACE96 /* InfoPlist.strings in Resources */,
+				C0EFBB90EEA5F3D4128EC1F8 /* Localizable.xcstrings in Resources */,
+				2A72CD8C510F019E70593D64 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		04B44CE172E53A5178F04522 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D09FFEC939FFDB1AC95FF96 /* KipurseWidget.swift in Sources */,
+				7DC76387EDC98D35BBF5804E /* SharedSpend.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C6A53AF682A02943761605CE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E4776AFFC3BFA57C8A3FCF2 /* AllowancesView.swift in Sources */,
+				4B28392EBB30A0485C61635F /* AppAttest.swift in Sources */,
+				8C215F59BB37490D5F0A6AC6 /* AppModel.swift in Sources */,
+				AB64927FDACEBACA31A9096C /* AppModelDemo.swift in Sources */,
+				09C4656B448640796C535213 /* ApplePayBuy.swift in Sources */,
+				9C4128965BF85D61088AF2FA /* AssistantEntities.swift in Sources */,
+				A4230B0EF8713526725AAE5E /* AssistantHooks.swift in Sources */,
+				1BED83179528500570E7CCF0 /* AssistantIntents.swift in Sources */,
+				C7D629324C63A50BBE3086DD /* AssistantPayIntents.swift in Sources */,
+				B2C60B00CBF5EAC0BB5684E3 /* AssistantStore.swift in Sources */,
+				83165D81436D981A00451A88 /* Awareness.swift in Sources */,
+				F458E9332CADB146C56FDC82 /* CoinbaseSignIn.swift in Sources */,
+				B426C77BF74B006BFE4BED58 /* CoinbaseVerifyGuide.swift in Sources */,
+				BB42F082A13A1F3CDA93DF47 /* Components.swift in Sources */,
+				840022E2DB7C6F36D40FE759 /* ConnectApprove.swift in Sources */,
+				923F2C2C774437ED6F2C8F25 /* DeleteAccount.swift in Sources */,
+				5851E5AA5D495E428EB11DA3 /* DemoGuard.swift in Sources */,
+				793E25D061CEA501EFF3D0B0 /* FirstUse.swift in Sources */,
+				54B8C9CF97F95E688C153AD7 /* GasPreflight.swift in Sources */,
+				DD2A4313B17DEA4A5BA3A861 /* KipurseApp.swift in Sources */,
+				2BA1695CCF99BEEEA7189AD9 /* LifeTab.swift in Sources */,
+				6F51A8634856C2EAC14B979C /* MainnetViews.swift in Sources */,
+				D6CEB484818F2E8F54A17814 /* MoneyFlows.swift in Sources */,
+				A40D32A8EBB38C0DB993AC39 /* MuseConnect.swift in Sources */,
+				707AB496C10105069DE72A15 /* OfflineRescue.swift in Sources */,
+				085270EAC5F5125474FFA4E6 /* PhoneSigner.swift in Sources */,
+				820FCCFCF747FB6AD1088DFB /* Platform.swift in Sources */,
+				55C9FB70F18A5C2676122F0A /* PushBridge.swift in Sources */,
+				D559CBD362C6DCC9F4B39EB4 /* SafetyPanel.swift in Sources */,
+				190200DA45BA9260505F2D56 /* Screens.swift in Sources */,
+				CE19BD62820FC039CE3EA45D /* SharedSpend.swift in Sources */,
+				C428466CF7F301D45CFC7A92 /* SimpleMode.swift in Sources */,
+				B1031CC46A42BD36BCF1E6EA /* SiriIntro.swift in Sources */,
+				7C0AD7B6C55D71B3A7A3B5E9 /* SiriPay.swift in Sources */,
+				3B80737CED188C76D5906A63 /* Theme.swift in Sources */,
+				B6AEC5B5A5340BAC0D1DA1B8 /* Tutorials.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F88A8BB0AEC69DD79944DCE8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AEF0E2ED1110B3809083E3D8 /* AssistantUITests.swift in Sources */,
+				AD29F5903E827393B25E0594 /* Batch2UITests.swift in Sources */,
+				61E435D468CA4EE653C4E1B8 /* BeginnerAuditUITests.swift in Sources */,
+				6404B6DA21CF5A5856D7BCC1 /* GasPreflightUITests.swift in Sources */,
+				7CB627523DC8ED9C4ABA887E /* I18nUITests.swift in Sources */,
+				534EC603A0B821A3B20FFDFD /* KipurseUITests.swift in Sources */,
+				B8D09D443C2BA3722FF19DC1 /* PhoneReplaceUITests.swift in Sources */,
+				D0F3F1A1E44682F7E927BDDC /* ReviewDemoUITests.swift in Sources */,
+				B497C2BD33A7D587DF7C84CB /* T820OutageDrillUITests.swift in Sources */,
+				AD5B4DA354F269E897CC08CE /* T927AuditUITests.swift in Sources */,
+				39B0D2A484A4C38205BB483A /* T934SecurityUITests.swift in Sources */,
+				AE67EA21A9DD8420C7503B31 /* UITourUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B560C2DD8655C98BDB865B16 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9ADF437013C1E6E1C10EEE4D /* Kipurse */;
+			targetProxy = 3333153FDF1733C344D3247D /* PBXContainerItemProxy */;
+		};
+		DF2DC80DF0206514AAEEE494 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 280952352B9C1CAAFA83A0DD /* KipurseWidget */;
+			targetProxy = 3AE33EF2DD789779281AC0D6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		FA4F0C0CB6310733890652B6 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				5F0B01AE0FC944A295DF1923 /* en */,
+				E08D3B824DC532F7A059BED5 /* zh-Hans */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		0137110E271D61EF6CA424A4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -DKP_OWNER_PAY_$(KIPURSE_OWNER_PAY) -DKP_VARIANT_$(KIPURSE_DEBUG_SUFFIX)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Kipurse;
+			};
+			name = Release;
+		};
+		064A3CDAA8F5C05D7991F092 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6EE7616671B8F4402F702FA5 /* Kipurse.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "$(KIPURSE_TEAM_ID)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		69D8FDB31BD6A050C59B2EFA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Kipurse.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_DEBUG_DYLIB = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				KIPURSE_ONBOARD = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -DKP_ASSISTANT";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).app";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		89CA754980384CE08A3C8555 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -DKP_OWNER_PAY_$(KIPURSE_OWNER_PAY) -DKP_VARIANT_$(KIPURSE_DEBUG_SUFFIX)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Kipurse;
+			};
+			name = Debug;
+		};
+		9120E0A522CD79DF5C78E591 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6EE7616671B8F4402F702FA5 /* Kipurse.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "$(KIPURSE_TEAM_ID)";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		9B910EBB797FABC8F25D7DB9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widget/KipurseWidget.entitlements;
+				INFOPLIST_FILE = Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).app.widget";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C42EB3229D206273ED309EA7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widget/KipurseWidget.entitlements;
+				INFOPLIST_FILE = Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX).widget";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E3D792CC22D92B2EE8F4693C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Kipurse.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_DEBUG_DYLIB = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				KIPURSE_ONBOARD = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -DKP_ASSISTANT";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6FDD3B541372F6148C0C82C0 /* Build configuration list for PBXProject "Kipurse" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				064A3CDAA8F5C05D7991F092 /* Debug */,
+				9120E0A522CD79DF5C78E591 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		96237FFC3F38E3935D56B103 /* Build configuration list for PBXNativeTarget "KipurseWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C42EB3229D206273ED309EA7 /* Debug */,
+				9B910EBB797FABC8F25D7DB9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D61B4EC976C69E4599BD59F4 /* Build configuration list for PBXNativeTarget "Kipurse" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E3D792CC22D92B2EE8F4693C /* Debug */,
+				69D8FDB31BD6A050C59B2EFA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ECE36C381C3E66E624D69540 /* Build configuration list for PBXNativeTarget "KipurseUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89CA754980384CE08A3C8555 /* Debug */,
+				0137110E271D61EF6CA424A4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AAB72E13E5F2BF944C9E0F76 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8550105EFB5125E3550E6D07 /* KipurseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KipurseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 350EDB3030ED9325C355D32B /* Project object */;
+}

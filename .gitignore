@@ -1,0 +1,34 @@
+# Build output
+DerivedData*/
+build/
+.build/
+.swiftpm/
+*.xcresult
+*.xcarchive
+xcuserdata/
+# Local config and secrets — never commit
+ios/Config/Local.xcconfig
+.env
+.env.*
+!.env.example
+secrets/
+session-key.json
+ops-signer.json
+*.pem
+*.p8
+*.key
+# Node / state
+node_modules
+coverage/
+dist/
+state/
+*.sqlite*
+*.db
+policy.local.json
+.agent-continuity/
+# Misc
+*.log
+*.tgz
+*.bak*
+*.removed*
+.DS_Store

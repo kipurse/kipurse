@@ -1,0 +1,25 @@
+// Build settings for Kipurse. Nothing personal is committed: put your own values in Config/Local.xcconfig (git-ignored),
+// copied from Config/Local.xcconfig.example. Values below are neutral defaults that build for the simulator.
+KIPURSE_TEAM_ID =
+KIPURSE_BUNDLE_ID_PREFIX = org.example.kipurse
+// Default server the app migrates temporary (*.trycloudflare.com) sessions to; empty = never migrate. "/$()/" keeps "//" out of xcconfig comments.
+KIPURSE_SERVER =
+// Operator mainnet server, the single-user wallet (multi-user builds learn it at enrollment), the owner's own account (warning only).
+KIPURSE_MAINNET_SERVER =
+KIPURSE_MAINNET_WALLET =
+KIPURSE_OWNER_ACCOUNT =
+// Owner-initiated payments (Siri/App). NO by default; only test builds against a fork/testnet turn it on.
+KIPURSE_OWNER_PAY = NO
+// New-user onboarding switch (Info.plist KipurseOnboard). NO by default; Release sets YES in project.yml.
+KIPURSE_ONBOARD = NO
+// Chain RPC for the network-fee preflight (user pays own gas). Empty = preflight off. Test/fork builds set it.
+KIPURSE_CHAIN_RPC =
+// Variant knobs (a separate test build overrides these; defaults keep the normal app unchanged).
+KIPURSE_DEBUG_SUFFIX = test
+KIPURSE_DISPLAY_NAME = Kipurse
+KIPURSE_GROUP_SUFFIX =
+// Names Siri also accepts for the app (spoken synonyms for \(.applicationName)).
+KIPURSE_SIRI_NAME_1 = Kipurse
+KIPURSE_SIRI_NAME_2 = 启付
+KIPURSE_SIRI_NAME_3 = Key Purse
+#include? "Local.xcconfig"

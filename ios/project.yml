@@ -1,0 +1,129 @@
+# XcodeGen: `brew install xcodegen && xcodegen generate && open Kipurse.xcodeproj`
+name: Kipurse
+options:
+  bundleIdPrefix: org.example.kipurse
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Kipurse.xcconfig
+  Release: Config/Kipurse.xcconfig
+  deploymentTarget: { iOS: "16.0" }
+packages:
+  KipurseCore: { path: . }
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: $(KIPURSE_TEAM_ID)   # from Config/Local.xcconfig
+targets:
+  Kipurse:
+    type: application
+    platform: iOS
+    sources:   # t784: never bundle backup copies (*.bak*, *.orig)
+      - path: App/Sources
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+      - path: App/Resources
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+      - path: Shared
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+      - path: App/Assistant
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+    # App/Assistant = optional Siri / Spotlight module (remove it + KP_ASSISTANT below)
+    entitlements:
+      path: App/Kipurse.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(KIPURSE_BUNDLE_ID_PREFIX)$(KIPURSE_GROUP_SUFFIX)]
+        aps-environment: development
+        com.apple.developer.devicecheck.appattest-environment: production   # t629 App Attest (owner approved)
+        keychain-access-groups: ["$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).keys", "$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).app", "$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)"]   # phone key survives variant / bundle changes
+    dependencies: [{ package: KipurseCore }, { target: KipurseWidget }]
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"   # iPhone-only (portrait); avoids iPad multitasking orientation rule
+        OTHER_SWIFT_FLAGS: "$(inherited) -DKP_ASSISTANT"
+        ENABLE_DEBUG_DYLIB: NO   # one real executable that links AppIntents itself (Siri / Shortcuts registration on device)
+      configs:
+        Debug:   { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)", KIPURSE_ONBOARD: "YES" }   # t769u: Debug test build must show the Face ID / setup button
+        Release: { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app", KIPURSE_ONBOARD: "YES" }   # new-user onboarding (owner approved 2026-10-24)
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "2"
+        KipurseKeyGroup: $(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).keys
+        CFBundleDisplayName: $(KIPURSE_DISPLAY_NAME)
+        INAlternativeAppNames:
+          - { INAlternativeAppName: $(KIPURSE_SIRI_NAME_1) }
+          - { INAlternativeAppName: $(KIPURSE_SIRI_NAME_2) }
+          - { INAlternativeAppName: $(KIPURSE_SIRI_NAME_3) }
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: { UIColorName: LaunchBackground, UIImageName: LaunchLogo }
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
+        KipurseServer: $(KIPURSE_SERVER)
+        KipurseMainnetServer: $(KIPURSE_MAINNET_SERVER)
+        KipurseOwnerPay: $(KIPURSE_OWNER_PAY)
+        KipurseOnboard: $(KIPURSE_ONBOARD)
+        KipurseChainRPC: $(KIPURSE_CHAIN_RPC)
+        KipurseRescuePages: "https://kipurse.github.io/rescue/|597556f138f7d6181579399bfe3ad33400efed578e74fcdf1cdec737c2964e90,https://blush-managerial-damselfly-70.mypinata.cloud/ipfs/bafybeibumfy3tdutd7onrqsi5u4olhovawh3fl5oak7vgkbgkekonnrz4i/|597556f138f7d6181579399bfe3ad33400efed578e74fcdf1cdec737c2964e90"   # t838 primary GitHub Pages, backup IPFS; index.html sha256 pinned
+        KipurseAppGroup: group.$(KIPURSE_BUNDLE_ID_PREFIX)$(KIPURSE_GROUP_SUFFIX)
+        NSSupportsLiveActivities: true
+        CFBundleDevelopmentRegion: en
+        CFBundleAllowMixedLocalizations: true
+        NSCameraUsageDescription: Scan the sign-in code or a receiving address.
+        NSFaceIDUsageDescription: Confirm it's you before approving payments, withdrawals and limit changes.
+        LSApplicationQueriesSchemes: [grokbot, com.openai.chat]
+        CFBundleURLTypes:
+          - { CFBundleURLName: com.kipurse.link, CFBundleURLSchemes: [kipurse] }
+        NSAppTransportSecurity: { NSAllowsLocalNetworking: true }
+        NSLocalNetworkUsageDescription: Connect to Kipurse running on your computer (home network).
+        BGTaskSchedulerPermittedIdentifiers: [com.kipurse.poll]
+        UIBackgroundModes: [fetch, remote-notification]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+  KipurseUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+    dependencies: [{ target: Kipurse }]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).uitests"
+        TEST_TARGET_NAME: Kipurse
+        GENERATE_INFOPLIST_FILE: YES
+        OTHER_SWIFT_FLAGS: "$(inherited) -DKP_OWNER_PAY_$(KIPURSE_OWNER_PAY) -DKP_VARIANT_$(KIPURSE_DEBUG_SUFFIX)"   # tests know which build variant they drive
+  KipurseWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.2"
+    sources:
+      - path: Widget
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+      - path: Shared
+        excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
+    entitlements:
+      path: Widget/KipurseWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(KIPURSE_BUNDLE_ID_PREFIX)$(KIPURSE_GROUP_SUFFIX)]
+    settings:
+      configs:
+        Debug:   { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX).widget" }
+        Release: { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app.widget" }
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "2"
+        CFBundleDisplayName: $(KIPURSE_DISPLAY_NAME)
+        KipurseAppGroup: group.$(KIPURSE_BUNDLE_ID_PREFIX)$(KIPURSE_GROUP_SUFFIX)
+        NSExtension: { NSExtensionPointIdentifier: com.apple.widgetkit-extension }
+schemes:
+  Kipurse:
+    build:
+      targets: { Kipurse: all }
+    test:
+      targets: [KipurseUITests]

@@ -1,0 +1,5 @@
+{
+  "_comment": "Gas for the rescue page. Empty = the user's own Base Account pays the network fee (needs a little ETH). paymasterUrl = an ERC-7677 sponsor (gas free for the user). erc20Paymaster = CDP Paymaster ERC-20 mode: network fee paid in USDC (Base mainnet only). Use a CLIENT url restricted to this page's origin and to these contracts; never a secret server key.",
+  "8453": {"paymasterUrl": null, "erc20Paymaster": null},
+  "84532": {"paymasterUrl": null, "erc20Paymaster": null}
+}

@@ -1,0 +1,11 @@
+# How each agent connects (researched 2026-10-20)
+- Codex: `codex mcp add NAME --url URL` (CLI help on the Mac). Codex app shares ~/.codex/config.toml.
+- Claude Code: `claude mcp add --transport http -s user NAME URL` (CLI help).
+- Gemini CLI: `gemini mcp add -s user --transport http NAME URL` — geminicli.com/docs/tools/mcp-server
+- Google Antigravity: ~/.gemini/config/mcp_config.json, remote servers use `serverUrl` (not url/httpUrl) — antigravity.google/docs/mcp
+- Grok: CLI `grok mcp add --transport http NAME URL` (docs.x.ai/build/features/mcp-servers); web: grok.com/connectors → New Connector → Custom, public URL only (docs.x.ai/grok/connectors)
+- ChatGPT: Plugins → + → Add custom MCP server, public HTTPS; full MCP incl. writes is beta for Business/Enterprise/Edu (help.openai.com/en/articles/12584461)
+- Claude Desktop / claude.ai: Customize → Connectors → Add → Custom → Web; connects from Anthropic cloud, public URL (support.claude.com/en/articles/11175166)
+- Meta Muse (personal agent, launched 2026-09-08): no MCP settings; ask it in chat to build a Custom Connector; runs in Meta's cloud, so public URL only. Muse Code: `mcp_servers` with `streamable_http` (meta.com/help/artificial-intelligence/1687253048996149, dev.meta.ai/docs/muse-code/extending)
+- Cursor: cursor://anysphere.cursor-deeplink/mcp/install?name=…&config=base64({url})
+- Apple Intelligence / Siri: App Intents + AppShortcutsProvider inside the Kipurse iOS app.

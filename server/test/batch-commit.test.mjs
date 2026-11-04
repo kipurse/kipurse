@@ -1,0 +1,43 @@
+// t621 #1/#7: app-committed batches (#vh) are the only ones Kipurse pages send; onboarding prepare is idempotent; setup rate limits.
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import {webcrypto} from 'node:crypto';
+import {commitment,canon} from '../src/v5/batch-commit.mjs';import {createNewWalletOnboarding} from '../src/v5/onboard-new.mjs';import {kvKey} from '../src/v5/store.mjs';
+import {wrap} from '../owner-sign/guard/apply.mjs';
+const V=JSON.parse(fs.readFileSync(new URL('./vectors/batch-verify.json',import.meta.url)));
+const G=fs.readFileSync(new URL('../owner-sign/guard/kpvh.js',import.meta.url),'utf8');
+const guard=hash=>{const ctx={location:{hash},document:{documentElement:{lang:'en'}},crypto:webcrypto,TextEncoder,URLSearchParams,BigInt,Number,String,Array,Uint8Array,Error};vm.createContext(ctx);vm.runInContext(G,ctx);return ctx.kpVH;};
+const req=(p)=>({method:'wallet_sendCalls',params:[p]});
+const B={chainId:'0x2105',from:V.owner,calls:V.setupNew};
+test('commitment = the vector the iOS tests use',{skip:'OSS copy: frozen vector/fixture tied to operator addresses or the operator App Attest fixture; regenerate with your own values'},()=>{assert.equal(canon({...B,chainId:8453}),V.commit.canon);assert.equal(commitment({...B,chainId:8453}),V.commit.hex);});
+test('page guard: committed batch goes through; any change, no commitment, or another sender is refused',{skip:'OSS copy: frozen vector/fixture tied to operator addresses or the operator App Attest fixture; regenerate with your own values'},async()=>{
+  const ok=guard('#vh='+V.commit.hex);assert.ok(await ok(req(B)));
+  for(const k of Object.keys(V.tampered))await assert.rejects(ok(req({...B,calls:V.tampered[k]})),/not exactly/,k);
+  await assert.rejects(ok(req({...B,from:'0x'+'3'.repeat(40)})),/not exactly/);
+  await assert.rejects(guard('')(req(B)),/start this from the Kipurse app/);
+  await assert.rejects(guard('#vw='+V.wallet)(req(B)),/start this from the Kipurse app/);});
+test('deposit page guard (#vw): only USDC -> this wallet, or a stray return back to the signer',async()=>{const g=guard('#vw='+V.wallet.toLowerCase());const pd=a=>a.toLowerCase().replace(/^0x/,'').padStart(64,'0');
+  const usdc='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';const dep=to=>({chainId:'0x2105',from:V.owner,calls:[{to:usdc,value:'0x0',data:'0xa9059cbb'+pd(to)+pd('f4240')}]});
+  assert.ok(await g(req(dep(V.wallet))));await assert.rejects(g(req(dep('0x'+'4'.repeat(40)))));
+  const ex=(tgt,val,inner)=>'0xb61d27f6'+pd(tgt)+pd(val)+pd('60')+pd((inner.length/2).toString(16))+inner.padEnd(Math.ceil(inner.length/64)*64,'0');
+  const back=to=>({chainId:'0x2105',from:V.owner,calls:[{to:V.wallet,value:'0x0',data:ex('0xfde4c96c8593536e31f229ea8f37b2ada2699bb2','0','a9059cbb'+pd(to)+pd('64'))}]});
+  assert.ok(await g(req(back(V.owner))));await assert.rejects(g(req(back('0x'+'5'.repeat(40)))));
+  const eth=to=>({chainId:'0x2105',from:V.owner,calls:[{to:V.wallet,value:'0x0',data:ex(to,'2386f26fc10000','')}]});
+  assert.ok(await g(req(eth(V.owner))));await assert.rejects(g(req(eth('0x'+'6'.repeat(40)))));});
+test('every page-level wallet_sendCalls in the shipped pages is wrapped by the guard',()=>{const dir=new URL('../owner-sign/static/',import.meta.url);let n=0;
+  for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.js'))){const s=fs.readFileSync(new URL(f,dir),'utf8');assert.equal(wrap(s).n,0,f+' has an unguarded wallet_sendCalls');
+    const g=(s.match(/await kpVH\(\{method:"wallet_sendCalls"/g)??[]).length;if(g){assert.ok(s.includes('KPVH-GUARD v1'),f);n+=g;}}
+  assert.ok(n>=10,'guarded calls: '+n);});
+const mapKV=()=>{const m=new Map();return {m,get:k=>m.get(k),put:(k,v)=>m.set(k,v),del:k=>m.delete(k)};};
+const call=async(N,method,url,body={},ip='1.2.3.4')=>{let code,b;const res={writeHead(c){code=c;},end(x){b=x?JSON.parse(x):null;}};await N.handle({method,headers:{'cf-connecting-ip':ip}},res,new URL('https://x'+url),{readBody:async()=>body});return {code,b};};
+test('onboard/new prepare is idempotent: the page gets exactly the calls the app checked',async()=>{const kv=mapKV();
+  const N=createNewWalletOnboarding({enabled:true,kv,base:()=>'https://x',script:()=>'',sponsor:null,quote:async()=>({}),reg:{byOwner:()=>[]},pub:{readContract:async()=>{throw Error('must not rebuild');}}});
+  kv.put(kvKey('onbnew',null,'abc'),{state:'prepared',kind:'new',owner:V.owner,expect:V.owner,wallet:V.wallet,calls:V.setupNew});
+  const a=await call(N,'POST','/onboard/new/prepare',{id:'abc',owner:V.owner});const b=await call(N,'POST','/onboard/new/prepare',{id:'abc',owner:V.owner});
+  assert.equal(a.code,200);assert.deepEqual(a.b.calls,V.setupNew);assert.deepEqual(b.b.calls,a.b.calls);assert.equal(a.b.owner,V.owner);
+  const o=await call(N,'POST','/onboard/new/prepare',{id:'abc',owner:'0x'+'7'.repeat(40)});assert.equal(o.code,400);});
+test('onboard/new start: per-network rate limit (10/hour), other networks unaffected',async()=>{const kv=mapKV();
+  const N=createNewWalletOnboarding({enabled:true,kv,base:()=>'https://x',script:()=>'',sponsor:null,quote:async()=>({})});
+  const b={x:V.x,y:V.y,single:'5',daily:'20',term:'100',days:90};
+  for(let i=0;i<10;i++)assert.equal((await call(N,'POST','/onboard/new/start',b)).code,200,'start '+i);
+  const r=await call(N,'POST','/onboard/new/start',b);assert.equal(r.code,400);assert.equal(r.b.error,'rate_limited');
+  assert.equal((await call(N,'POST','/onboard/new/start',b,'5.6.7.8')).code,200);
+  assert.ok(![...kv.m.keys()].some(k=>k.includes('1.2.3.4')),'raw IPs are not stored');});

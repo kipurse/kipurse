@@ -1,0 +1,25 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {toHex} from 'viem';import * as P256 from 'ox/P256';
+import {createUserDataEraser,eraseDigest} from '../src/v5/user-data.mjs';import {createOwnerPay} from '../src/v5/owner-pay.mjs';import {createPhoneSession} from '../src/v5/phone-session.mjs';
+const W='0x1111111111111111111111111111111111111111';
+test('delete everything: phone session, owner-pay records, enrollment, per-user state gone; needs fresh phone signature',async()=>{
+  const privateKey=P256.randomPrivateKey();const pk=P256.getPublicKey({privateKey});const active={x:toHex(pk.x,{size:32}),y:toHex(pk.y,{size:32}),fingerprint:'FP'};
+  const S={phone:{pending:{},active},phoneSession:{},ownerPay:{[W]:{pending:{},payments:[{id:'1'}]}},agentLastSeen:{a:'t'}};
+  const PS=createPhoneSession({phone:{active:()=>S.phone.active},wallet:W,store:S.phoneSession,readState:async()=>({})});S.phoneSession.sessions.h={exp:Date.now()+1e6,fingerprint:'FP'};
+  const OP=createOwnerPay({enabled:true,store:S,resolveTenant:async()=>null});
+  const parts=[{name:'owner-pay',forget:w=>OP.forget(w)},{name:'phone-sessions',forget:()=>{S.phoneSession.sessions={};}},{name:'phone-enrollment',forget:()=>{S.phone={pending:{},active:null};}},{name:'agent-activity',forget:()=>{S.agentLastSeen={};}}];
+  let authed=true;const E=createUserDataEraser({enabled:true,parts,resolveTenant:async()=>authed?{wallet:W,phone:{active:()=>active}}:null});
+  const call=async(path,body)=>{let code,out;await E.handle({method:'POST'},{writeHead:c=>{code=c;},end:s=>{out=JSON.parse(s);}},new URL('http://x'+path),{readBody:async()=>body});return [code,out];};
+  const [,c]=await call('/user/erase/challenge');
+  const bad=P256.sign({payload:eraseDigest(W,'x'.repeat(48)),privateKey});assert.equal((await call('/user/erase',{nonce:c.nonce,phrase:'DELETE',r:toHex(bad.r),s:toHex(bad.s)}))[0],403);
+  assert.ok(S.ownerPay[W],'nothing erased on a bad signature');
+  const [,c2]=await call('/user/erase/challenge');const sg=P256.sign({payload:c2.digest,privateKey});
+  assert.equal((await call('/user/erase',{nonce:c2.nonce,phrase:'nope',r:toHex(sg.r),s:toHex(sg.s)}))[0],400);
+  const [,c3]=await call('/user/erase/challenge');const s3=P256.sign({payload:c3.digest,privateKey});
+  const [code,o]=await call('/user/erase',{nonce:c3.nonce,phrase:'DELETE',r:toHex(s3.r),s:toHex(s3.s)});assert.equal(code,200);
+  assert.deepEqual(o.erased,['owner-pay','phone-sessions','phone-enrollment','agent-activity']);
+  assert.equal(S.ownerPay[W],undefined);assert.deepEqual(S.phoneSession.sessions,{});assert.equal(S.phone.active,null);assert.deepEqual(S.agentLastSeen,{});
+  assert.equal(JSON.stringify(S).includes('FP'),false,'no trace of the phone key fingerprint');
+  assert.equal((await call('/user/erase',{nonce:c3.nonce,phrase:'DELETE',r:toHex(s3.r),s:toHex(s3.s)}))[0],400,'single use');
+  authed=false;assert.equal((await call('/user/erase/challenge'))[0],401);
+});
+test('erase disabled -> 404',async()=>{const E=createUserDataEraser({enabled:false,parts:[],resolveTenant:async()=>null});let code;await E.handle({method:'POST'},{writeHead:c=>{code=c;},end:()=>{}},new URL('http://x/user/erase'),{readBody:async()=>({})});assert.equal(code,404);});

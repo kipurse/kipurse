@@ -1,0 +1,52 @@
+// t595 item 2: AP2 Payment Mandates (SD-JWT) mapped onto Kipurse rules; AP2 can only tighten.
+import test from 'node:test';import assert from 'node:assert/strict';import {webcrypto,createHash,randomBytes} from 'node:crypto';import {getAddress} from 'viem';
+import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {DatabaseSync} from 'node:sqlite';
+import {engineFor} from './helpers/v5-fixture.mjs';import {BEGINNER_DEFAULTS} from '../src/v5/mandates.mjs';import {createBuy} from '../src/v5/buy.mjs';
+import {createAp2,AP2_VCT} from '../src/v5/ap2.mjs';
+const S=webcrypto.subtle;const b64=o=>Buffer.from(typeof o==='string'?o:JSON.stringify(o)).toString('base64url');const sha=s=>createHash('sha256').update(s).digest('base64url');
+const kp=async()=>{const k=await S.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);const j=await S.exportKey('jwk',k.publicKey);return {priv:k.privateKey,jwk:{kty:'EC',crv:'P-256',x:j.x,y:j.y}};};
+const jwt=async(key,header,payload)=>{const si=b64(header)+'.'+b64(payload);const sig=Buffer.from(await S.sign({name:'ECDSA',hash:'SHA-256'},key,Buffer.from(si))).toString('base64url');return si+'.'+sig;};
+const disc=v=>{const d=b64([randomBytes(12).toString('base64url'),v]);return {d,h:sha(d)};};
+async function openMandate(owner,agent,constraints,{exp}={}){const m=disc({vct:AP2_VCT.openPayment,constraints,cnf:{jwk:agent.jwk},iat:Math.floor(Date.now()/1000),exp:exp??Math.floor(Date.now()/1000)+3600});
+  return (await jwt(owner.priv,{alg:'ES256',typ:'example+sd-jwt',kid:'kipurse-app'},{delegate_payload:[{'...':m.h}],_sd_alg:'sha-256'}))+'~'+m.d+'~';}
+async function closedMandate(agent,openStr,{payee,amount,currency='USDC',tx='tx-'+randomBytes(4).toString('hex'),aud='kipurse',iat}={}){
+  const m=disc({vct:AP2_VCT.payment,transaction_id:tx,payee,payment_amount:{amount,currency},payment_instrument:{id:'kipurse-usdc-base',type:'usdc'}});
+  return (await jwt(agent.priv,{alg:'ES256',typ:'kb+sd-jwt'},{delegate_payload:[{'...':m.h}],iat:iat??Math.floor(Date.now()/1000),aud,nonce:randomBytes(8).toString('hex'),sd_hash:sha(openStr),_sd_alg:'sha-256'}))+'~'+m.d+'~';}
+const PAYEE={id:getAddress('0x00110000000000000000000000000000000000aa'),name:'Demo API'};
+const env=async()=>{const owner=await kp(),agent=await kp();const e=engineFor({ownerRulesDir:mkdtempSync(join(tmpdir(),'ap2-'))},{bal:1000000000n},{openSingle:'500000000',openDaily:'900000000',single:'500000000',daily:'900000000',term:'900000000'});
+  e.engine.mandates.propose({items:BEGINNER_DEFAULTS.map(d=>({...d}))});const ok=()=>{for(const p of e.engine.mandates.proposals())e.engine.mandates.approve(p.id,()=>true);};ok();
+  const ap2=createAp2({db:new DatabaseSync(':memory:'),ownerKeys:[owner.jwk]});return {owner,agent,ap2,ok,buy:createBuy(e.engine,{sleep:async()=>{},waitMs:0})};};
+const range=(max,c='USDC')=>({type:'payment.amount_range',currency:c,max,min:0});const allow=(...p)=>({type:'payment.allowed_payees',allowed:p});
+test('valid owner-issued open + agent closed mandate -> still needs Face ID for a NEW payee, then paid inside the one limit',async()=>{const {owner,agent,ap2,ok,buy}=await env();
+  const o=await openMandate(owner,agent,[range(3_000_000),allow(PAYEE),{type:'payment.agent_recurrence',frequency:'ON_DEMAND'}]);
+  const r0=await ap2.pay(buy,o+'~'+await closedMandate(agent,o,{payee:PAYEE,amount:2_000_000}),'g');assert.equal(r0.decision,'ask_owner','AP2 never replaces the new-payee Face ID');assert.equal(r0.nothingPaid,true);
+  ok();const r=await ap2.pay(buy,o+'~'+await closedMandate(agent,o,{payee:PAYEE,amount:2_000_000}),'g');assert.equal(r.state,'paid',JSON.stringify(r).slice(0,400));assert.equal(r.via,'ap2');
+  const v=await ap2.verify(o+'~'+await closedMandate(agent,o,{payee:PAYEE,amount:1_000_000}));assert.equal(v.ok,true);});
+test('signatures and binding: non-owner issuer, wrong agent key, closed bound to another open, wrong aud, stale -> refused',async()=>{const {owner,agent,ap2}=await env();const evil=await kp();
+  const o=await openMandate(owner,agent,[range(3_000_000)]);const oEvil=await openMandate(evil,agent,[range(3_000_000)]);
+  assert.equal((await ap2.verify(oEvil+'~'+await closedMandate(agent,oEvil,{payee:PAYEE,amount:1}))).code,'ap2_open_not_signed_by_owner');
+  assert.equal((await ap2.verify(o+'~'+await closedMandate(evil,o,{payee:PAYEE,amount:1}))).code,'ap2_closed_bad_agent_signature');
+  const o2=await openMandate(owner,agent,[range(9_000_000)]);assert.equal((await ap2.verify(o+'~'+await closedMandate(agent,o2,{payee:PAYEE,amount:1}))).code,'ap2_closed_not_bound_to_open');
+  assert.equal((await ap2.verify(o+'~'+await closedMandate(agent,o,{payee:PAYEE,amount:1,aud:'someone-else'}))).code,'ap2_wrong_audience');
+  assert.equal((await ap2.verify(o+'~'+await closedMandate(agent,o,{payee:PAYEE,amount:1,iat:Math.floor(Date.now()/1000)-3600}))).code,'ap2_closed_stale');
+  const oExp=await openMandate(owner,agent,[range(3)],{exp:Math.floor(Date.now()/1000)-10});assert.equal((await ap2.verify(oExp+'~'+await closedMandate(agent,oExp,{payee:PAYEE,amount:1}))).code,'ap2_open_expired');});
+test('constraints: amount range, payee list, currency, unknown type and checkout reference fail closed; non-0x payee refused',async()=>{const {owner,agent,ap2}=await env();
+  const o=await openMandate(owner,agent,[range(3_000_000),allow(PAYEE)]);const c=async x=>(await ap2.verify(o+'~'+await closedMandate(agent,o,x))).code;
+  assert.equal(await c({payee:PAYEE,amount:3_000_001}),'ap2_amount_out_of_range');
+  assert.equal(await c({payee:{...PAYEE,id:getAddress('0x00220000000000000000000000000000000000bb')},amount:1}),'ap2_payee_not_allowed');
+  assert.equal(await c({payee:PAYEE,amount:100,currency:'USD'}),'ap2_currency_mismatch');assert.equal(await c({payee:PAYEE,amount:1,currency:'EUR'}),'ap2_bad_amount');
+  assert.equal(await c({payee:{id:'merchant_1',name:'x'},amount:1}),'ap2_payee_not_onchain');
+  const u=await openMandate(owner,agent,[{type:'payment.something_new'}]);assert.equal((await ap2.verify(u+'~'+await closedMandate(agent,u,{payee:PAYEE,amount:1}))).code,'ap2_unknown_constraint');
+  const rf=await openMandate(owner,agent,[{type:'payment.reference',conditional_transaction_id:'x'}]);assert.equal((await ap2.verify(rf+'~'+await closedMandate(agent,rf,{payee:PAYEE,amount:1}))).code,'ap2_checkout_reference_unsupported');});
+test('AP2 allows more than Kipurse: the ONE limit still wins (asks owner); replay + single-use + budget enforced',async()=>{const {owner,agent,ap2,ok,buy}=await env();
+  const big=await openMandate(owner,agent,[range(50_000_000),allow(PAYEE),{type:'payment.agent_recurrence',frequency:'ON_DEMAND'}]);
+  await ap2.pay(buy,big+'~'+await closedMandate(agent,big,{payee:PAYEE,amount:1_000_000}),'g');ok();
+  const r=await ap2.pay(buy,big+'~'+await closedMandate(agent,big,{payee:PAYEE,amount:8_000_000}),'g');assert.notEqual(r.state,'paid');assert.equal(r.nothingPaid,true,'8 > 5 per payment: AP2 does not loosen');
+  const b=await openMandate(owner,agent,[range(3_000_000),allow(PAYEE),{type:'payment.budget',max:3_000_000,currency:'USDC'},{type:'payment.agent_recurrence',frequency:'ON_DEMAND',max_occurrences:5}]);
+  const c1=b+'~'+await closedMandate(agent,b,{payee:PAYEE,amount:2_000_000});assert.equal((await ap2.pay(buy,c1,'g')).state,'paid');
+  assert.equal((await ap2.pay(buy,c1,'g')).reason,'ap2_replay');
+  assert.equal((await ap2.pay(buy,b+'~'+await closedMandate(agent,b,{payee:PAYEE,amount:2_000_000}),'g')).reason,'ap2_budget_exceeded');
+  const once=await openMandate(owner,agent,[range(3_000_000),allow(PAYEE)]);assert.equal((await ap2.pay(buy,once+'~'+await closedMandate(agent,once,{payee:PAYEE,amount:500_000}),'g')).state,'paid');
+  assert.equal((await ap2.pay(buy,once+'~'+await closedMandate(agent,once,{payee:PAYEE,amount:500_000}),'g')).reason,'ap2_open_mandate_already_used');
+  const d=await openMandate(owner,agent,[range(3_000_000),allow(PAYEE),{type:'payment.agent_recurrence',frequency:'DAILY'}]);assert.equal((await ap2.pay(buy,d+'~'+await closedMandate(agent,d,{payee:PAYEE,amount:100_000}),'g')).state,'paid');
+  assert.equal((await ap2.pay(buy,d+'~'+await closedMandate(agent,d,{payee:PAYEE,amount:100_000}),'g')).reason,'ap2_too_soon');});

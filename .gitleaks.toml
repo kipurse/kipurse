@@ -1,0 +1,10 @@
+# Gitleaks config: default rules + reviewed false positives only.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed false positives (t934)"
+# Public USDC token contract addresses (Base mainnet / Base Sepolia) — not secrets.
+regexes = ['''(?i)0x833589fcd6edb6e08f4c7c32d4f71b54bda02913''', '''(?i)0x036cbd53842c5426634e7929541ec2318f3dcf7e''']
+# Vendored, minified Base Account / Coinbase SDK bundles (their public client telemetry key is part of the upstream package).
+paths = ['''server/kit/static/app\.js$''', '''server/kit/rescue/rescue\.js$''', '''server/owner-sign/static/[a-z-]+\.js$''']

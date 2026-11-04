@@ -1,0 +1,6 @@
+Kipurse
+Copyright 2026 the Kipurse authors.
+
+This repository is dual-licensed by component: see LICENSING.md.
+Apache-2.0 components: smart contracts, SDKs (JS/TS, Python), MCP package, owner exit kit.
+AGPL-3.0-only: the hosted gateway and the rest of this repository.

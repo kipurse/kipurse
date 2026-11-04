@@ -1,0 +1,11 @@
+Kipurse is multi-licensed by directory. Copyright (c) 2026 Blessbridge Global Trading LLC / Kipurse.
+
+- contracts/   Apache-2.0  (contracts/LICENSE)
+- ios/         Apache-2.0  (ios/LICENSE)
+- server/sdk/  Apache-2.0  (server/sdk/LICENSE)
+- server/      AGPL-3.0-only (server/LICENSE), except files carrying an
+               SPDX-License-Identifier: Apache-2.0 header (SDK, MCP surface,
+               owner exit kit / rescue page), see server/NOTICE.
+- docs/        CC BY 4.0 unless stated otherwise.
+
+Full license texts: server/LICENSES/. Third-party code keeps its own license.

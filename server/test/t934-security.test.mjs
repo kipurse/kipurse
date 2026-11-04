@@ -1,0 +1,26 @@
+// t934: one "Pause AI payments" switch stops every AI incl. Siri; owner withdraw is independent; new payee -> Face ID; stopped AI refused.
+import test from 'node:test';import assert from 'node:assert/strict';
+import {getAddress} from 'viem';import {mkdtempSync,readFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {engineFor} from './helpers/v5-fixture.mjs';
+import {BEGINNER_DEFAULTS} from '../src/v5/mandates.mjs';
+import {createBuy} from '../src/v5/buy.mjs';
+import {createSiriAgent} from '../src/v5/siri.mjs';
+const P=i=>getAddress('0x'+String(i).padStart(4,'0')+'b'.repeat(32)+String(i).padStart(4,'0'));
+const mk=(paused)=>{let flag=paused;const e=engineFor({onAnomaly:()=>{},isPaused:()=>flag,onMandateProposal:()=>{},ownerRulesDir:mkdtempSync(join(tmpdir(),'t934-'))},{bal:1000000000n},{openSingle:'500000000',openDaily:'900000000',single:'500000000',daily:'900000000',term:'900000000'});
+  const M=e.engine.mandates;for(const p of M.proposals())M.approve(p.id,()=>true);M.propose({items:BEGINNER_DEFAULTS.filter(d=>d.on),by:'owner'});for(const p of M.proposals())M.approve(p.id,()=>true);
+  M.propose({items:[{kind:'agent_limits',agentId:'siri',single:'1',daily:'2',monthly:'60'}],by:'owner'});for(const p of M.proposals())M.approve(p.id,()=>true);
+  const buy=createBuy(e.engine,{sleep:async()=>{},waitMs:0});const siri=createSiriAgent(e.engine,{buyFactory:()=>buy});
+  return {...e,M,buy,siri,setPaused:v=>{flag=v;}};};
+const siriPay=(s,amt,k,to=P(31))=>s.handle('/siri/buy',{purpose:'daily',item:'t934',merchant:'Cafe',to,amount:amt,idempotencyKey:'siri-t934-'+k},{authed:true}).then(([,j])=>j);
+const agentPay=(b,id,amt,k,to=P(31))=>b.buy({purpose:'daily',item:'t934',merchant:'Cafe',to,amount:amt,idempotencyKey:id+'-t934-'+k},id);
+test('t934 pause: Siri and every other AI are refused, nothing paid, no Face ID prompt',async()=>{const {M,siri,buy}=mk(true);M.remember(P(31),'Cafe');
+  const r=await siriPay(siri,'0.5','p1');assert.notEqual(r.state,'paid',JSON.stringify(r));assert.notEqual(r.decision,'ask_owner','paused must not turn into a Face ID prompt');assert.match(String(r.reason),/paused/,JSON.stringify(r));
+  for(const id of ['codex','claude','grok','muse']){const x=await agentPay(buy,id,'0.1','p-'+id);assert.notEqual(x.state,'paid',id+' '+JSON.stringify(x));assert.match(String(x.reason),/paused/,id+' '+JSON.stringify(x));}});
+test('t934 pause: resume restores Siri inside its allowance',async()=>{const {M,siri,setPaused}=mk(true);M.remember(P(31),'Cafe');
+  assert.notEqual((await siriPay(siri,'0.5','r1')).state,'paid');setPaused(false);const r2=await siriPay(siri,'0.5','r2');assert.equal(r2.state,'paid',JSON.stringify(r2));});
+test('t934 pause: owner withdraw path never consults the AI pause',()=>{const src=readFileSync(new URL('../src/v5/owner-withdraw.mjs',import.meta.url),'utf8');
+  assert.ok(!/isPaused\s*\(/.test(src),'owner-withdraw must not gate on the AI pause');assert.match(src,/never uses the AI spend permission/);});
+test('t934 new payee: Siri to an unknown payee -> ask_owner (Face ID), nothing paid',async()=>{const {M,siri}=mk(false);M.remember(P(31),'Cafe');
+  const r=await siriPay(siri,'0.1','n1',P(77));assert.notEqual(r.state,'paid',JSON.stringify(r));assert.equal(r.decision,'ask_owner',JSON.stringify(r));});
+test('t934 stop/revoke: a stopped AI is refused',async()=>{const {M,siri}=mk(false);M.remember(P(31),'Cafe');M.agentStop('siri');
+  const r=await siriPay(siri,'0.1','s1');assert.equal(r.reason,'AGENT_STOPPED');});

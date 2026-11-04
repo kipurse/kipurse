@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createEverydayLimits,changeCost,clampEveryday,EVERYDAY_WHY} from '../src/v5/everyday-limits.mjs';import {PRINCIPLES,assertPrinciples} from '../src/v5/principles.mjs';
+const kv=()=>{const m=new Map();return {get:k=>m.get(k),set:(k,v)=>m.set(k,v),del:k=>m.delete(k)};};
+let F={single:10_000_000n,daily:50_000_000n};const mk=()=>createEverydayLimits({kv:kv(),wallet:'0xAbc',floor:()=>F});
+test('default everyday = floor',()=>{const e=mk();assert.deepEqual([e.get().single,e.get().daily],['10000000','50000000']);});
+test('set under floor: free + instant; raise & lower both free',()=>{const e=mk();assert.equal(e.set({single:'2000000',daily:'5000000'}).free,true);assert.equal(e.get().single,'2000000');assert.equal(e.set({single:'9000000',daily:'40000000'}).ok,true);});
+test('above floor rejected with why',()=>{const e=mk();const r=e.set({single:'20000000',daily:'60000000'});assert.equal(r.error,'above_floor');assert.match(r.why.zh,/区块链上/);});
+test('floor lowered on chain -> everyday clamped on read',()=>{const e=mk();e.set({single:'9000000',daily:'40000000'});F={single:3_000_000n,daily:6_000_000n};assert.deepEqual([e.get().single,e.get().daily],['3000000','6000000']);F={single:10_000_000n,daily:50_000_000n};});
+test('engine check blocks over single / over 24h, nothing paid',()=>{const e=mk();e.set({single:'2000000',daily:'5000000'});assert.equal(e.check({amount:3_000_000n}).reason,'EVERYDAY_SINGLE_LIMIT');assert.equal(e.check({amount:2_000_000n,spent24h:4_000_000n}).reason,'EVERYDAY_DAILY_LIMIT');assert.equal(e.check({amount:1_000_000n,spent24h:1n}),null);});
+test('free vs charged preview',()=>{assert.equal(changeCost({next:{single:'1',daily:'1'},floor:{single:'5',daily:'5'}}).free,true);const c=changeCost({next:{single:'9',daily:'1'},floor:{single:'5',daily:'5'},feeUSDC:7258n});assert.equal(c.free,false);assert.equal(c.feeUSDC,'7258');});
+test('invariant locked',async()=>{assert.equal(PRINCIPLES.everydayBelowFloor??PRINCIPLES.principles?.everydayBelowFloor??true,true);const c=clampEveryday({single:99n,daily:99n},{single:1n,daily:2n});assert.deepEqual(c,{single:1n,daily:2n});assert.doesNotMatch(EVERYDAY_WHY.zh,/ETH/);});
