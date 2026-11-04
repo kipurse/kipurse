@@ -1,7 +1,0 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Kipurse status</title>
-<style>body{font:16px/1.6 system-ui;background:#07070c;color:#e8e8f0;max-width:640px;margin:40px auto;padding:0 20px}.r{display:flex;justify-content:space-between;padding:12px 16px;border:1px solid #222;border-radius:12px;margin:10px 0}.ok{color:#3ddc84}.bad{color:#ff5a5a}small{color:#889}</style>
-<h1>Kipurse status</h1><small>Checked live from your browser when you open this page. No background monitoring runs on our side.</small>
-<div id=l></div><p><small>If the gateway is down your money is still yours: use the offline exit (rescue page) — it needs no Kipurse server.</small></p>
-<script>const S=[["Agent gateway (Base mainnet)","https://pay.kipurse.com/.well-known/oauth-authorization-server"],["Test gateway (Base Sepolia)","https://mcp.kipurse.com/.well-known/oauth-authorization-server"],["Website","https://kipurse.com/"],["Base network","https://mainnet.base.org"]];
-const l=document.getElementById('l');for(const [n,u] of S){const d=document.createElement('div');d.className='r';d.innerHTML=`<span>${n}</span><span>…</span>`;l.append(d);const t=performance.now();
-fetch(u,{mode:'no-cors',cache:'no-store'}).then(()=>{d.lastChild.className='ok';d.lastChild.textContent='up · '+Math.round(performance.now()-t)+' ms';}).catch(()=>{d.lastChild.className='bad';d.lastChild.textContent='unreachable';});}</script></html>

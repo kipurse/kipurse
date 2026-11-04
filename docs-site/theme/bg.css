@@ -1,0 +1,8 @@
+#bg{position:absolute;left:0;top:0;width:100%;height:135vh;z-index:-3;display:block;-webkit-mask-image:linear-gradient(180deg,#000 62%,transparent);mask-image:linear-gradient(180deg,#000 62%,transparent)}
+.bg-fallback{position:absolute;left:0;right:0;top:0;height:135vh;z-index:-4;-webkit-mask-image:linear-gradient(180deg,#000 60%,transparent);mask-image:linear-gradient(180deg,#000 60%,transparent);background:
+  radial-gradient(60% 50% at 75% 20%,rgba(139,108,255,.45),transparent 70%),
+  radial-gradient(50% 45% at 20% 30%,rgba(34,211,238,.28),transparent 70%),
+  radial-gradient(60% 50% at 50% 100%,rgba(255,95,210,.18),transparent 70%),#05060a}
+.grain{position:fixed;inset:0;z-index:-2;pointer-events:none;opacity:.07;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+body{background:#05060a}.bg{display:none}
