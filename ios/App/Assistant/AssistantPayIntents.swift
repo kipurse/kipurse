@@ -64,7 +64,7 @@ enum AssistantFlow {
 /// Existing phrase "用 Kipurse 付款": asks for anything missing.
 struct StartPaymentIntent: AppIntent, ForegroundContinuableIntent {
   static var title: LocalizedStringResource = "Start a Kipurse payment"
-  static var description = IntentDescription("Pick a payee and amount. Within Siri's allowance it pays a saved payee; otherwise Kipurse asks for Face ID.")
+  static var description = IntentDescription("Pick a payee and amount. Within the voice allowance it pays a saved payee; otherwise Kipurse asks for Face ID.")
   static var authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
   @Parameter(title: "Amount (USDC)", requestValueDialog: "How much USDC?") var amount: Double?
   @Parameter(title: "Payee", requestValueDialog: "Pay whom?") var payee: PayeeEntity?
@@ -78,7 +78,7 @@ struct StartPaymentIntent: AppIntent, ForegroundContinuableIntent {
 /// "用 Kipurse 付给 楼下咖啡店 5 块" — both parameters, so Siri can fill them from one sentence.
 struct PayIntent: AppIntent, ForegroundContinuableIntent {
   static var title: LocalizedStringResource = "Pay a payee with Kipurse"
-  static var description = IntentDescription("Pay a saved payee. Within Siri's allowance it pays; over it or a new payee asks for Face ID.")
+  static var description = IntentDescription("Pay a saved payee. Within the voice allowance it pays; over it or a new payee asks for Face ID.")
   static var authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
   @Parameter(title: "Payee", requestValueDialog: "Pay whom?") var payee: PayeeEntity
   @Parameter(title: "Amount (USDC)", requestValueDialog: "How much USDC?") var amount: Double
