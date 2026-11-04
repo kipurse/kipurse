@@ -451,6 +451,136 @@
           }
         }
       }
+    },
+    "Send money to ${payee} with ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}转给${payee}"
+          }
+        }
+      }
+    },
+    "Transfer to ${payee} with ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}打钱给${payee}"
+          }
+        }
+      }
+    },
+    "Use ${applicationName} to pay ${payee}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}给${payee}付钱"
+          }
+        }
+      }
+    },
+    "${applicationName} send to ${payee}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}转给${payee}"
+          }
+        }
+      }
+    },
+    "${applicationName} transfer to ${payee}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}打给${payee}"
+          }
+        }
+      }
+    },
+    "Give ${payee} money with ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}给${payee}转钱"
+          }
+        }
+      }
+    },
+    "Pay ${payee} using ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}给${payee}付款"
+          }
+        }
+      }
+    },
+    "${applicationName} pay money to ${payee}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}付钱给${payee}"
+          }
+        }
+      }
+    },
+    "Pay ${preset} with ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}付${preset}"
+          }
+        }
+      }
+    },
+    "${applicationName} pay ${preset}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}付${preset}"
+          }
+        }
+      }
+    },
+    "Send ${preset} with ${applicationName}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}转${preset}"
+          }
+        }
+      }
+    },
+    "Use ${applicationName} to pay ${preset}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用${applicationName}付款${preset}"
+          }
+        }
+      }
+    },
+    "${applicationName} transfer ${preset}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}转账${preset}"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

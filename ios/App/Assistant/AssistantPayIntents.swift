@@ -128,12 +128,36 @@ struct RejectIntent: AppIntent, ForegroundContinuableIntent {
   @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { .result(dialog: try await AssistantFlow.decide(self, approval, approve: false)) }
 }
 
+/// t952 A2: common fixed amounts so one sentence carries the amount ("用启付付5块"); Kipurse then asks for the payee. Other amounts use PayIntent.
+enum AmountPreset: String, AppEnum {
+  case one, two, five, ten, twenty
+  static var typeDisplayRepresentation: TypeDisplayRepresentation = "Amount"
+  static var caseDisplayRepresentations: [AmountPreset: DisplayRepresentation] = [
+    .one: DisplayRepresentation(title: "1 USDC", synonyms: ["1", "one", "一块", "1块", "1刀", "一刀", "1美元", "一美元"]),
+    .two: DisplayRepresentation(title: "2 USDC", synonyms: ["2", "two", "两块", "二块", "2块", "2刀", "两刀", "2美元", "两美元"]),
+    .five: DisplayRepresentation(title: "5 USDC", synonyms: ["5", "five", "五块", "5块", "5刀", "五刀", "5美元", "五美元"]),
+    .ten: DisplayRepresentation(title: "10 USDC", synonyms: ["10", "ten", "十块", "10块", "10刀", "十刀", "10美元", "十美元"]),
+    .twenty: DisplayRepresentation(title: "20 USDC", synonyms: ["20", "twenty", "二十块", "20块", "20刀", "二十刀", "20美元", "二十美元"]),
+  ]
+  var usdc: Double { switch self { case .one: 1; case .two: 2; case .five: 5; case .ten: 10; case .twenty: 20 } }
+}
+struct PayPresetIntent: AppIntent, ForegroundContinuableIntent {
+  static var title: LocalizedStringResource = "Pay a fixed amount with Kipurse"
+  static var description = IntentDescription("Pay 1, 2, 5, 10 or 20 USDC to a saved payee. Within the voice allowance it pays; over it or a new payee asks for Face ID.")
+  static var authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
+  @Parameter(title: "Amount", requestValueDialog: "How much?") var preset: AmountPreset
+  @Parameter(title: "Payee", requestValueDialog: "Pay whom?") var payee: PayeeEntity
+  static var parameterSummary: some ParameterSummary { Summary("Pay \(\.$preset) to \(\.$payee)") }
+  @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { .result(dialog: try await AssistantFlow.pay(self, payeeId: payee.id, amount: preset.usdc)) }
+}
+
 struct KipurseShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(intent: MainBalanceIntent(), phrases: ["Check \(.applicationName) balance", "\(.applicationName) balance", "How much is in \(.applicationName)", "\(.applicationName) limits", "What's my \(.applicationName) balance", "Show \(.applicationName) balance", "\(.applicationName) how much money", "Open \(.applicationName) balance"], shortTitle: "Balance & limits", systemImageName: "dollarsign.circle")
     AppShortcut(intent: MainActivityIntent(), phrases: ["Recent \(.applicationName) payments", "\(.applicationName) spending summary", "\(.applicationName) activity", "What did I spend on \(.applicationName)", "\(.applicationName) history"], shortTitle: "Recent activity", systemImageName: "list.bullet.rectangle")
     AppShortcut(intent: StartPaymentIntent(), phrases: ["Pay with \(.applicationName)", "Make a payment with \(.applicationName)", "\(.applicationName) payment", "Send money with \(.applicationName)", "\(.applicationName) pay", "Start a \(.applicationName) payment"], shortTitle: "Start payment", systemImageName: "paperplane.circle")
-    AppShortcut(intent: PayIntent(), phrases: ["Pay \(\.$payee) with \(.applicationName)", "\(.applicationName) pay \(\.$payee)"], shortTitle: "Pay payee", systemImageName: "person.crop.circle.badge.checkmark")
+    AppShortcut(intent: PayIntent(), phrases: ["Pay \(\.$payee) with \(.applicationName)", "\(.applicationName) pay \(\.$payee)", "Send money to \(\.$payee) with \(.applicationName)", "Transfer to \(\.$payee) with \(.applicationName)", "Use \(.applicationName) to pay \(\.$payee)", "\(.applicationName) send to \(\.$payee)", "\(.applicationName) transfer to \(\.$payee)", "Give \(\.$payee) money with \(.applicationName)", "Pay \(\.$payee) using \(.applicationName)", "\(.applicationName) pay money to \(\.$payee)"], shortTitle: "Pay payee", systemImageName: "person.crop.circle.badge.checkmark")
+    AppShortcut(intent: PayPresetIntent(), phrases: ["Pay \(\.$preset) with \(.applicationName)", "\(.applicationName) pay \(\.$preset)", "Send \(\.$preset) with \(.applicationName)", "Use \(.applicationName) to pay \(\.$preset)", "\(.applicationName) transfer \(\.$preset)"], shortTitle: "Pay fixed amount", systemImageName: "dollarsign.arrow.circlepath")
     AppShortcut(intent: RepeatPaymentIntent(), phrases: ["Repeat my last \(.applicationName) payment", "Pay again with \(.applicationName)"], shortTitle: "Pay again", systemImageName: "arrow.clockwise.circle")
     AppShortcut(intent: ApproveIntent(), phrases: ["Approve \(.applicationName) request", "\(.applicationName) approve"], shortTitle: "Approve", systemImageName: "checkmark.seal.fill")
     AppShortcut(intent: PauseIntent(), phrases: ["Pause \(.applicationName)", "Stop \(.applicationName) AI payments"], shortTitle: "Pause AI", systemImageName: "pause.circle")

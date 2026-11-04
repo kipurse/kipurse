@@ -64,7 +64,28 @@ public enum AssistantData {
     if ["我", "我自己", "自己", "我的", "me", "myself", "my account", "my base", "base account", "我的账户", "我的钱包"].contains(where: { s == $0 || (s.count > 2 && $0.count > 2 && s.contains($0)) }) {  // i18n-ok: paired zh/en or zh-only data
       let o = list.filter(\.isOwner); if !o.isEmpty { return o } }
     let tail = s.hasPrefix("…") || s.hasPrefix("...") ? String(s.drop { $0 == "…" || $0 == "." }) : s
-    return list.filter { $0.label.lowercased().contains(s) || s.contains($0.label.lowercased()) || (tail.count == 4 && $0.last4.lowercased() == tail) }
+    let direct = list.filter { $0.label.lowercased().contains(s) || s.contains($0.label.lowercased()) || (tail.count == 4 && $0.last4.lowercased() == tail) }
+    if !direct.isEmpty { return direct }
+    // t952 A3: nickname / fuzzy match — filler words dropped, then pinyin (with or without tones) or pinyin initials ("xw" -> 小王).
+    let q = fuzzyKey(s); guard q.count >= 2 else { return [] }
+    return list.filter { p in let k = fuzzyKey(p.label.lowercased()); guard !k.isEmpty else { return false }
+      return k.contains(q) || q.contains(k) || pinyin(p.label) == pinyin(q) || (q.allSatisfy(\.isASCII) && (pinyin(p.label).contains(q) || initials(p.label) == q)) }
+  }
+  static let fillers = ["付给", "转给", "打给", "付钱给", "给", "付", "转", "的", "那个", "pay ", "to ", "the "]  // i18n-ok: zh-only data
+  /// Lowercased, filler words, spaces and punctuation removed.
+  public static func fuzzyKey(_ raw: String) -> String {
+    var s = raw.lowercased(); for f in fillers { s = s.replacingOccurrences(of: f, with: "") }
+    return String(s.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init))
+  }
+  /// Toneless pinyin, no spaces ("小王" -> "xiaowang"); ASCII passes through.
+  public static func pinyin(_ raw: String) -> String {
+    let m = NSMutableString(string: fuzzyKey(raw)); CFStringTransform(m, nil, kCFStringTransformToLatin, false); CFStringTransform(m, nil, kCFStringTransformStripDiacritics, false)
+    return (m as String).lowercased().replacingOccurrences(of: " ", with: "")
+  }
+  /// Pinyin initials ("小王" -> "xw").
+  public static func initials(_ raw: String) -> String {
+    let m = NSMutableString(string: fuzzyKey(raw)); CFStringTransform(m, nil, kCFStringTransformToLatin, false); CFStringTransform(m, nil, kCFStringTransformStripDiacritics, false)
+    return (m as String).lowercased().split(separator: " ").compactMap(\.first).map(String.init).joined()
   }
   /// Nickname the owner chose (Siri may set it, still untrusted): 1–24 visible chars, no addresses / long hex, no control chars.
   public static func validNickname(_ raw: String) -> String? {
@@ -77,7 +98,7 @@ public enum AssistantData {
   static func safeName(_ n: String) -> String? { validNickname(String(n.prefix(24))) }
 
   /// Everything a Spotlight item may contain. Tests assert no address, no balance.
-  public static func indexText(_ p: Payee) -> [String] { [p.label, "…" + p.last4, "Kipurse"] }
+  public static func indexText(_ p: Payee) -> [String] { [p.label, "…" + p.last4, "Kipurse"] + [pinyin(p.label), initials(p.label)].filter { !$0.isEmpty && $0 != p.label.lowercased() } }
   public static func indexText(_ p: Payment) -> [String] { [p.title, "Kipurse"] }
 
   public enum PayCheck: Equatable { case ok(Payee, Int64), unknownPayee, badAmount, problem(String) }

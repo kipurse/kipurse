@@ -8,6 +8,6 @@ final class T934SecurityUITests: XCTestCase {
     let t = app.descendants(matching: .any).matching(identifier: "settings.terms")
     for _ in 0..<8 where !t.firstMatch.exists || !t.firstMatch.isHittable { app.swipeUp() }
     XCTAssertTrue(t.firstMatch.exists, "Terms link in Settings")
-    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "服务条款")).count, 1, "exactly one Terms entry")
+    XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ AND (elementType == %d OR elementType == %d)", "服务条款", XCUIElement.ElementType.button.rawValue, XCUIElement.ElementType.link.rawValue)).count, 1, "exactly one Terms entry")
   }
 }

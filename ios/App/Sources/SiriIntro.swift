@@ -15,7 +15,7 @@ struct SiriIntroView: View {
   @Environment(\.dismiss) private var dismiss
   let faceIDOn: Bool
   @State private var single = SiriPending.value?.0 ?? "2"; @State private var daily = SiriPending.value?.1 ?? "10"
-  @State private var step1 = SiriPending.value != nil; @State private var step2 = false
+  @State private var step1 = SiriPending.value != nil; @State private var step2 = true   // t952 A5: no "say it" step; phrases are info only
   @State private var err: String?; @State private var phrases = false; @State private var deposit = false
   static let maxFee: Int64 = 50_000   // server cap for the one-time approver fee (0.05 USDC); the exact quote shows on the next sheet
   var enough: Bool { (m.state?.balance ?? 0) >= Self.maxFee }
@@ -39,13 +39,11 @@ struct SiriIntroView: View {
           } else { Text(T("每笔 \(single) · 每天 \(daily) USDC，随时可改", "\(single) per payment · \(daily) a day (USDC), change any time")).font(.footnote).foregroundStyle(.secondary) }
         }
         Section {
-          row("2", T("对 Siri 说一句话", "Say it to Siri"), done: step2, id: "siri.intro.step2")
-          Text(T("装好就能说：“嘿 Siri，用 Kipurse 付款”。", "Just say: “Hey Siri, pay with Kipurse”.")).font(.footnote).foregroundStyle(.secondary)
-          HStack { Button(T("看全部说法", "All phrases")) { phrases = true }.accessibilityIdentifier("siri.intro.phrases"); Spacer()
-            if !step2 { Button(T("知道了", "Got it")) { withAnimation { step2 = true } }.accessibilityIdentifier("siri.intro.step2.done") } }.buttonStyle(.borderless)
+          Text(T("装好就能说：“嘿 Siri，用启付付 5 块”“用启付付给小王”。", "Just say: “Hey Siri, pay 5 with Kipurse” or “Pay Xiao Wang with Kipurse”.")).font(.footnote).foregroundStyle(.secondary)
+          Button(T("看全部说法", "All phrases")) { phrases = true }.buttonStyle(.borderless).accessibilityIdentifier("siri.intro.phrases")
         }
         Section {
-          row("3", T("开启 Face ID 批准（最后一步）", "Turn on Face ID approval (last step)"), done: faceIDOn, id: "siri.intro.step3")
+          row("2", T("开启 Face ID 批准（最后一步）", "Turn on Face ID approval (last step)"), done: faceIDOn, id: "siri.intro.step3")
           Text(T("只在超额、新收款方、恢复暂停时用。开通费约 0.03 USDC，从启付钱包余额扣，只扣一次。", "Only for over-allowance, new payees or resuming. Setup fee about 0.03 USDC, taken once from your Kipurse wallet balance.")).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("siri.intro.fee")
           if faceIDOn { Button(T("完成", "Done")) { dismiss() } }
           else if !enough && m.demo == nil {

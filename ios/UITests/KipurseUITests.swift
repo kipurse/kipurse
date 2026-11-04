@@ -695,7 +695,7 @@ final class KipurseUITests: XCTestCase {
       t902shot("siri-intro-\(lang)")
       app.buttons["siri.intro.step1.done"].tap()
       XCTAssertEqual(any["siri.intro.step1"].firstMatch.value as? String, "done")
-      let s2 = app.buttons["siri.intro.step2.done"]; scrollTo(s2); s2.tap()
+      XCTAssertFalse(app.buttons["siri.intro.step2.done"].exists, "t952: no say-it step")
       let next = app.buttons["siri.intro.next"]; scrollTo(next); XCTAssertTrue(next.waitForExistence(timeout: 4)); XCTAssertTrue(next.isEnabled)
       XCTAssertFalse(any["t893.steps"].firstMatch.exists, "still no Face ID sheet before 下一步")
       t902shot("siri-intro-steps-done-\(lang)")
@@ -707,7 +707,7 @@ final class KipurseUITests: XCTestCase {
   func testT902NextDisabledUntilSteps() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "agents", "-kp.lang", "zh"]; app.launch()
     let c = app.buttons["agent.siri.connect"].firstMatch; XCTAssertTrue(c.waitForExistence(timeout: 8)); c.tap()
-    let next = app.buttons["siri.intro.next"]; scrollTo(next); XCTAssertTrue(next.waitForExistence(timeout: 6)); XCTAssertFalse(next.isEnabled, "steps 1-2 first")
+    let next = app.buttons["siri.intro.next"]; scrollTo(next); XCTAssertTrue(next.waitForExistence(timeout: 6)); XCTAssertFalse(next.isEnabled, "step 1 first")
   }
   func testSiriAgentCardNotConnected() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "agents", "-kp.lang", "zh"]; app.launch()
