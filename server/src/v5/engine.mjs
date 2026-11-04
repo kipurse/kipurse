@@ -17,7 +17,7 @@ import {abiFor,TRUST_FNS,ZERO,ZERO32,TIERS,decodePolicyV5,permissionFromJson,fee
 import {identityV5,signedLedgerKey,signedPurchaseKeyV5,merchantIdBytes} from './ref.mjs';
 import {v5Client} from './chain.mjs';import {createMandates,purposeKey,purposeName,fmtUsdc as mUsd} from './mandates.mjs';import {classifyPayee,ADDRESS_SOURCES,groups4} from './address-trust.mjs';import {GUARD_DEFAULTS,normalizeOrder,checkOrder,checkTrial,TIER_LIMITS,claimedTier,ALL_SOURCES,TIER_SAY,checkAiVerified,blacklisted} from './guardrails.mjs';import {createTrustRequests} from './trust-requests.mjs';import {join as joinPath} from 'node:path';
 import {createFloat} from './float.mjs';import {buildExitPlanV5} from './plan.mjs';import {createUserOpWriter,loadOrCreateSessionKey,GAS_MODES} from './userop.mjs';import {decodeEventLog,parseAbi as parseAbiX} from 'viem';import {toCsv,receipt as taxReceipt,annualSummary} from './tax.mjs';
-import {F2_WARNING} from './paymaster.mjs';import {authHeaderFor,redactSecrets} from './merchant-auth.mjs';import {discoverMerchant,orderToPayment,buildCreateOrder} from './discovery.mjs';import {attestOrder} from './attestor.mjs';import {QUESTIONS,disclosure,RISK_NOTICE_ZH,RISK_NOTICE_EN,buildOneSignatureBatchV5} from './owner-setup.mjs';import {depositInfo} from './owner-guard.mjs';
+import {buildReceipt} from './receipt.mjs';import {caseState,refundRequest,RESPONSE_WINDOW_SEC} from './dispute-window.mjs';import {F2_WARNING} from './paymaster.mjs';import {authHeaderFor,redactSecrets} from './merchant-auth.mjs';import {discoverMerchant,orderToPayment,buildCreateOrder} from './discovery.mjs';import {attestOrder} from './attestor.mjs';import {QUESTIONS,disclosure,RISK_NOTICE_ZH,RISK_NOTICE_EN,buildOneSignatureBatchV5} from './owner-setup.mjs';import {depositInfo} from './owner-guard.mjs';
 const USDC_OF={8453:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',84532:'0x036CbD53842c5426634e7929541eC2318f3dCF7e'};
 import {GasBook,inflightLock,liveUsdcPerEth,ETH_USD_FEEDS,SEQUENCER_FEEDS,sequencerCheck,secondUsdcPerEth,divergenceBps,MAX_FAILURES_PER_AGENT_PER_DAY} from './gas.mjs';
 import {trustTypedData,untrustTypedData,denySignerTypedData,approvalTypedData,newNonce} from './owner.mjs';
@@ -288,7 +288,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const needsOwnerApproval=n.mode!=='signed'&&!approved&&uniq.length>0&&uniq.every(isOwnerApprovable);
     return j({...(gasMode==='f2'?{gasMode,warning:F2_WARNING}:{}),canPay:uniq.length===0,reasons:uniq,needsOwnerApproval,tier:r.tier,merchant:directory(n)?.id??(r.merchant??null),
       standard:n.standard,mode:n.mode,payee:n.payee,
-      quote:{amount,fee:fe,networkFee,gasQuote:nf??null,gasRecovery:nfx.recovery,total,feePpm:f.ppm,feePercent:Number(f.ppm)/10000,maxNetworkFee:B('maxNetworkFee'),
+      quote:{amount,fee:fe,networkFee,gasQuote:nf??null,gasRecovery:nfx.recovery,total,feePpm:f.ppm,feePercent:Number(f.ppm)/10000,maxNetworkFee:B('maxNetworkFee'),receipt:buildReceipt({amount,ppm:f.ppm,networkFee,payee:n.payee,merchant:directory(n)?.id??(r.merchant??null)}),
         note:'payer pays amount + 0.1% protocol fee + network fee (= actual gas cost, no markup, never subsidized); merchant pays 0 and receives amount. Per-payment caps count the amount; daily/term caps count the total.'},
       fee:{protocolAtomic:fe,networkAtomic:networkFee},amount,totalCostAtomic:total,maxPayable:{overall:overall??0n,byCap},
       gas:{units:gasUnits,unquotableDetail:nfDetail,priceCheck:lastPriceCheck,paidBy:'payer (reimbursed in USDC in the same tx)',x402CloseShareIncluded:n.mode==='eip3009',outstandingFailedGas:gas.outstanding(p.account),failuresToday:gas.failuresToday(agentId),maxFailuresPerDay:MAX_FAILURES_PER_AGENT_PER_DAY},
@@ -369,7 +369,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         const fe=feeFor(n.amount,await fee());settleGas(nfx,tx.hash);
         ledger.update(key,agentId,{state:'paid',result:{txHash:tx.hash,block:tx.blockNumber?.toString(),fee:fe.toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString(),gasUsed:tx.gasUsed?.toString()}});
         try{if(jt)cfg.jointTrust.recordPaid({decision:jt,amount:n.amount,purchaseKey:key});if(withdrawalId!==undefined)cfg.ownerGuard?.markWithdrawal(withdrawalId,{state:'paid',txHash:tx.hash});}catch{}
-        return {state:'paid',purchaseKey:key,txHash:tx.hash,onchainPurchaseKey:id.purchaseKey,amount:n.amount.toString(),fee:fe.toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString(),total:(n.amount+fe+networkFee).toString()};
+        return {state:'paid',purchaseKey:key,txHash:tx.hash,onchainPurchaseKey:id.purchaseKey,amount:n.amount.toString(),fee:fe.toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString(),total:(n.amount+fe+networkFee).toString(),receipt:buildReceipt({amount:n.amount,ppm:(await fee()).ppm,networkFee,payee:n.payee,txHash:tx.hash,status:'paid'})};
       }
       if(n.eip712?.name!==undefined||n.eip712?.version!==undefined){
         const want=await rd('DOMAIN_SEPARATOR',[],cfg.token);
@@ -928,9 +928,9 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const requestRefund=({purchaseKey,reason='other',note=''}={},agentId)=>{if(!cfg.disputes)throw Error('disputes are not enabled on this gateway');
     const pr=listPurchases({limit:100000}).find(x=>x.purchaseKey===purchaseKey||x.txHash===purchaseKey);if(!pr)return {state:'rejected',reason:'unknown_purchase',detail:'no payment with that purchase key; see kipurse_list_purchases'};
     const c=cfg.disputes.open({purchase:pr,reason,note,by:agentId?'agent:'+agentId:'owner'});
-    return {state:'opened',case:c,refundTo:p.account,network:'Base',asset:'USDC',
+    return {state:'opened',case:{...c,state:caseState(c),respondBy:c.openedAt+RESPONSE_WINDOW_SEC},refundRequest:refundRequest(c,{wallet:p.account}),refundTo:p.account,network:'Base',asset:'USDC',
       merchantInstructions:`To refund, send up to ${(Number(c.amount)/1e6).toFixed(6)} USDC on Base to ${p.account} (reference ${c.reference}). Kipurse matches refunds from the paying address ${c.payee} automatically.`};};
-  const disputes=()=>cfg.disputes?cfg.disputes.list():[];
+  const disputes=()=>cfg.disputes?cfg.disputes.list().map(c=>({...c,state:caseState(c),respondBy:c.openedAt+RESPONSE_WINDOW_SEC})):[];
   const cardCreate=async(o,agentId)=>{if(!cfg.cards)return {state:'rejected',reason:'no_card_provider',detail:'real-world cards are not enabled on this gateway'};
     return cfg.cards.create({...o,agentId},({to,amountAtomic,merchant,orderRef,idempotencyKey})=>payAny({agentId,order:o.order??normalizeOrder(o),payment:{to,amountAtomic,asset:'USDC'},merchant,orderRef,idempotencyKey,maxAmount:o.maxAmount}));};
   const cards=()=>cfg.cards?cfg.cards.list():[];

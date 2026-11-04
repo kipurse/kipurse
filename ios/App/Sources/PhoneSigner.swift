@@ -170,6 +170,7 @@ struct PhoneApproveTrustSheet: View {
             LabeledContent(T("到期", "Expires"), value: m.expiry == RequestVerify.noExpiry ? T("不过期，直到你取消", "Never, until you remove it") : Date(timeIntervalSince1970: Double(m.expiry) ?? 0).formatted(date: .abbreviated, time: .omitted)) }
           Section(T("AI 说的理由（仅供参考）", "AI's reason (for reference only)")) { Text("\(m.name) — \(r["reason"] as? String ?? "")").font(.callout)
             Text(T("申请的 AI：", "Requested by: ") + ((r["requestedBy"] as? [String])?.joined(separator: ", ") ?? "")).font(.caption).foregroundStyle(.secondary) }
+          if let fr = FeeReceipt(data?["feePreview"] as? [String: Any]) { Section(T("费用（Face ID 之前看清）", "Fees (before Face ID)")) { ForEach(Array(fr.rows(zh: Loc.isChinese).enumerated()), id: \.offset) { LabeledContent($0.element.0, value: $0.element.1) } }.accessibilityIdentifier("trust.fee.preview") }
           if RequestVerify.isReusableTrust(m) { Section { Label(RequestVerify.rememberNote(zh: Loc.isChinese), systemImage: "checkmark.shield").font(.callout).accessibilityIdentifier("trust.remember.free") } }
           if !issues.isEmpty { Section { ForEach(issues, id: \.self) { Text($0).foregroundStyle(Brand.negative) } } }
           Section {

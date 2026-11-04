@@ -3,6 +3,7 @@
 // OWNER signs with his own Base Account. Approve = he signs the trustBySig wallet message; the server checks that signature against
 // the owner address (ERC-1271/6492 on chain) BEFORE relaying, so a forged or wrong signature never reaches the chain (or costs gas).
 // Reject = he signs a short reject message (also verified). Agents can still only REQUEST; nothing here can be done by an agent key.
+import {buildReceipt} from './receipt.mjs';
 import {langOf} from './i18n.mjs';import {randomBytes,createHash} from 'node:crypto';import {getAddress} from 'viem';import {phoneTrustWrapper,p256VerifyDigest} from './phone-signer.mjs';
 const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10,7 +11,7 @@ const usd=a=>{try{const n=BigInt(a);return (Number(n)/1e6).toString();}catch{ret
 export const rejectMessage=(id,payee)=>`Kipurse: I reject trust request ${id} for payee ${payee}. Nothing is trusted.`;
 export const phoneRejectDigest=(id,payee)=>'0x'+createHash('sha256').update(rejectMessage(id,payee)).digest('hex');
 /** phone: {active:()=>({index,x,y,maxSingle,maxDaily})|null, verifyWrapped:(digest,wrapper)=>Promise<bool> (wallet ERC-1271 on chain), adapter, chainId} */
-export function createPublicTrustApproval({owner,wallet,ownerApi,verifyTypedData,verifyMessage,script,base,phone=null,addressCheck=null}){
+export function createPublicTrustApproval({owner,wallet,ownerApi,verifyTypedData,verifyMessage,script,base,phone=null,addressCheck=null,feePpm=null}){
   const OWNER=getAddress(owner),WALLET=getAddress(wallet);const prepared=new Map();const busy=new Set();const hits=new Map();
   const limited=(ip,max=30)=>{const n=Date.now(),h=hits.get(ip)??[0,n];if(n-h[1]>60000){h[0]=0;h[1]=n;}h[0]++;hits.set(ip,h);return h[0]>max;};
   const find=id=>{const l=ownerApi.list();return [...l.pending,...l.recent].find(r=>r.id===id)??null;};
@@ -55,7 +56,8 @@ button{display:block;width:100%;border:0;border-radius:14px;padding:15px;font-si
       if(p==='/approve/trust/phone-prepare'){const a=phone?.active?.();if(!a){json(409,{error:'no_phone_signer'});return true;}
         let c=prepared.get(id);if(!(c&&c.inner&&r.status==='awaiting_signature'&&Date.now()-c.at<600000)){const out=await ownerApi.approve(id);c={td:out.typedData,inner:out.innerTypedData,digest:out.digest,at:Date.now()};prepared.set(id,c);}
         if(!c.inner){json(409,{error:'not_supported'});return true;}
-        json(200,{request:{id:r.id,payee:r.payee,merchantName:r.merchantName,reason:r.reason,requestedBy:r.requestedBy,single:r.single,total:r.total},message:c.inner.message,domain:c.inner.domain,digest:c.digest,
+        const feePreview=await (async()=>{try{const ppm=await feePpm?.();return ppm==null||r.single==null?null:{...buildReceipt({amount:BigInt(r.single),ppm,networkFee:0n,payee:r.payee}),networkFeeAtPayment:true};}catch{return null;}})();
+        json(200,{feePreview,request:{id:r.id,payee:r.payee,merchantName:r.merchantName,reason:r.reason,requestedBy:r.requestedBy,single:r.single,total:r.total},message:c.inner.message,domain:c.inner.domain,digest:c.digest,
           wallet:WALLET,chainId:c.inner.domain?.chainId,phone:{index:a.index,maxSingle:a.maxSingle,maxDaily:a.maxDaily},addressCheck:await (async()=>{try{const v=await addressCheck?.(r.payee);return v?.ok?{status:v.status,verified:v.verified,groups:v.groups,lookalikes:v.lookalikes??[],inbound:v.inbound}:null;}catch{return null;}})()});return true;}
       if(p==='/approve/trust/phone-sign'){const a=phone?.active?.();const c=prepared.get(id);if(!a){json(409,{error:'no_phone_signer'});return true;}if(!c?.inner){json(409,{error:'prepare_first'});return true;}
         if(BigInt(c.inner.message.single)>BigInt(a.maxSingle)||BigInt(c.inner.message.daily)>BigInt(a.maxDaily)){json(403,{error:'above_phone_ceiling',detail:'这次的上限超过手机确认允许的范围，请用 Base Account 批准'});return true;}

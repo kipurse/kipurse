@@ -90,7 +90,7 @@ test('op kinds: payments pay back only payment ops; owner-action gas stays on th
 test('engine userop: owner-action gas is not billed to a payment while the vault buffer is healthy; billed (own line) when low',async()=>{
   const {engine,m}=zrEngine();engine.gasBook.recordCharge({account:WALLET,txHash:'0xtrust',charged:7105n,kind:'owner'});
   const r1=await engine.pay({...ORD,request:direct('10000','own-1'),idempotencyKey:'idem-own-0001'});assert.equal(r1.state,'paid');assert.equal(r1.networkFee,'0'); // first payment: no owner-action gas billed
-  const pf=await engine.preflight(direct('10000','own-2'));assert.equal(pf.quote.networkFee,'1517'); // only the previous payment's own charge
+  const pf=await engine.preflight(direct('10000','own-2'));assert.equal(pf.quote.networkFee,'1517');assert.equal(pf.quote.receipt.networkFee,'1517');assert.equal(pf.quote.receipt.total,String(pf.quote.total));assert.equal(pf.quote.receipt.paidFrom,'wallet_balance'); // only the previous payment's own charge
   m.s.bal=1n;const low=await engine.preflight(direct('10000','own-3'));assert.equal(low.quote.networkFee,String(1517n+7105n)); // buffer low -> refill
   assert.equal(engine.gasBook.pendingTopUp(WALLET,'owner'),7105n);});
 

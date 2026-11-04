@@ -148,7 +148,7 @@ const API={
       if(!S.setup.active&&st.walletDeployed&&Number((await pub.getBlock()).timestamp)>=Number(S.setup.permission.start)+5&&await pub.readContract({address:NET.spm,abi:SPMR,functionName:'isValid',args:[S.setup.permObj()]}).catch(()=>false)){S.setup.active=true;save();await boot();st.setup.active=true;}}
     if(engine){await scanDeposits().catch(()=>{});const g=cfg.ownerGuard;st.limits=g.limits();{const c=g.capsForTrust();if(c)st.main={single:c.mainSingle.toString(),daily:c.mainDaily.toString()};}st.trust=cfg.jointTrust.list();{const o=cfg.__trustRequestsOwner;if(o)st.trustRequests=o.api.list(o.cap);}st.deposits=g.deposits().slice(-20);st.quarantined=g.quarantined().toString();if(S.setup?.vault){try{st.reserve=(await bal(S.setup.vault)).toString();}catch{}}st.pending=g.pending();
       try{st.purchases=enrichPurchases(engine.listPurchases({limit:20}));}catch{st.purchases=[];}
-      try{cfg.disputes?.matchRefunds(g.deposits().map(d=>({from:d.from,amount:d.amount,txHash:d.txHash??d.id,at:d.time})));st.disputes=cfg.disputes?.list()??[];}catch{st.disputes=[];}}
+      try{cfg.disputes?.matchRefunds(g.deposits().map(d=>({from:d.from,amount:d.amount,txHash:d.txHash??d.id,at:d.time})));st.disputes=engine?.disputes?.()??cfg.disputes?.list()??[];}catch{st.disputes=[];}}
     return st;},
   async prepare({owner,answers}){if(S.setup?.active)throw Error('already set up');const o=getAddress(owner);const nonce=BigInt(keccak256(toHex('kipurse-kit:'+o+':'+Date.now())));
     const wallet=getAddress(await pub.readContract({address:NET.factory,abi:ERC,functionName:'getAddress',args:[ownersBytes(o),nonce]}));

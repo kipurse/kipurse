@@ -596,7 +596,8 @@ struct TxDetail: View {
         }
         if let d = dispute {
           Section(T("退款进度", "Refund status")) {
-            LabeledContent(T("状态", "Status"), value: disputeStatus(d["status"]?.string ?? "open"))
+            LabeledContent(T("状态", "Status"), value: DisputeState.label(state: d["state"]?.string, status: d["status"]?.string, zh: Loc.isChinese))
+            if let due = d["respondBy"]?.atomic, d["status"]?.string == "open" { LabeledContent(T("商家应在此前退款", "Merchant should refund by"), value: Date(timeIntervalSince1970: Double(due)).formatted(date: .abbreviated, time: .omitted)) }
             LabeledContent(T("已退回", "Refunded"), value: money(d["refunded"]?.atomic ?? 0))
             Text(T("商家把钱退回钱包后会自动显示在这里。", "When the merchant sends the money back it shows here automatically.")).font(.footnote).foregroundStyle(.secondary)
           }
@@ -615,7 +616,6 @@ struct TxDetail: View {
     }
   }
   var receiptText: String { [T("Kipurse 收据", "Kipurse receipt"), "\(who) → \(t.merchantName)", money(t.amount), t.date?.formatted() ?? "", t.txHash.map { "\(explorer)/tx/\($0)" } ?? ""].joined(separator: "\n") }
-  func disputeStatus(_ s: String) -> String { switch s { case "refunded": return T("已全部退款", "Fully refunded"); case "resolved": return T("已解决", "Resolved"); case "withdrawn": return T("已撤回", "Withdrawn"); default: return T("等待商家退款", "Waiting for the merchant") } }
 }
 
 struct ReportProblemView: View {
