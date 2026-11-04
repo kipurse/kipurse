@@ -1,5 +1,5 @@
 // Docs site builder (no deps). Same look as kipurse.com: theme/ holds the main site's CSS, WebGL aurora (bg.js), fx.js, fonts, logo.
-// docs/**/*.md -> dist/. English default; 中文 toggle switches chrome and body: Simplified Chinese bodies live in docs-site/zh/<same path>.md. Deploy needs owner approval.
+// docs/**/*.md -> dist/ (English overrides for Chinese-first docs in docs-site/en/). English default; 中文 toggle switches chrome and body: Simplified Chinese bodies live in docs-site/zh/<same path>.md. Deploy needs owner approval.
 import fs from 'node:fs';import path from 'node:path';
 const here=path.dirname(new URL(import.meta.url).pathname),root=path.resolve(here,'..'),out=path.join(here,'dist');
 fs.rmSync(out,{recursive:true,force:true});fs.cpSync(path.join(here,'theme'),out,{recursive:true});
@@ -8,6 +8,7 @@ const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)
 function md(s){let h='',code=false,tbl=[],list=null;const fl=()=>{if(list){h+=`</${list}>`;list=null;}if(!tbl.length)return;const rows=tbl.filter(r=>!/^\|[\s:|-]+\|$/.test(r));
   h+='<div class="tw"><table>'+rows.map((r,i)=>'<tr>'+r.slice(1,-1).split('|').map(c=>`<${i?'td':'th'}>${inl(c.trim())}</${i?'td':'th'}>`).join('')+'</tr>').join('')+'</table></div>';tbl=[];};
   let title=null;for(const l of s.split('\n')){if(l.startsWith('```')){fl();h+=code?'</code></pre>':'<pre><code>';code=!code;continue;}if(code){h+=esc(l)+'\n';continue;}
+    if(/^>\s?/.test(l)){fl();h+=`<blockquote>${inl(l.replace(/^>\s?/,''))}</blockquote>`;continue;}
     if(l.startsWith('|')){if(list){h+=`</${list}>`;list=null;}tbl.push(l.trim());continue;}if(tbl.length)fl();
     const m=/^(#{1,4}) (.*)/.exec(l);const li=/^\s*[-*] (.*)/.exec(l),ol=/^\s*\d+\. (.*)/.exec(l);
     if(m){fl();if(m[1].length===1&&!title){title=m[2];continue;}h+=`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`;}
@@ -17,7 +18,7 @@ const GROUPS={design:['Design','设计'],security:['Security','安全'],fees:['F
 const clean=t=>(t??'').replace(/\s*\((?:t\d+|updated|draft|NOT|prepared|owner|Siri AI skill)[^)]*\)/gi,'').replace(/\s+—\s+\d{4}-\d{2}-\d{2}$/,'').trim();
 const bil=t=>{t=clean(t);const m=/^(.*?[\u4e00-\u9fff].*?)\s+\/\s+(.*)$/.exec(t);return m?`<span class="l-zh">${inl(m[1])}</span><span class="l-en">${inl(m[2])}</span>`:inl(t);};
 const pages=[];const walk=d=>{for(const f of fs.readdirSync(path.join(root,d)).sort()){const p=path.join(d,f);if(fs.statSync(path.join(root,p)).isDirectory())walk(p);
-  else if(f.endsWith('.md')){const g=p.split('/')[1];const zf=path.join(here,'zh',p.replace(/^docs\//,''));const zh=fs.existsSync(zf)?md(fs.readFileSync(zf,'utf8')):null;pages.push({zh,slug:p.replace(/^docs\//,'').replace(/\.md$/,'').replace(/[\/.]/g,'-').toLowerCase(),src:p,group:g,...md(fs.readFileSync(path.join(root,p),'utf8'))});}}};walk('docs');
+  else if(f.endsWith('.md')){const g=p.split('/')[1];const zf=path.join(here,'zh',p.replace(/^docs\//,''));const ef=path.join(here,'en',p.replace(/^docs\//,''));const en=fs.existsSync(ef)?md(fs.readFileSync(ef,'utf8')):null;const zh=fs.existsSync(zf)?md(fs.readFileSync(zf,'utf8')):null;pages.push({zh,slug:p.replace(/^docs\//,'').replace(/\.md$/,'').replace(/[\/.]/g,'-').toLowerCase(),src:p,group:g,...(en??md(fs.readFileSync(path.join(root,p),'utf8')))});}}};walk('docs');
 const CSS=`main{max-width:1120px;margin:0 auto;padding:0 20px}.dh{padding:72px 0 28px;text-align:center}.dh h1{font-size:clamp(34px,5.4vw,62px);line-height:1.05;letter-spacing:-.03em;margin:18px 0 12px}
 .dh .lead{max-width:680px;margin:0 auto;color:var(--mut)}.grp{margin:40px 0 10px;font:12px GeistMono,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--c)}
 .dg{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}.dc{position:relative;display:block;text-decoration:none;color:inherit;border:1px solid var(--line);background:var(--card);border-radius:18px;padding:20px;transition:.3s;backdrop-filter:blur(8px)}
@@ -29,7 +30,7 @@ const CSS=`main{max-width:1120px;margin:0 auto;padding:0 20px}.dh{padding:72px 0
 .art h2{font-size:24px;margin:34px 0 10px}.art h3{font-size:18px;margin:24px 0 8px}.art p,.art li{color:#d6d4e6;line-height:1.7}.art a{color:var(--c)}.art code{font:13px GeistMono,monospace;background:rgba(139,116,255,.14);border-radius:6px;padding:1px 6px}
 .art pre{background:rgba(0,0,0,.45);border:1px solid var(--line);border-radius:14px;padding:16px;overflow:auto}.art pre code{background:none;padding:0}
 .tw{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:14px}.art table{border-collapse:collapse;width:100%;font-size:14px}.art th{text-align:left;color:var(--fg);background:rgba(139,116,255,.12)}
-.art td,.art th{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}.art tr:last-child td{border-bottom:0}.src{margin-top:28px;font:12px GeistMono,monospace;color:#7d7b94}
+.art td,.art th{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}.art tr:last-child td{border-bottom:0}.art blockquote{margin:18px 0;padding:14px 18px;border:1px solid rgba(139,116,255,.35);border-left:3px solid var(--c);border-radius:14px;background:linear-gradient(90deg,rgba(20,210,238,.08),rgba(139,116,255,.10));color:#e6e4f4;line-height:1.7}.art blockquote b{color:var(--fg)}.src{margin-top:28px;font:12px GeistMono,monospace;color:#7d7b94}
 .sr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border:1px solid var(--line);background:var(--card);border-radius:16px;margin:10px 0}.up{color:#5ef0b0}.down{color:#ff6b8b}
 html:not([lang=en]) .l-en,html[lang=en] .l-zh{display:none}body{min-height:100vh;display:flex;flex-direction:column}main{flex:1;width:100%}footer{width:100%;box-sizing:border-box}#bg,.bg-fallback{position:fixed!important;height:100vh!important;-webkit-mask-image:none!important;mask-image:none!important}.nav nav{display:flex!important;gap:18px}@media(max-width:820px){.lay{grid-template-columns:1fr;padding-top:20px}.side{display:none}.nav nav .wide{display:none}.nav{gap:12px}.nav nav{gap:14px}.dh{padding-top:48px}}`;
 const T={en:{brand:'Kipurse',home:'Home',docs:'Docs',status:'Status',h:'Kipurse documentation',p:'Design, security, fees and operations — the same files as the open-source repo, rendered.',src:'Source',sp:'Checked live from your browser when you open this page. Nothing runs in the background on our side.',
