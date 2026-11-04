@@ -3,6 +3,9 @@
 A self-custodial USDC wallet on Base that lets AI agents pay within limits you set, with Face ID approval on your iPhone.
 一个在 Base 上的自托管 USDC 钱包：AI 只能在你设定的额度内付款，超额、新收款人都要你在 iPhone 上用 Face ID 批准。
 
+## Use with an AI agent (MCP)
+Remote MCP server: `https://pay.kipurse.com/mcp` (Streamable HTTP, OAuth). Setup for Cline and other MCP clients: [llms-install.md](llms-install.md).
+
 ## Layout
 - `ios/` — iOS app (SwiftUI), widget, `KipurseCore` Swift package, unit and UI tests.
 - `server/` — Kipurse production gateway (cleaned copy): owner API, AI agent MCP (OAuth), Siri endpoint, pause, caps, onboarding sponsor caps, rescue (offline withdraw) page, SDK. Operator values (addresses, keys, URLs) come from config outside the repo.
