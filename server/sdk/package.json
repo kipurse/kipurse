@@ -1,7 +1,6 @@
 {
   "name": "@kipurse/sdk",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Kipurse agent SDK: connect any agent framework to an owner-controlled Kipurse USDC wallet gateway (parse, preflight, pay exactly once, limits, merchant info).",
   "main": "src/index.mjs",
