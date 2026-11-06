@@ -46,7 +46,21 @@ test('signature writes the policy and the connection together; a bad signature, 
   const text=firstConnectText({wallet:W,clientId:ok.out.clientId,agent:'Claude',request:ok.out.req,redirect:ok.out.redirect,...AMOUNTS,action:'approve',nonce:ok.out.nonce,exp:ok.out.exp});
   assert.equal(ok.out.digest,firstConnectDigest({wallet:W,clientId:ok.out.clientId,agent:'Claude',request:ok.out.req,redirect:ok.out.redirect,...AMOUNTS,action:'approve',nonce:ok.out.nonce,exp:ok.out.exp}));
   const done=await t.call('/oauth/phone-decide',{req:ok.out.req,approve:true,...t.phone.sig(text)});
-  assert.equal(done.code,200);assert.equal(done.out.status,'approved');assert.equal(t.ev.get().authorized,true);assert.equal(t.ev.get().term,'15000000');assert.deepEqual(t.agents,['claude-desktop']);});
+  assert.equal(done.code,200);assert.equal(done.out.status,'approved');assert.equal(t.ev.get().authorized,true);assert.equal(t.ev.get().term,'15000000');assert.deepEqual(t.agents,['claude-desktop']);
+  const replay=await t.call('/oauth/phone-decide',{req:ok.out.req,approve:true,...t.phone.sig(text)});
+  assert.equal(replay.code,400);assert.equal(t.agents.length,1);assert.equal(t.ev.get().term,'15000000');});
+test('each unset agent is asked, and one confirmed policy is shared without being rewritten',async()=>{
+  const t=harness();
+  for(const agent of ['muse','grok','claude','siri']){const started=await t.call('/oauth/first',{agent,...AMOUNTS});assert.equal(started.code,200);assert.equal(started.out.mode,'first');assert.equal(t.ev.get().authorized,false);assert.equal(t.agents.length,0);}
+  const siri=await t.call('/oauth/first',{agent:'siri',...AMOUNTS});
+  const text=firstConnectText({wallet:W,clientId:siri.out.clientId,agent:'Siri',request:siri.out.req,redirect:siri.out.redirect,...AMOUNTS,action:'approve',nonce:siri.out.nonce,exp:siri.out.exp});
+  assert.equal((await t.call('/oauth/phone-decide',{req:siri.out.req,approve:true,...t.phone.sig(text)})).out.status,'approved');
+  const at=t.ev.get().at;
+  const r=await t.call('/oauth/register',{client_name:'Muse',redirect_uris:['https://muse.ai/api/hatch/oauth/callback']});
+  await t.call(`/oauth/authorize?response_type=code&client_id=${r.out.client_id}&redirect_uri=${encodeURIComponent('https://muse.ai/api/hatch/oauth/callback')}&code_challenge=${'A'.repeat(43)}&code_challenge_method=S256`,null,'GET');
+  const id=Object.keys(t.S.oauth.pending).find(k=>t.S.oauth.pending[k].client_id===r.out.client_id);
+  const prep=await t.call('/oauth/phone-prepare',{req:id});
+  assert.equal(prep.out.mode,'reuse');assert.equal(t.ev.get().at,at);assert.equal(t.ev.get().term,'15000000');});
 test('a failed connection rolls the new policy back and leaves the request pending',async()=>{
   const t=harness({throwOnAgent:true});const ok=await t.call('/oauth/first',{agent:'siri',...AMOUNTS});
   const text=firstConnectText({wallet:W,clientId:ok.out.clientId,agent:'Siri',request:ok.out.req,redirect:ok.out.redirect,...AMOUNTS,action:'approve',nonce:ok.out.nonce,exp:ok.out.exp});

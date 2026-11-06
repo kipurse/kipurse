@@ -114,7 +114,8 @@ export class V4Ledger{
     this.db.prepare(`UPDATE purchases SET state='failed',updated_at=? WHERE purchase_key=? AND state='claimed'`).run(Date.now(),key);this.event(null,key,'everyday_release',{reason:'term'});return {ok:false,spent:others.toString()};}
     return {ok:true,spent:others.toString()};});}
   /** Hold a float reservation inside the same lock as the total. The caller deletes it after the real session row exists. */
-  reserveFloat(session,amount,limit){return this.tx(()=>{try{this.db.prepare(`INSERT OR REPLACE INTO float_sessions(session,float_vault,funded,fee_reserve,network_fee,fund_tx,funded_at) VALUES(?,?,?,?,?,?,?)`).run(session,'reserved',Number(amount),0,0,'reserved',Date.now());}catch{return {ok:false,error:'reserve_failed'};}
+  reserveFloat(session,amount,limit){return this.tx(()=>{try{const existing=this.db.prepare(`SELECT fund_tx FROM float_sessions WHERE session=?`).get(session);if(existing&&existing.fund_tx!=='reserved')return {ok:false,error:'reserve_failed'};
+    this.db.prepare(`INSERT OR REPLACE INTO float_sessions(session,float_vault,funded,fee_reserve,network_fee,fund_tx,funded_at) VALUES(?,?,?,?,?,?,?)`).run(session,'reserved',Number(amount),0,0,'reserved',Date.now());}catch{return {ok:false,error:'reserve_failed'};}
     const spent=this._committed(null);if(spent>BigInt(limit)){this.db.prepare(`DELETE FROM float_sessions WHERE session=? AND fund_tx='reserved'`).run(session);return {ok:false,spent:spent.toString()};}return {ok:true,spent:spent.toString()};});}
   clearFloatReserve(session){try{this.db.prepare(`DELETE FROM float_sessions WHERE session=? AND fund_tx='reserved'`).run(session);}catch{}}
   /** Sum (atomic, BigInt) committed by one agent since a timestamp: claimed/submitted/prepared/paid rows it originated. */

@@ -35,7 +35,7 @@ export function explicitEveryday(r){
   let s,d,term;try{s=BigInt(r.single);d=BigInt(r.daily);term=BigInt(r.term);}catch{return null;}
   if(s<=0n||d<=0n||term<=0n||s>d||d>term)return null;
   return {single:s,daily:d,term,at};}
-const UNCONFIRMED={state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true,capHit:true,fix:'AI spending limits are not confirmed. Nothing was paid. The owner sets them in the Kipurse app; there is no default.',say_to_user:'没有付款：AI 总限额还没有确认，不能花钱。请先在启付里自己设置，没有默认额度。/ Not paid: AI spending limits are not confirmed, so nothing can be spent. Set them yourself in Kipurse. There is no default.'};
+const UNCONFIRMED={state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true,capHit:true,fix:'AI spending limits are not confirmed. Nothing was paid. The owner sets them in the Kipurse app; there is no default.',say_to_user:'没有付款：AI 花钱上限还没有确认，不能花钱。请先在启付里自己设置，没有默认额度。/ Not paid: AI spending limits are not confirmed, so nothing can be spent. Set them yourself in Kipurse. There is no default.'};
 export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now()}){
   const K=kvKey('everyday',null,String(wallet).toLowerCase());
   const raw=()=>{try{const s=kv.get(K);return s?(typeof s==='string'?JSON.parse(s):s):null;}catch{return null;}};

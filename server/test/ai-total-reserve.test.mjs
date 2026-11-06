@@ -21,4 +21,7 @@ test('a pending hold counts, and a float voucher already stored as a purchase is
   assert.equal(db.committedSpend(),12_000_000n);
   const fit=db.admitAmount('k1',4_000_000n,12_000_000n);assert.equal(fit.ok,true);
   db.claim('k3',row(1n,'o3'),null,'siri');
-  assert.equal(db.admitAmount('k3',1n,12_000_000n).ok,false);assert.equal(db.get('k3').state,'failed');db.close();});
+  assert.equal(db.admitAmount('k3',1n,12_000_000n).ok,false);assert.equal(db.get('k3').state,'failed');
+  const before=db.db.prepare(`SELECT fund_tx,funded FROM float_sessions WHERE session='sess'`).get();
+  assert.equal(db.reserveFloat('sess',1,10_000_000n).error,'reserve_failed');
+  assert.deepEqual(db.db.prepare(`SELECT fund_tx,funded FROM float_sessions WHERE session='sess'`).get(),before);db.close();});

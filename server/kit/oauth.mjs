@@ -122,7 +122,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   function bindSpend(p){const s=currentSpend();if(s.mode!=='enforced')return s;p.aiLimits=s.authorized?{perPayment:s.perPayment,perDay:s.perDay,termTotal:s.termTotal,at:s.at??null}:null;save();return s;}
   function assertSpend(p){const s=currentSpend();if(s.mode!=='enforced')return;
     if(s.authorized&&sameSpend(p.aiLimits,s))return;
-    const stale=!!s.authorized;const e=Error(stale?'额度已经变了，这次页面上的数字不能用。请重新打开连接页再确认。/ The limits changed, so the amounts on this page cannot be used. Open the connection again.':'AI 总限额还没有确认，不能授权花钱。请先在启付里设置，再重新打开这个连接。/ AI spending limits are not confirmed, so this does not authorize spending. Set them in Kipurse, then open this connection again.');e.code=stale?'ai_limits_stale':'ai_limits_unconfirmed';throw e;}
+    const stale=!!s.authorized;const e=Error(stale?'额度已经变了，这次页面上的数字不能用。请重新打开连接页再确认。/ The limits changed, so the amounts on this page cannot be used. Open the connection again.':'AI 花钱上限还没有确认，不能授权花钱。请先在启付里设置，再重新打开这个连接。/ AI spending limits are not confirmed, so this does not authorize spending. Set them in Kipurse, then open this connection again.');e.code=stale?'ai_limits_stale':'ai_limits_unconfirmed';throw e;}
   const spendError=e=>e&&(e.code==='ai_limits_unconfirmed'||e.code==='ai_limits_stale');
 
   // ---- consent page ----
@@ -143,7 +143,7 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
   function phonePrepare(body){gc();const id=String(body?.req||'');const p=O.pending[id];if(!p||p.status!=='pending'||p.exp<Date.now()/1000)return [400,{error:'expired',error_description:'请求已过期或已处理，请回到 AI 重新连接'}];
     const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];const live=currentSpend();
     let host='';try{host=new URL(p.redirect_uri).host;}catch{}
-    if(live.mode==='enforced'&&live.authorized!==true){const q=atomic3(body);if(!q)return [409,{error:'limits_required',error_description:'AI 总限额还没有确认。连接批准要带上你选的每笔、每天和总额。'}];
+    if(live.mode==='enforced'&&live.authorized!==true){const q=atomic3(body);if(!q)return [409,{error:'limits_required',error_description:'AI 花钱上限还没有确认。连接批准要带上你选的每笔、每天和总额。'}];
       p.proposal={...q,nonce:rnd(18)};p.phase='signing';p.phaseAt=Date.now();save();const shown=firstFields(id,'approve');
       return [200,{mode:'first',req:id,clientId:shown.clientId,name:shown.agent,kind:mapClient(shown.agent),redirect:shown.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(shown.exp),wallet,single:q.single,daily:q.daily,total:q.total,nonce:q.nonce,fingerprint:a.fingerprint,digest:firstConnectDigest(shown),rejectDigest:firstConnectDigest({...shown,action:'reject'}),access:'request-only'}];}
     delete p.proposal;p.phase='signing';p.phaseAt=Date.now();save();const f=phoneFields(id,'approve');
@@ -169,7 +169,7 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
     if(!approve){let redirect;try{redirect=decide(id,false);}catch(e){if(spendError(e))return [403,{error:e.code,error_description:e.message}];throw e;}
       O.pending[id].by='phone:'+a.fingerprint;save();return [200,{status:'denied',redirect}];}
     let undo=null;
-    if(p.proposal){if(live.mode==='enforced'&&live.authorized===true&&!limitsMatch(live,p.proposal))return [403,{error:'ai_limits_stale',error_description:'额度已经变了，这次签名里的数字不能用。没有保存，也没有连接。'}];
+    if(p.proposal){if(live.mode==='enforced'&&live.authorized===true&&!limitsMatch(live,p.proposal))return [403,{error:'ai_limits_stale',error_description:'额度已经变了，这次确认里的数字不能用。没有保存，也没有连接。'}];
       if(live.mode==='enforced'&&live.authorized===true)p.aiLimits={perPayment:live.perPayment,perDay:live.perDay,termTotal:live.termTotal,at:live.at??null};
       else{let wrote;try{wrote=commitSpend?.({single:p.proposal.single,daily:p.proposal.daily,total:p.proposal.total});}catch{wrote={ok:false,error:'commit_failed'};}
         if(!wrote?.ok)return [403,{error:wrote?.error||'commit_unavailable',error_description:'额度没有写入，连接也没有创建。'}];
@@ -179,26 +179,34 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
   function consentHtml(reqId,client,{owner,csrf,nonce,en}){const p=O.pending[reqId];const spend=bindSpend(p);const kind=mapClient(client.name);const X=(zh,e)=>en?e:zh;
     const what=`<div class=c><b>${X('它能做什么','What it can do')}</b><ul><li>${X('查看余额和付款记录','See your balance and payments')}</li><li>${X('在你设的上限内自动付款','Pay on its own, within your limits')}</li><li>${X('提议信任新的收款方、申请提现到你的钱包——都要你批准','Suggest new shops or withdrawals — you approve each one')}</li></ul><div class=muted>${X('它不能改上限，不能把钱转到别处。随时可以在 Kipurse App 里断开。','It can’t change your limits or send money anywhere else. Disconnect anytime in the Kipurse app.')}</div></div>`;
     const money=v=>en?'$'+esc(v):esc(v)+' USDC';
+    const limTitle=X('AI 花钱上限','AI spending limits');
+    const limExplain=X('所有 AI 共用，每笔、每天、总共最多花多少；免费修改','Shared by every AI: the most per payment, per day, and in total. Free to change.');
     let lim;if(spend.mode==='legacy'){let cp=null;try{cp=typeof caps==='function'?caps():null;}catch{cp=null;}
-      lim=cp?`<div class=c><b>${X('上限','Your limits')}</b>${[[X('每笔','Per payment'),cp.perPayment],[X('每天','Per day'),cp.perDay],[X('整个期间','In total'),cp.termTotal]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v!=null&&v!==''?money(v):''}</span></div>`).join('')}</div>`:'';}
+      lim=cp?`<div class=c><b>${limTitle}</b><div class=muted>${limExplain}</div>${[[X('每笔','Per payment'),cp.perPayment],[X('每天','Per day'),cp.perDay],[X('总共','In total'),cp.termTotal]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v!=null&&v!==''?money(v):''}</span></div>`).join('')}</div>`:'';}
     else{const vals=spend.authorized?[spend.perPayment,spend.perDay,spend.termTotal??'']:['','',''];
-      lim=`<div class=c><b>${X('上限','Your limits')}</b>${[[X('每笔','Per payment'),vals[0]],[X('每天','Per day'),vals[1]],[X('整个期间','In total'),vals[2]]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v?money(v):''}</span></div>`).join('')}</div>`;}
+      const blank=spend.authorized?'':`<p class=muted>${X('还没有确认。请在启付现有的 AI 花钱上限页填写这三项。钱包安全上限不是你选的额度。确认前不能批准。','Not confirmed yet. Enter these three amounts on the existing AI spending limits page in Kipurse. The wallet safety limit is not a limit you chose. This cannot be approved before that.')}</p>`;
+      lim=`<div class=c><b>${limTitle}</b><div class=muted>${limExplain}</div>${[[X('每笔','Per payment'),vals[0]],[X('每天','Per day'),vals[1]],[X('总共','In total'),vals[2]]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v?money(v):''}</span></div>`).join('')}${blank}</div>`;}
+    const openApp=`<a class="btn p" id=fid href="kipurse://approve-connect?id=${reqId}">${spend.authorized?X('在 Kipurse 里用 Face ID 批准','Approve with Face ID in Kipurse'):X('在启付里设置 AI 花钱上限','Set AI spending limits in Kipurse')}</a>`;
     const head=`<div class=mk>K</div><div class=t>${esc(client.name)} ${X('想连接你的 Kipurse 钱包','wants to connect to your Kipurse wallet')}</div><p class=s>${X('类型','Type')}: ${esc(kind)} · ${X('回调','Returns to')}: ${esc(new URL(p.redirect_uri).host)}</p>`;
     const warn=`<div class=warn>${X('⚠️ 这个钱包完全由 AI 控制，请只放少量资金。','Your AI can spend this money on its own — keep only a small amount here.')}</div>`;
     if(!owner&&MAIN&&verifyOwner&&phoneOn()){const data=JSON.stringify({req:reqId,client:client.name,owner:ownerAddress,message:ownerMessage(reqId),en}).replace(/</g,'\\u003c');
       const T=JSON.stringify({signing:X('授权中…请在 Kipurse 里用 Face ID 批准','Approving… confirm with Face ID in Kipurse'),done:X('授权完成，正在返回 ','Approved — returning to ')+client.name+'…',back:X('返回 ','Return to ')+client.name,
         denied:X('已拒绝','Declined'),expired:X('已过期，请回到 AI 重新连接','Expired — go back to your AI and connect again')}).replace(/</g,'\\u003c');
-      return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}<a class="btn p" id=fid href="kipurse://approve-connect?id=${reqId}">${X('在 Kipurse 里用 Face ID 批准','Approve with Face ID in Kipurse')}</a>
-<p class=muted id=pst>${X('打开 Kipurse App，用已登记的这台 iPhone 批准。批准后这里会自动返回。','Opens the Kipurse app on your enrolled iPhone. This page continues by itself.')}</p><div id=back></div>
-<button class=g id=ok>${X('或用 Base Account 批准','Or approve with Base Account')}</button><button class=g id=no>${X('拒绝','Decline')}</button><p class=muted id=st></p>
+      const pst=spend.authorized?X('打开 Kipurse App，用已登记的这台 iPhone 批准。批准后这里会自动返回。','Opens the Kipurse app on your enrolled iPhone. This page continues by itself.'):X('打开启付后，在现有的 AI 花钱上限页填写三项。这一页不会批准。','Open Kipurse and enter the three amounts on the existing AI spending limits page. This page will not approve.');
+      const alt=spend.authorized?`<button class=g id=ok>${X('或用 Base Account 批准','Or approve with Base Account')}</button>`:'';
+      return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}${openApp}
+<p class=muted id=pst>${pst}</p><div id=back></div>
+${alt}<button class=g id=no>${X('拒绝','Decline')}</button><p class=muted id=st></p>
 <script type="application/json" id=kp-data>${data}</script><script nonce="${nonce}" src="/oauth/consent.js"></script>`,nonce,
 `(()=>{const T=${T},st=document.getElementById('pst'),bk=document.getElementById('back');let fin=false;const go=r=>{if(fin)return;fin=true;st.textContent=T.done;st.style.color='#0E9F6E';st.style.fontWeight='600';
 for(const i of ['fid','ok','no'])document.getElementById(i)?.remove();const a=document.createElement('a');a.className='btn p';a.href=r;a.textContent=T.back;bk.replaceChildren(a);setTimeout(()=>{location.href=r;},600);};
 const tick=async()=>{if(fin)return;try{const j=await(await fetch('/oauth/status?req=${reqId}',{cache:'no-store'})).json();if(j.redirect)go(j.redirect);else if(j.status==='denied'){st.textContent=T.denied;fin=true;}
 else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=true;}else if(j.phase==='signing'){st.textContent=T.signing;st.style.fontWeight='600';}}catch{}};setInterval(tick,1500);tick();document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();});addEventListener('pageshow',tick);addEventListener('focus',tick);})();`);}
     if(!owner&&MAIN&&verifyOwner){const data=JSON.stringify({req:reqId,client:client.name,owner:ownerAddress,message:ownerMessage(reqId),en}).replace(/</g,'\\u003c');
-      return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}<button class=p id=ok>${X('用我的 Base Account 批准（Face ID）','Approve with my Base Account (Face ID)')}</button><button class=g id=no>${X('拒绝','Decline')}</button>
-<p class=muted id=st>${X('只有钱包主人的 Base Account 确认才能批准。确认不花钱，不发交易。','Only the wallet owner’s Base Account signature can approve. Signing is free and sends no transaction.')}</p><div id=back></div><script type="application/json" id=kp-data>${data}</script><script nonce="${nonce}" src="/oauth/consent.js"></script>`,nonce);}
+      const primary=spend.authorized?`<button class=p id=ok>${X('用我的 Base Account 批准（Face ID）','Approve with my Base Account (Face ID)')}</button>`:openApp;
+      const note=spend.authorized?X('只有钱包主人的 Base Account 确认才能批准。确认不花钱，不发交易。','Only the wallet owner’s Base Account signature can approve. Signing is free and sends no transaction.'):X('还没有确认的 AI 花钱上限。打开启付填写三项后再回到这一页。确认不花钱，不发交易。','AI spending limits are not confirmed. Open Kipurse, enter the three amounts, then come back. Signing spends nothing and sends no transaction.');
+      return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}${primary}<button class=g id=no>${X('拒绝','Decline')}</button>
+<p class=muted id=st>${note}</p><div id=back></div><script type="application/json" id=kp-data>${data}</script><script nonce="${nonce}" src="/oauth/consent.js"></script>`,nonce);}
     if(owner)return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}<form method=post action="/oauth/decision"><input type=hidden name=req value="${reqId}"><input type=hidden name=csrf value="${csrf}">
 <button class=p name=d value=approve>${X('批准连接','Approve')}</button><button class=g name=d value=deny>${X('拒绝','Decline')}</button></form>`,nonce);
     return page(X('批准连接','Approve connection'),`${head}${what}${lim}${warn}<a class="btn p" href="kipurse://oauth?req=${reqId}">${X('在 iPhone 上用 Kipurse App 批准（Face ID）','Approve in the Kipurse app (Face ID)')}</a>
