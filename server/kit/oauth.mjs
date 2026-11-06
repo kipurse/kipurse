@@ -26,6 +26,15 @@ export function validRedirect(u){if(CUSTOM_REDIRECTS.has(u))return true;try{cons
 export function pkceOk(verifier,challenge){if(!/^[A-Za-z0-9\-._~]{43,128}$/.test(verifier||''))return false;
   const a=Buffer.from(b64url(createHash('sha256').update(verifier).digest())),b=Buffer.from(String(challenge));return a.length===b.length&&timingSafeEqual(a,b);}
 /** Client name -> gallery agent type. */
+/** Pick an OAuth agent id without touching any other row. Siri never uses the phone-signer id `siri`. A different client on the same id is refused; nothing is deleted. */
+export function reserveOAuthAgent(agents,{name,kind,clientId,knownIds=new Set()}){
+  let id=knownIds.has(kind)||['grok-bot','claude-code','codex','gemini-cli','gemini-spark'].includes(kind)?kind:'oauth-'+kind;
+  if(name==='Siri'||id==='siri')id='oauth-siri';
+  const cur=agents[id];
+  if(cur&&cur.clientId!==clientId)return {ok:false,error:'agent_id_in_use',id};
+  if(!cur)agents[id]={id,name,kind,clientId,created:new Date().toISOString()};
+  return {ok:true,id};
+}
 export function mapClient(name){const n=String(name||'').toLowerCase();
   const rules=[['grok bot','grok-bot'],['grok-bot','grok-bot'],['muse','muse'],['chatgpt','chatgpt'],['openai','chatgpt'],['claude code','claude-code'],['claude','claude-desktop'],['anthropic','claude-desktop'],['grok','grok'],['xai','grok'],['cursor','cursor'],['antigravity','antigravity'],['gemini spark','gemini-spark'],['google gemini','gemini-spark'],['gemini cli','gemini-cli'],['gemini','gemini-cli'],['codex','codex']];
   for(const [k,v] of rules)if(n.includes(k))return v;return 'custom';}

@@ -1,5 +1,5 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {generateKeyPairSync,sign,createHash} from 'node:crypto';
-import {createOAuth,connectText,firstConnectText,firstConnectDigest} from '../kit/oauth.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {generateKeyPairSync,sign,createHash} from 'node:crypto';
+import {createOAuth,connectText,firstConnectText,firstConnectDigest,reserveOAuthAgent} from '../kit/oauth.mjs';
 import {createEverydayLimits,consentSpend} from '../src/v5/everyday-limits.mjs';
 import {p256VerifyDigest,fingerprint} from '../src/v5/phone-signer.mjs';
 const W='0x1000000000000000000000000000000000000001';
@@ -79,6 +79,22 @@ test('an already confirmed policy still uses the v1 statement and is not rewritt
   assert.equal(prep.out.mode,'reuse');assert.equal(prep.out.digest,'0x'+createHash('sha256').update(connectText({wallet:W,req:id,clientId:r.out.client_id,name:'Muse',redirect:'https://muse.ai/api/hatch/oauth/callback',exp:t.S.oauth.pending[id].exp,action:'approve'})).digest('hex'));
   const before=t.ev.get().at;const d=await t.call('/oauth/phone-decide',{req:id,approve:true,...t.phone.sig(connectText({wallet:W,req:id,clientId:r.out.client_id,name:'Muse',redirect:'https://muse.ai/api/hatch/oauth/callback',exp:t.S.oauth.pending[id].exp,action:'approve'}))});
   assert.equal(d.out.status,'approved');assert.equal(t.ev.get().at,before);assert.equal(t.ev.get().term,'30000000');});
+test('a Siri connection does not take the phone id or edit any other agent row',()=>{
+  const agents={siri:{id:'siri',clientId:'phone',name:'Siri',kind:'siri'},muse:{id:'muse',clientId:'c1',name:'Muse',kind:'muse'}};
+  const siri={...agents.siri},muse={...agents.muse};
+  const made=reserveOAuthAgent(agents,{name:'Siri',kind:'custom',clientId:'kpc_new',knownIds:new Set(['muse','siri'])});
+  assert.equal(made.ok,true);assert.equal(made.id,'oauth-siri');
+  assert.deepEqual(agents.siri,siri);assert.deepEqual(agents.muse,muse);
+  assert.equal(agents['oauth-siri'].clientId,'kpc_new');
+  const clash=reserveOAuthAgent(agents,{name:'Siri',kind:'custom',clientId:'kpc_other',knownIds:new Set(['muse','siri'])});
+  assert.equal(clash.ok,false);assert.equal(clash.error,'agent_id_in_use');
+  assert.equal(agents['oauth-siri'].clientId,'kpc_new');assert.deepEqual(agents.siri,siri);assert.deepEqual(agents.muse,muse);
+  const same=reserveOAuthAgent(agents,{name:'Siri',kind:'custom',clientId:'kpc_new'});
+  assert.equal(same.ok,true);assert.equal(Object.keys(agents).length,3);
+  const src=readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
+  assert.match(src,/name==='Siri'\|\|kind==='siri'/);assert.match(src,/reserveOAuthAgent\(S\.oauthAgents/);
+  assert.doesNotMatch(src,/name==='Siri'\?'siri'/);
+});
 test('amounts above the floor write nothing and create no connection',async()=>{
   const t=harness();const ok=await t.call('/oauth/first',{agent:'siri',single:'20000000',daily:'60000000',total:'60000000'});
   const text=firstConnectText({wallet:W,clientId:ok.out.clientId,agent:'Siri',request:ok.out.req,redirect:ok.out.redirect,single:'20000000',daily:'60000000',total:'60000000',action:'approve',nonce:ok.out.nonce,exp:ok.out.exp});

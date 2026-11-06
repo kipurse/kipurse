@@ -25,3 +25,15 @@ test('a pending hold counts, and a float voucher already stored as a purchase is
   const before=db.db.prepare(`SELECT fund_tx,funded FROM float_sessions WHERE session='sess'`).get();
   assert.equal(db.reserveFloat('sess',1,10_000_000n).error,'reserve_failed');
   assert.deepEqual(db.db.prepare(`SELECT fund_tx,funded FROM float_sessions WHERE session='sess'`).get(),before);db.close();});
+test('opening an existing ledger does not rewrite a paid purchase or change the schema',()=>{
+  const file=join(mkdtempSync(join(tmpdir(),'kp-')),'l.sqlite');
+  const db=new V4Ledger(file);
+  db.claim('paid1',row(1_000_000n,'o1'),null,'muse');
+  db.db.prepare(`UPDATE purchases SET state='paid', tx_hash='0xabc' WHERE purchase_key='paid1'`).run();
+  const tables=db.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`).all().map(r=>r.name);
+  db.close();
+  const again=new V4Ledger(file);
+  const kept=again.get('paid1');
+  assert.equal(kept.state,'paid');assert.equal(kept.tx_hash,'0xabc');
+  assert.deepEqual(again.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`).all().map(r=>r.name),tables);
+  again.close();});
