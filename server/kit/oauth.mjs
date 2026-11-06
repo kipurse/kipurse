@@ -137,13 +137,22 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   // ---- consent page ----
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function page(title,inner,nonce,script=''){const zh=/[\u3400-\u9fff]/.test(String(title));return `<!doctype html><html lang=${zh?'zh':'en'}><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
-<style>:root{--a:#5B4CF0;--bg:#F2F2F7;--card:#fff;--t:#111;--s:#6b6b78;color-scheme:light dark}@media(prefers-color-scheme:dark){:root{--a:#8B7CFF;--bg:#000;--card:#1c1c1e;--t:#f5f5f7;--s:#9a9aa5}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:17px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}.w{max-width:460px;margin:0 auto;padding:28px 20px 40px}
-.mk{width:56px;height:56px;border-radius:15px;background:var(--a);color:#fff;display:grid;place-items:center;font:700 30px ui-rounded,-apple-system}.t{font-size:26px;font-weight:700;margin:16px 0 4px}.s{color:var(--s);margin:0 0 20px}
-.c{background:var(--card);border-radius:18px;padding:16px 18px;margin:12px 0}.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.2)}.row:last-child{border:0}
-.n{font:600 17px ui-rounded,-apple-system;font-variant-numeric:tabular-nums}ul{margin:6px 0;padding-left:20px}li{margin:4px 0}.warn{background:rgba(220,38,38,.1);color:#c81e1e;border-radius:14px;padding:12px 14px;font-weight:600}
-.test{background:#FFD666;color:#3D2A00;text-align:center;font-size:13px;font-weight:600;padding:6px}button,.btn{display:block;width:100%;border:0;border-radius:14px;padding:15px;font:600 17px -apple-system;margin-top:10px;text-align:center;text-decoration:none;cursor:pointer}
-.p{background:var(--a);color:#fff}.g{background:rgba(91,76,240,.12);color:var(--a)}.muted{color:var(--s);font-size:14px}</style>
+<style>:root{--a:#5B4CF0;--ahi:#7C6CFF;--cyan:#00E0FF;--t:#fff;--s:rgba(255,255,255,.73);color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;color:var(--t);font:17px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+body{background-color:#05040C;background-image:radial-gradient(ellipse at 15% 5%,rgba(91,44,255,.33),transparent 60%),radial-gradient(ellipse at 95% 20%,rgba(0,224,255,.16),transparent 50%),radial-gradient(ellipse at 50% 100%,rgba(255,45,149,.16),transparent 70%)}
+.w{max-width:460px;margin:0 auto;padding:max(28px,env(safe-area-inset-top)) 20px max(40px,env(safe-area-inset-bottom))}
+.mk{width:56px;height:56px;border-radius:16px;background:linear-gradient(#7C6CFF,#5B4CF0);color:#fff;display:grid;place-items:center;font:700 30px ui-rounded,-apple-system}
+.t{font-size:28px;font-weight:700;letter-spacing:-.02em;margin:16px 0 4px}.s{color:var(--s);margin:0 0 20px}
+.c{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));border-radius:24px;padding:16px 18px;margin:12px 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 0 0 1px rgba(167,139,250,.55),0 8px 24px rgba(91,44,255,.28)}
+.row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.12)}.row:last-child{border:0}
+.n{font:600 17px ui-rounded,-apple-system;font-variant-numeric:tabular-nums}ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
+.warn{background:rgba(248,113,113,.12);color:#F87171;border-radius:16px;padding:12px 14px;font-weight:600}
+.test{background:#FFD666;color:#3D2A00;text-align:center;font-size:13px;font-weight:600;padding:6px}
+button,.btn{display:block;width:100%;border:0;border-radius:16px;min-height:54px;padding:15px 12px;font:600 17px/1.2 -apple-system;margin-top:10px;text-align:center;text-decoration:none;cursor:pointer}
+.p{background:linear-gradient(#7C6CFF,#5B4CF0);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 14px rgba(91,76,240,.45)}
+.g{background:rgba(91,76,240,.12);color:#A79BFF}.muted{color:var(--s);font-size:15px}
+@media(max-width:360px){.t{font-size:24px}.w{padding-left:16px;padding-right:16px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}</style>
 ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'Base Mainnet'}</div>`:`<div class=test>${zh?'测试模式 · Base Sepolia · 测试币，不是真钱':'Test mode · Base Sepolia · test money, not real'}</div>`}<div class=w>${inner}</div>${script?`<script nonce="${nonce}">${script}</script>`:''}</html>`;}
   const phoneOn=()=>!!(MAIN&&phoneApprover&&phoneApprover.active());
   function phoneFields(id,action){const p=O.pending[id];const c=O.clients[p.client_id];return {wallet,req:id,clientId:p.client_id,name:c?.name??'AI',redirect:p.redirect_uri,exp:p.exp,action};}

@@ -24,6 +24,7 @@ const noDefaults=html=>{assert.doesNotMatch(html,/>10 USDC<|>\$10</);assert.does
 test('Muse approval with chain caps 10/50/200 shows blanks and grants nothing',async()=>{
   const t=oauth({spend:()=>({authorized:false})});const {id,page}=await open(t);
   assert.match(page,/Muse 想连接你的 Kipurse 钱包/);assert.match(page,/agent\.meta\.ai/);assert.match(page,/AI 花钱上限/);assert.match(page,/所有 AI 共用/);
+  assert.match(page,/background-color:#05040C/);assert.doesNotMatch(page,/backdrop-filter/);assert.doesNotMatch(page,/AI spending limits/);assert.match(page,/钱包安全上限/);
   assert.match(page,/kipurse:\/\/approve-connect\?id=/);assert.match(page,/在启付里设置 AI 花钱上限/);assert.doesNotMatch(page,/用我的 Base Account 批准/);
   noDefaults(page);assert.match(page,/<span class=n><\/span>/);
   const d=await t.call('/oauth/owner-decide',{req:id,approve:true,signature:'0xabc',perPayment:'10',perDay:'50',termTotal:'200',confirmed:true});
@@ -33,6 +34,7 @@ test('Muse approval with chain caps 10/50/200 shows blanks and grants nothing',a
 test('English approval is blank too, and a bad signature grants nothing',async()=>{
   const t=oauth({spend:()=>({authorized:false}),verify:async()=>false,lang:'en-US'});const {id,page}=await open(t);
   assert.match(page,/wants to connect to your Kipurse wallet/);assert.match(page,/AI spending limits/);assert.match(page,/Shared by every AI/);
+  assert.match(page,/background-color:#05040C/);assert.doesNotMatch(page,/backdrop-filter/);assert.doesNotMatch(page,/AI 花钱上限/);assert.match(page,/wallet safety limit/);
   assert.match(page,/Set AI spending limits in Kipurse/);assert.doesNotMatch(page,/Approve with my Base Account/);noDefaults(page);
   const d=await t.call('/oauth/owner-decide',{req:id,approve:true,signature:'0xno'});assert.equal(d.code,403);assert.equal(d.out.error,'not_owner');assert.equal(t.agents.length,0);assert.equal(t.S.oauth.pending[id].status,'pending');});
 
