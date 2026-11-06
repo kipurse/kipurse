@@ -6,8 +6,10 @@ const key=()=>{const k=generateKeyPairSync('ec',{namedCurve:'P-256'});const j=k.
     sig:digestText=>{const s=sign('sha256',Buffer.from(digestText),{key:k.privateKey,dsaEncoding:'ieee-p1363'});const N=0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;let sv=BigInt('0x'+s.subarray(32).toString('hex'));if(sv>N/2n)sv=N-sv;// low-s, like the app
     return {r:'0x'+s.subarray(0,32).toString('hex'),s:'0x'+sv.toString(16).padStart(64,'0')};}};};
 function setup({onChain=true,now}={}){const S={},phone=key(),agents=[];let active=phone,chain=onChain;
+  // t1073: mainnet approval requires an explicit spend snapshot. This fixture is a confirmed save, not a product default.
   const O=createOAuth({S,save:()=>{},base:()=>'https://pay.example',network:'main',wallet:W,ownerAddress:'0x2222',verifyOwner:async()=>false,
     createAgentKey:(n,k)=>{agents.push(k);return k;},isAgentLive:()=>true,caps:()=>null,ownerSession:()=>null,
+    spendAuthorization:()=>({authorized:true,perPayment:'2',perDay:'5',termTotal:'30',at:1}),
     phoneApprover:{active:()=>active,onChain:async()=>chain,verify:(a,d,r,s)=>p256VerifyDigest(a,d,r,s)}});
   const call=async(path,body,method='POST')=>{let out,code,hdr;const res={writeHead(c,h){code=c;hdr=h;},end(b){out=b;}};
     await O.handle({method,headers:{'accept-language':'zh-CN'}},res,new URL('https://pay.example'+path),{readBody:async()=>body,ip:'1.1.1.'+Math.floor(Math.random()*250)});

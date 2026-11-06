@@ -38,7 +38,7 @@ export function mapClient(name){const n=String(name||'').toLowerCase();
 export const connectText=({wallet,req,clientId,name,redirect,exp,action})=>`Kipurse approve connection v1\nwallet:${String(wallet).toLowerCase()}\nreq:${req}\nclient:${clientId}\nname:${name}\nredirect:${redirect}\nexp:${Math.floor(exp)}\naction:${action}`;
 export const connectDigest=f=>'0x'+createHash('sha256').update(connectText(f)).digest('hex');
 /** phoneApprover (mainnet): {active:()=>{approver,x,y,fingerprint}|null, onChain:async a=>bool (still an owner of the wallet), verify:(a,digestHex,r,s)=>bool} */
-export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null}){
+export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null}){
   S.oauth??={clients:{},pending:{},codes:{},tokens:{}};let O=S.oauth;
   const RES=()=>base()+'/mcp';
   const hits=new Map();// ip -> [count, windowStart]
@@ -78,6 +78,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,ownerSe
   function decide(reqId,approve){const p=O.pending[reqId];if(!p||p.exp<Date.now()/1000||p.status!=='pending')throw Error('请求已过期或已处理，请回到 AI 重新连接');
     const c=O.clients[p.client_id];const u=new URL(p.redirect_uri);if(p.state!=null)u.searchParams.set('state',p.state);u.searchParams.set('iss',base());
     if(!approve){p.status='denied';u.searchParams.set('error','access_denied');p.redirect=u.toString();save();return p.redirect;}
+    assertSpend(p); // t1073: Face ID / Base Account approval does not grant spend unless the shown AI limits are still the confirmed ones
     const agentId=createAgentKey(c.name,mapClient(c.name),p.client_id);const code=rnd(32);
     O.codes[sha(code)]={client_id:p.client_id,redirect_uri:p.redirect_uri,challenge:p.challenge,agentId,exp:Date.now()/1000+CODE_TTL};
     u.searchParams.set('code',code);p.codeHash=sha(code);p.codeExp=Date.now()/1000+CODE_TTL;p.status='approved';p.redirect=u.toString();save();return p.redirect;}
@@ -104,6 +105,21 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,ownerSe
   function revokeAgent(agentId){for(const [k,t] of Object.entries(O.tokens))if(t.agentId===agentId)delete O.tokens[k];for(const [k,c] of Object.entries(O.codes))if(c.agentId===agentId)delete O.codes[k];save();}
   function pendingList(){gc();return Object.entries(O.pending).filter(([,p])=>p.status==='pending').map(([id,p])=>({id,client:O.clients[p.client_id]?.name??'AI',kind:mapClient(O.clients[p.client_id]?.name),exp:Math.floor(p.exp),host:(()=>{try{return new URL(p.redirect_uri).host;}catch{return '';}})()}));}
 
+  // ---- t1073 spend authorization (independent of the page and of any client-sent amounts) ----
+  const canon=s=>{const t=String(s??'').trim();if(!/^\d+(\.\d{1,6})?$/.test(t))return null;const [a,b='']=t.split('.');const whole=a.replace(/^0+(?=\d)/,'')||'0';const frac=b.replace(/0+$/,'');if(whole==='0'&&!frac)return null;return frac?`${whole}.${frac}`:whole;};
+  const cmpDec=(x,y)=>{const [ax,fx='']=x.split('.'),[ay,fy='']=y.split('.');const n=Math.max(fx.length,fy.length);const bx=BigInt(ax+fx.padEnd(n,'0')),by=BigInt(ay+fy.padEnd(n,'0'));return bx<by?-1:bx>by?1:0;};
+  function currentSpend(){if(typeof spendAuthorization!=='function')return MAIN?{mode:'enforced',authorized:false}:{mode:'legacy'};
+    try{const v=spendAuthorization();if(!v||v.authorized!==true)return {mode:'enforced',authorized:false};
+      const per=canon(v.perPayment),day=canon(v.perDay);if(!per||!day||cmpDec(per,day)>0)return {mode:'enforced',authorized:false};
+      let term=null;if(v.termTotal!=null&&String(v.termTotal).trim()!==''){term=canon(v.termTotal);if(!term||cmpDec(day,term)>0)return {mode:'enforced',authorized:false};}
+      return {mode:'enforced',authorized:true,perPayment:per,perDay:day,termTotal:term,at:v.at??null};}catch{return {mode:'enforced',authorized:false};}}
+  const sameSpend=(a,b)=>!!a&&!!b&&a.perPayment===b.perPayment&&a.perDay===b.perDay&&(a.termTotal??null)===(b.termTotal??null)&&(a.at??null)===(b.at??null);
+  function bindSpend(p){const s=currentSpend();if(s.mode!=='enforced')return s;p.aiLimits=s.authorized?{perPayment:s.perPayment,perDay:s.perDay,termTotal:s.termTotal,at:s.at??null}:null;save();return s;}
+  function assertSpend(p){const s=currentSpend();if(s.mode!=='enforced')return;
+    if(s.authorized&&sameSpend(p.aiLimits,s))return;
+    const stale=!!s.authorized;const e=Error(stale?'额度已经变了，这次页面上的数字不能用。请重新打开连接页再确认。/ The limits changed, so the amounts on this page cannot be used. Open the connection again.':'AI 总限额还没有确认，不能授权花钱。请先在启付里设置，再重新打开这个连接。/ AI spending limits are not confirmed, so this does not authorize spending. Set them in Kipurse, then open this connection again.');e.code=stale?'ai_limits_stale':'ai_limits_unconfirmed';throw e;}
+  const spendError=e=>e&&(e.code==='ai_limits_unconfirmed'||e.code==='ai_limits_stale');
+
   // ---- consent page ----
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function page(title,inner,nonce,script=''){const zh=/[\u3400-\u9fff]/.test(String(title));return `<!doctype html><html lang=${zh?'zh':'en'}><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
@@ -129,11 +145,15 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
     const d=connectDigest(phoneFields(id,approve?'approve':'reject'));let ok=false;try{ok=!!phoneApprover.verify(a,d,String(b.r??''),String(b.s??''));}catch{ok=false;}
     if(!ok)return [403,{error:'bad_signature',error_description:'确认不是这台已登记手机的'}];
     if(O.pending[id]?.status!=='pending')return [400,{error:'expired',error_description:'请求已处理'}];// raced with another decision
-    const redirect=decide(id,approve);O.pending[id].by='phone:'+a.fingerprint;save();return [200,{status:approve?'approved':'denied',redirect}];}
-  function consentHtml(reqId,client,{owner,csrf,nonce,en}){const p=O.pending[reqId];const cp=caps();const kind=mapClient(client.name);const X=(zh,e)=>en?e:zh;
+    let redirect;try{redirect=decide(id,approve);}catch(e){if(spendError(e))return [403,{error:e.code,error_description:e.message}];throw e;}
+    O.pending[id].by='phone:'+a.fingerprint;save();return [200,{status:approve?'approved':'denied',redirect}];}
+  function consentHtml(reqId,client,{owner,csrf,nonce,en}){const p=O.pending[reqId];const spend=bindSpend(p);const kind=mapClient(client.name);const X=(zh,e)=>en?e:zh;
     const what=`<div class=c><b>${X('它能做什么','What it can do')}</b><ul><li>${X('查看余额和付款记录','See your balance and payments')}</li><li>${X('在你设的上限内自动付款','Pay on its own, within your limits')}</li><li>${X('提议信任新的收款方、申请提现到你的钱包——都要你批准','Suggest new shops or withdrawals — you approve each one')}</li></ul><div class=muted>${X('它不能改上限，不能把钱转到别处。随时可以在 Kipurse App 里断开。','It can’t change your limits or send money anywhere else. Disconnect anytime in the Kipurse app.')}</div></div>`;
     const money=v=>en?'$'+esc(v):esc(v)+' USDC';
-    const lim=cp?`<div class=c><b>${X('上限','Your limits')}</b>${[[X('每笔','Per payment'),cp.perPayment],[X('每天','Per day'),cp.perDay],[X('整个期间','In total'),cp.termTotal]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${money(v)}</span></div>`).join('')}</div>`:'';
+    let lim;if(spend.mode==='legacy'){let cp=null;try{cp=typeof caps==='function'?caps():null;}catch{cp=null;}
+      lim=cp?`<div class=c><b>${X('上限','Your limits')}</b>${[[X('每笔','Per payment'),cp.perPayment],[X('每天','Per day'),cp.perDay],[X('整个期间','In total'),cp.termTotal]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v!=null&&v!==''?money(v):''}</span></div>`).join('')}</div>`:'';}
+    else{const vals=spend.authorized?[spend.perPayment,spend.perDay,spend.termTotal??'']:['','',''];
+      lim=`<div class=c><b>${X('上限','Your limits')}</b>${[[X('每笔','Per payment'),vals[0]],[X('每天','Per day'),vals[1]],[X('整个期间','In total'),vals[2]]].map(([k,v])=>`<div class=row><span>${k}</span><span class=n>${v?money(v):''}</span></div>`).join('')}</div>`;}
     const head=`<div class=mk>K</div><div class=t>${esc(client.name)} ${X('想连接你的 Kipurse 钱包','wants to connect to your Kipurse wallet')}</div><p class=s>${X('类型','Type')}: ${esc(kind)} · ${X('回调','Returns to')}: ${esc(new URL(p.redirect_uri).host)}</p>`;
     const warn=`<div class=warn>${X('⚠️ 这个钱包完全由 AI 控制，请只放少量资金。','Your AI can spend this money on its own — keep only a small amount here.')}</div>`;
     if(!owner&&MAIN&&verifyOwner&&phoneOn()){const data=JSON.stringify({req:reqId,client:client.name,owner:ownerAddress,message:ownerMessage(reqId),en}).replace(/</g,'\\u003c');
@@ -175,7 +195,7 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
       if(b.approve!==true){json(200,{redirect:decide(id,false)});return true;}
       let ok=false;try{ok=await verifyOwner(ownerMessage(id),String(b.signature||''));}catch{ok=false;}
       if(!ok){json(403,{error:'not_owner',error_description:'确认不是钱包主人的 Base Account'});return true;}
-      json(200,{redirect:decide(id,true)});return true;}
+      try{json(200,{redirect:decide(id,true)});}catch(e){if(spendError(e)){json(403,{error:e.code,error_description:e.message});return true;}throw e;}return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-prepare'&&req.method==='POST'){const [c,b]=phonePrepare(String((await readBody(req)).req||''));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-decide'&&req.method==='POST'){const [c,b]=await phoneDecide(await readBody(req));json(c,b);return true;}
     if(p==='/oauth/status'){const r=O.pending[u.searchParams.get('req')||''];
@@ -192,7 +212,7 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
       const own=ownerSession(req);const en=(()=>{const q=new URL(req.url,'http://x').searchParams.get('lang');return q==='zh'||q==='en'?q==='en':!/^\s*zh/i.test(String(req.headers['accept-language']??''));})();html(200,consentHtml(r.req,r.client,{owner:!!own,csrf:own?.csrf,nonce,en}));return true;}
     if(p==='/oauth/decision'&&req.method==='POST'){const b=await readBody(req);const own=ownerSession(req);
       const en=(()=>{const q=new URL(req.url,'http://x').searchParams.get('lang');return q==='zh'||q==='en'?q==='en':!/^\s*zh/i.test(String(req.headers['accept-language']??''));})();if(!own||!b.csrf||b.csrf!==own.csrf){html(403,page(en?'Sign-in needed':'需要登录',en?`<div class=t>The wallet owner must sign in</div><p class=s>Use a browser signed in to Kipurse, or approve in the Kipurse app.</p>`:`<div class=t>需要主人登录</div><p class=s>请在已登录 Kipurse 的浏览器里操作，或用 Kipurse App 批准。</p>`,nonce));return true;}
-      try{const to=decide(String(b.req||''),b.d==='approve');res.writeHead(303,{location:to});res.end();}catch(e){html(400,page(en?'Expired':'已过期',`<div class=t>${esc(en?'The request has expired or was already handled. Go back to your AI and connect again.':e.message)}</div>`,nonce));}return true;}
+      try{const to=decide(String(b.req||''),b.d==='approve');res.writeHead(303,{location:to});res.end();}catch(e){if(spendError(e)){html(403,page(en?'Not confirmed':'还不能批准',`<div class=t>${esc(e.message)}</div>`,nonce));return true;}html(400,page(en?'Expired':'已过期',`<div class=t>${esc(en?'The request has expired or was already handled. Go back to your AI and connect again.':e.message)}</div>`,nonce));}return true;}
     json(404,{error:'not_found'});return true;}
 
   // account deletion: drop every client registration, pending request, code and token

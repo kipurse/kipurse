@@ -82,7 +82,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     engine=createEngineV5(cfg,{ledgerFile:R.engineFiles.ledgerFile??overrides.ledgerFile??cfg.ledgerFile});};boot();
   const E0=new Proxy({},{get:(_,k)=>engine[k]});const E=guardEngine(E0,{guard:SAFE,wallet:R.wallet});const O=()=>cfg.__trustRequestsOwner;
   const pol=()=>decodePolicyV5(permissionFromJson(S.permission).extraData);const target=BigInt(R.targetSingle??decodePolicyV5(permissionFromJson(S.permission).extraData).single);
-  const {createEverydayLimits,changeCost,EVERYDAY_WHY}=await import(G+'src/v5/everyday-limits.mjs');const EVD=createEverydayLimits({kv:KV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
+  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');const EVD=createEverydayLimits({kv:KV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
   const chainNow=async()=>Number((await pub.getBlock()).timestamp);
   async function planCapChange(choice){const {limitsWindow}=await import(G+'src/v5/limits-public.mjs');const cur=S.permission,cp=pol();const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();const fc=await pub.readContract({address:X.adapter,abi:v5Abi,functionName:'fees'});
     const ppm=await pub.readContract({address:fc,abi:v5Abi,functionName:'feePpm'});
@@ -103,7 +103,8 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   const knownIds=new Set((agents??[]).map(a=>a.id));
   const OA=createOAuth({S,save,base:()=>PUBLIC,network:'main',wallet:R.wallet,ownerAddress:R.owner,
     consentScript:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/consent.js');})(),
-    caps:()=>{try{const p=pol(),f=v=>(Number(BigInt(v))/1e6).toString();return {perPayment:f(p.single),perDay:f(p.daily),termTotal:f(p.term)};}catch{return null;}},
+    // t1073: the approval page shows only an explicit AI-limit save. Chain policy (including a 10/50/200 floor) is not spend authorization.
+    spendAuthorization:()=>{try{return consentSpend(EVD.get());}catch{return {authorized:false};}},
     ownerSession:()=>null,
     // Face ID approval by the ENROLLED phone key (KipursePhoneApprover), re-checked on chain at every decision. Base Account stays as the alternative.
     phoneApprover:{active:()=>PH.active(),verify:(a,d,r,s)=>p256VerifyDigest(a,d,r,s),
