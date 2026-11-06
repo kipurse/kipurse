@@ -17,36 +17,45 @@ export function changeCost({next,floor,firstFloorDone=true,feeUSDC=null}){
   return {free:!firstFloorDone,layer:'floor',feeUSDC:firstFloorDone?(feeUSDC==null?null:String(feeUSDC)):'0',needsFloorChange:true};}
 /** Atomic USDC (6 decimals) -> plain decimal. Null when the value is missing or not a positive integer. */
 export function formatAtomic(v){let b;try{b=typeof v==='bigint'?v:BigInt(v);}catch{return null;}if(b<=0n)return null;const whole=b/1000000n,frac=b%1000000n;if(frac===0n)return whole.toString();return `${whole}.${frac.toString().padStart(6,'0').replace(/0+$/,'')}`;}
-/** Connect-page amounts. Never copies the chain floor into an unconfirmed view. */
+/** Connect-page amounts. Shows the saved policy, never the chain floor substituted for a missing field.
+ *  `single`/`daily`/`term` on the view are the effective (clamped) caps. `requested*` are what was saved. */
 export function consentSpend(view){
-  if(!view||view.authorized!==true||view.single==null||view.daily==null)return {authorized:false};
-  let per,day,term=null;try{per=formatAtomic(view.single);day=formatAtomic(view.daily);if(per==null||day==null)return {authorized:false};
-    if(view.term!=null&&view.term!==''){term=formatAtomic(view.term);if(term==null)return {authorized:false};}}catch{return {authorized:false};}
-  return {authorized:true,perPayment:per,perDay:day,termTotal:term,at:view.at??null};}
-/** A stored row is an explicit owner save only when set() wrote it: positive single <= daily, and a finite `at`.
- *  Amounts alone, `confirmed:true` alone, or a copy of 10/50/200 do not qualify. `confirmed:false` never qualifies. */
+  if(!view||view.authorized!==true)return {authorized:false};
+  const rs=view.requestedSingle??view.single,rd=view.requestedDaily??view.daily;
+  const rt=Object.hasOwn(view,'requestedTerm')?view.requestedTerm:view.term;
+  let per,day,term=null;try{per=formatAtomic(rs);day=formatAtomic(rd);if(per==null||day==null)return {authorized:false};
+    if(rt!=null&&rt!==''){term=formatAtomic(rt);if(term==null)return {authorized:false};}}catch{return {authorized:false};}
+  return {authorized:true,perPayment:per,perDay:day,termTotal:term,at:view.at??null,
+    effectivePerPayment:formatAtomic(view.single),effectivePerDay:formatAtomic(view.daily),effectiveTermTotal:view.term==null?null:formatAtomic(view.term)};}
+const stamp=v=>{if(typeof v==='number'&&Number.isFinite(v))return v;if(typeof v==='string'&&/^\d+$/.test(v)){const n=Number(v);return Number.isFinite(n)?n:null;}return null;};
+/** A stored row is an explicit owner save when set() wrote it: positive single <= daily, and a finite `at`.
+ *  The build-43 app POST persists `{single,daily,at}` only (atomic strings, no term, no confirmed flag). That shape qualifies.
+ *  Amounts alone, `confirmed:true` alone, or the chain floor do not. `confirmed:false` never qualifies. */
 export function explicitEveryday(r){
   if(!r||typeof r!=='object'||Array.isArray(r)||r.confirmed===false)return null;
-  if(typeof r.at!=='number'||!Number.isFinite(r.at))return null;
+  const at=stamp(r.at);if(at==null)return null;
   let s,d,term=null;try{s=BigInt(r.single);d=BigInt(r.daily);}catch{return null;}
   if(s<=0n||d<=0n||s>d)return null;
   if(r.term!=null&&r.term!==''){try{term=BigInt(r.term);}catch{return null;}if(term<=0n||term<d)return null;}
-  return {single:s,daily:d,term,at:r.at};}
+  return {single:s,daily:d,term,at};}
 const UNCONFIRMED={state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true,capHit:true,fix:'AI spending limits are not confirmed. Nothing was paid. The owner sets them in the Kipurse app; there is no default.',say_to_user:'没有付款：AI 总限额还没有确认，不能花钱。请先在启付里自己设置，没有默认额度。/ Not paid: AI spending limits are not confirmed, so nothing can be spent. Set them yourself in Kipurse. There is no default.'};
 export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now()}){
   const K=kvKey('everyday',null,String(wallet).toLowerCase());
   const raw=()=>{try{const s=kv.get(K);return s?(typeof s==='string'?JSON.parse(s):s):null;}catch{return null;}};
   const fl=()=>{const f=floor();return {single:BigInt(f.single),daily:BigInt(f.daily),term:f.term==null||f.term===''?null:BigInt(f.term)};};
   const floorOut=f=>({single:f.single.toString(),daily:f.daily.toString(),...(f.term==null?{}:{term:f.term.toString()})});
-  const blank=f=>({single:null,daily:null,term:null,floor:floorOut(f),custom:false,authorized:false,explicit:false,at:null});
-  function get(){const f=fl(),row=explicitEveryday(raw());if(!row)return blank(f);
-    const c=clampEveryday({single:row.single,daily:row.daily},f);let term=row.term;if(term!=null&&f.term!=null&&term>f.term)term=f.term;
+  const blank=f=>({single:null,daily:null,term:null,requestedSingle:null,requestedDaily:null,requestedTerm:null,floor:floorOut(f),custom:false,authorized:false,explicit:false,clamped:false,at:null});
+  function present(row,f){const c=clampEveryday({single:row.single,daily:row.daily},f);let term=row.term;if(term!=null&&f.term!=null&&term>f.term)term=f.term;
     if(c.single==null||c.daily==null||c.single<=0n||c.daily<=0n)return blank(f);
-    return {single:c.single.toString(),daily:c.daily.toString(),term:term==null?null:term.toString(),floor:floorOut(f),custom:true,authorized:true,explicit:true,at:row.at};}
-  function set({single,daily,term}={}){const s=B(single),d=B(daily),f=fl();
+    const clamped=c.single!==row.single||c.daily!==row.daily||(row.term!=null&&term!==row.term);
+    return {single:c.single.toString(),daily:c.daily.toString(),term:term==null?null:term.toString(),requestedSingle:row.single.toString(),requestedDaily:row.daily.toString(),requestedTerm:row.term==null?null:row.term.toString(),floor:floorOut(f),custom:true,authorized:true,explicit:true,clamped,at:row.at};}
+  function get(){const f=fl(),row=explicitEveryday(raw());return row?present(row,f):blank(f);}
+  function set({single,daily,term}={}){const s=B(single),d=B(daily),f=fl(),prev=explicitEveryday(raw());
     if(s===null||d===null||s<=0n||d<=0n)return {ok:false,error:'bad_amount'};
     if(s>d)return {ok:false,error:'single_above_daily'};
+    // The build-43 app sends only single and daily. Omitting term must not erase a total already stored.
     let t=null;if(term!=null&&term!==''){t=B(term);if(t===null||t<=0n)return {ok:false,error:'bad_amount'};if(t<d)return {ok:false,error:'daily_above_term'};}
+    else if(prev?.term!=null&&prev.term>=d)t=prev.term;
     if(s>f.single||d>f.daily||(t!=null&&f.term!=null&&t>f.term))return {ok:false,error:'above_floor',floor:floorOut(f),cost:{free:false,layer:'floor'},why:EVERYDAY_WHY};
     const row={single:s.toString(),daily:d.toString(),at:now(),confirmed:true};if(t!=null)row.term=t.toString();
     kv.set(K,row);return {ok:true,free:true,feeUSDC:'0',...get()};}
