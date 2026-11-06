@@ -74,7 +74,7 @@ test('float funding is refused while AI limits are unconfirmed',async()=>{
   const m=new Map();const ev=createEverydayLimits({kv:{get:k=>m.get(k),set:(k,v)=>m.set(k,v),del:k=>m.delete(k)},wallet:'0xabc',floor:()=>FLOOR});
   const {engine}=engineFor({everydayCheck:a=>ev.check(a),everydayGet:()=>ev.get()});
   const r=await engine.floatFund({amount:'1000000'});assert.equal(r.state,'rejected');assert.equal(r.reason,'AI_LIMITS_UNCONFIRMED');assert.equal(r.nothingPaid,true);
-  ev.set({single:'3000000',daily:'4000000'});
+  ev.set({single:'3000000',daily:'4000000',term:'100000000'});
   const over=await engine.floatFund({amount:'5000000'});assert.equal(over.reason,'EVERYDAY_DAILY_LIMIT');});
 
 test('a saved AI policy that is not 10/50/200 is what the Muse page shows',async()=>{
@@ -88,8 +88,9 @@ test('a saved AI policy that is not 10/50/200 is what the Muse page shows',async
   assert.equal(t.S.oauth.pending[id].aiLimits.perPayment,'2.5');assert.equal(t.S.oauth.pending[id].aiLimits.termTotal,'15');
   const appShaped=createEverydayLimits({kv:{get:k=>m.get(k),set:(k,v)=>m.set(k,v),del:k=>m.delete(k)},wallet:'0xabc',floor:()=>floor});
   m.set(key,{single:'2500000',daily:'7000000',at:'1710000000000'});
-  const partial=consentSpend(appShaped.get());assert.equal(partial.perPayment,'2.5');assert.equal(partial.perDay,'7');assert.equal(partial.termTotal,null);
-  const t2=oauth({spend:()=>partial});const blankTerm=await open(t2);assert.match(blankTerm.page,/>2\.5 USDC</);assert.match(blankTerm.page,/>7 USDC</);noDefaults(blankTerm.page);});
+  const partial=consentSpend(appShaped.get());assert.equal(partial.authorized,false);
+  const t2=oauth({spend:()=>partial});const blankTerm=await open(t2);noDefaults(blankTerm.page);
+  assert.equal((await t2.call('/oauth/owner-decide',{req:blankTerm.id,approve:true,signature:'0xok'})).code,403);assert.equal(t2.agents.length,0);});
 test('production launch wires consent to explicit AI limits, not chain caps',()=>{
   const src=readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
   assert.match(src,/spendAuthorization:\(\)=>\{try\{return consentSpend\(EVD\.get\(\)\);\}catch\{return \{authorized:false\};\}/);

@@ -110,8 +110,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   const cmpDec=(x,y)=>{const [ax,fx='']=x.split('.'),[ay,fy='']=y.split('.');const n=Math.max(fx.length,fy.length);const bx=BigInt(ax+fx.padEnd(n,'0')),by=BigInt(ay+fy.padEnd(n,'0'));return bx<by?-1:bx>by?1:0;};
   function currentSpend(){if(typeof spendAuthorization!=='function')return MAIN?{mode:'enforced',authorized:false}:{mode:'legacy'};
     try{const v=spendAuthorization();if(!v||v.authorized!==true)return {mode:'enforced',authorized:false};
-      const per=canon(v.perPayment),day=canon(v.perDay);if(!per||!day||cmpDec(per,day)>0)return {mode:'enforced',authorized:false};
-      let term=null;if(v.termTotal!=null&&String(v.termTotal).trim()!==''){term=canon(v.termTotal);if(!term||cmpDec(day,term)>0)return {mode:'enforced',authorized:false};}
+      const per=canon(v.perPayment),day=canon(v.perDay),term=canon(v.termTotal);if(!per||!day||!term||cmpDec(per,day)>0||cmpDec(day,term)>0)return {mode:'enforced',authorized:false};
       return {mode:'enforced',authorized:true,perPayment:per,perDay:day,termTotal:term,at:v.at??null};}catch{return {mode:'enforced',authorized:false};}}
   const sameSpend=(a,b)=>!!a&&!!b&&a.perPayment===b.perPayment&&a.perDay===b.perDay&&(a.termTotal??null)===(b.termTotal??null)&&(a.at??null)===(b.at??null);
   function bindSpend(p){const s=currentSpend();if(s.mode!=='enforced')return s;p.aiLimits=s.authorized?{perPayment:s.perPayment,perDay:s.perDay,termTotal:s.termTotal,at:s.at??null}:null;save();return s;}

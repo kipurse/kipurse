@@ -17,26 +17,23 @@ export function changeCost({next,floor,firstFloorDone=true,feeUSDC=null}){
   return {free:!firstFloorDone,layer:'floor',feeUSDC:firstFloorDone?(feeUSDC==null?null:String(feeUSDC)):'0',needsFloorChange:true};}
 /** Atomic USDC (6 decimals) -> plain decimal. Null when the value is missing or not a positive integer. */
 export function formatAtomic(v){let b;try{b=typeof v==='bigint'?v:BigInt(v);}catch{return null;}if(b<=0n)return null;const whole=b/1000000n,frac=b%1000000n;if(frac===0n)return whole.toString();return `${whole}.${frac.toString().padStart(6,'0').replace(/0+$/,'')}`;}
-/** Connect-page amounts. Shows the saved policy, never the chain floor substituted for a missing field.
- *  `single`/`daily`/`term` on the view are the effective (clamped) caps. `requested*` are what was saved. */
+/** Connect-page amounts. A policy without an explicit total is not authorization.
+ *  Display uses the saved amounts. `single`/`daily`/`term` are the clamped caps used for enforcement. */
 export function consentSpend(view){
   if(!view||view.authorized!==true)return {authorized:false};
-  const rs=view.requestedSingle??view.single,rd=view.requestedDaily??view.daily;
-  const rt=Object.hasOwn(view,'requestedTerm')?view.requestedTerm:view.term;
-  let per,day,term=null;try{per=formatAtomic(rs);day=formatAtomic(rd);if(per==null||day==null)return {authorized:false};
-    if(rt!=null&&rt!==''){term=formatAtomic(rt);if(term==null)return {authorized:false};}}catch{return {authorized:false};}
+  const rs=view.requestedSingle??view.single,rd=view.requestedDaily??view.daily,rt=view.requestedTerm??view.term;
+  let per,day,term;try{per=formatAtomic(rs);day=formatAtomic(rd);term=formatAtomic(rt);
+    if(per==null||day==null||term==null)return {authorized:false};}catch{return {authorized:false};}
   return {authorized:true,perPayment:per,perDay:day,termTotal:term,at:view.at??null,
-    effectivePerPayment:formatAtomic(view.single),effectivePerDay:formatAtomic(view.daily),effectiveTermTotal:view.term==null?null:formatAtomic(view.term)};}
+    effectivePerPayment:formatAtomic(view.single),effectivePerDay:formatAtomic(view.daily),effectiveTermTotal:formatAtomic(view.term)};}
 const stamp=v=>{if(typeof v==='number'&&Number.isFinite(v))return v;if(typeof v==='string'&&/^\d+$/.test(v)){const n=Number(v);return Number.isFinite(n)?n:null;}return null;};
-/** A stored row is an explicit owner save when set() wrote it: positive single <= daily, and a finite `at`.
- *  The build-43 app POST persists `{single,daily,at}` only (atomic strings, no term, no confirmed flag). That shape qualifies.
- *  Amounts alone, `confirmed:true` alone, or the chain floor do not. `confirmed:false` never qualifies. */
+/** A complete save is single <= daily <= total, plus the timestamp set() writes.
+ *  Single and daily without a total are not a policy. Amounts alone, or the chain floor, are not either. */
 export function explicitEveryday(r){
   if(!r||typeof r!=='object'||Array.isArray(r)||r.confirmed===false)return null;
   const at=stamp(r.at);if(at==null)return null;
-  let s,d,term=null;try{s=BigInt(r.single);d=BigInt(r.daily);}catch{return null;}
-  if(s<=0n||d<=0n||s>d)return null;
-  if(r.term!=null&&r.term!==''){try{term=BigInt(r.term);}catch{return null;}if(term<=0n||term<d)return null;}
+  let s,d,term;try{s=BigInt(r.single);d=BigInt(r.daily);term=BigInt(r.term);}catch{return null;}
+  if(s<=0n||d<=0n||term<=0n||s>d||d>term)return null;
   return {single:s,daily:d,term,at};}
 const UNCONFIRMED={state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true,capHit:true,fix:'AI spending limits are not confirmed. Nothing was paid. The owner sets them in the Kipurse app; there is no default.',say_to_user:'没有付款：AI 总限额还没有确认，不能花钱。请先在启付里自己设置，没有默认额度。/ Not paid: AI spending limits are not confirmed, so nothing can be spent. Set them yourself in Kipurse. There is no default.'};
 export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now()}){
@@ -50,20 +47,21 @@ export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now()}){
     const clamped=c.single!==row.single||c.daily!==row.daily||(row.term!=null&&term!==row.term);
     return {single:c.single.toString(),daily:c.daily.toString(),term:term==null?null:term.toString(),requestedSingle:row.single.toString(),requestedDaily:row.daily.toString(),requestedTerm:row.term==null?null:row.term.toString(),floor:floorOut(f),custom:true,authorized:true,explicit:true,clamped,at:row.at};}
   function get(){const f=fl(),row=explicitEveryday(raw());return row?present(row,f):blank(f);}
-  function set({single,daily,term}={}){const s=B(single),d=B(daily),f=fl(),prev=explicitEveryday(raw());
+  function set({single,daily,term}={}){const s=B(single),d=B(daily),t=B(term),f=fl();
     if(s===null||d===null||s<=0n||d<=0n)return {ok:false,error:'bad_amount'};
+    if(t===null||t<=0n)return {ok:false,error:'term_required'};
     if(s>d)return {ok:false,error:'single_above_daily'};
-    // The build-43 app sends only single and daily. Omitting term must not erase a total already stored.
-    let t=null;if(term!=null&&term!==''){t=B(term);if(t===null||t<=0n)return {ok:false,error:'bad_amount'};if(t<d)return {ok:false,error:'daily_above_term'};}
-    else if(prev?.term!=null&&prev.term>=d)t=prev.term;
-    if(s>f.single||d>f.daily||(t!=null&&f.term!=null&&t>f.term))return {ok:false,error:'above_floor',floor:floorOut(f),cost:{free:false,layer:'floor'},why:EVERYDAY_WHY};
-    const row={single:s.toString(),daily:d.toString(),at:now(),confirmed:true};if(t!=null)row.term=t.toString();
-    kv.set(K,row);return {ok:true,free:true,feeUSDC:'0',...get()};}
-  /** Engine hook: null = go; else rejection (nothing paid). spent24h = rolling outflow already paid.
-   *  Unconfirmed limits reject. They are not replaced with the floor. */
-  function check({amount,spent24h=0n}){if(amount===undefined||amount===null)return null;const e=get(),a=BigInt(amount);
-    if(!e.authorized||e.single==null||e.daily==null)return UNCONFIRMED;
+    if(d>t)return {ok:false,error:'daily_above_term'};
+    if(s>f.single||d>f.daily||(f.term!=null&&t>f.term))return {ok:false,error:'above_floor',floor:floorOut(f),cost:{free:false,layer:'floor'},why:EVERYDAY_WHY};
+    kv.set(K,{single:s.toString(),daily:d.toString(),term:t.toString(),at:now(),confirmed:true});
+    return {ok:true,free:true,feeUSDC:'0',...get()};}
+  /** Engine hook. spentTerm is cumulative AI spend already recorded. Missing total or missing spentTerm refuses.
+   *  The chain floor is not used as a stand-in budget. */
+  function check({amount,spent24h=0n,spentTerm}={}){if(amount===undefined||amount===null)return null;const e=get(),a=BigInt(amount);
+    if(!e.authorized||e.single==null||e.daily==null||e.term==null)return UNCONFIRMED;
     if(a>BigInt(e.single))return {state:'rejected',reason:'EVERYDAY_SINGLE_LIMIT',nothingPaid:true,capHit:true,limit:e.single,fix:'Over the owner’s everyday per-payment limit. Only the owner can raise it in the Kipurse app (Face ID).',say_to_user:'没有付款：超过了你设的日常单笔额度。可以在 App 里免费调高（在链上底线以内）。/ Not paid: over your everyday per-payment limit. You can raise it for free in the app (up to the on-chain floor).'};
     if(BigInt(spent24h)+a>BigInt(e.daily))return {state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:e.daily,fix:'Over the owner’s everyday 24h limit. Only the owner can raise it in the Kipurse app (Face ID).',say_to_user:'没有付款：超过了你设的日常额度（24 小时内）。可以在 App 里免费调高（在链上底线以内）。/ Not paid: over your everyday limit for 24h. You can raise it for free in the app (up to the on-chain floor).'};
+    if(spentTerm===undefined||spentTerm===null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The cumulative total could not be checked. Nothing was paid.',say_to_user:'没有付款：暂时核对不了总额，请稍后再试。/ Not paid: the total limit could not be checked right now.'};
+    if(BigInt(spentTerm)+a>BigInt(e.term))return {state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:e.term,fix:'Over the owner’s explicit total AI budget. Nothing was paid.',say_to_user:'没有付款：超过了你设的 AI 总额。/ Not paid: over the total you set for AI spending.'};
     return null;}
   return {get,set,check,forget:()=>{try{kv.del?.(K);}catch{}return {ok:true};}};}

@@ -466,11 +466,14 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const floatCommitted24h=()=>{try{const since=Date.now()-86400e3;const f=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(funded),0) AS a FROM float_sessions WHERE funded_at>=?`).get(since).a);
     const v=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(amount),0) AS a FROM float_vouchers WHERE state!='void' AND at>=?`).get(since).a);return f>v?f-v:0n;}catch{return 0n;}};
   const everydaySpent=()=>outflow24h()+floatCommitted24h();
-  /** t609u Layer 2 + t621 #6: everyday limits. Fail CLOSED: a check that throws refuses (nothing paid). allowUnknown: pre-checks before
-   *  the amount is known pass here, and the payment is checked again in payNormalized once the merchant's quote (402) is known. */
+  /** Cumulative recorded payment amount. null means the total cannot be checked, so the caller must refuse. */
+  const spentCumulative=()=>{try{const q=`SELECT o.amount AS amount FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE p.state IN ('claimed','submitted','prepared','paid')`;
+    return ledger.db.prepare(q).all().reduce((a,x)=>a+BigInt(x.amount??0),0n);}catch{return null;}};
+  /** t609u Layer 2 + t621 #6 + t1076 total. Fail CLOSED. allowUnknown: pre-checks before the amount is known. */
   function everydayGate(amount,{allowUnknown=false}={}){if(!cfg.everydayCheck)return null;
     if(amount===undefined||amount===null){if(allowUnknown)return null;return {state:'rejected',reason:'EVERYDAY_AMOUNT_UNKNOWN',nothingPaid:true,fix:'The payment amount is unknown, so the owner’s everyday limits cannot be checked. Nothing was paid.',say_to_user:'没有付款：不知道这笔要付多少，没法核对你的日常额度。/ Not paid: the amount is unknown, so your everyday limits can’t be checked.'};}
-    try{return cfg.everydayCheck({amount:BigInt(amount),spent24h:everydaySpent()})??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit check failed; nothing was paid. Retry later.',say_to_user:'没有付款：暂时核对不了日常额度，请稍后再试。/ Not paid: your everyday limits could not be checked right now.'};}}
+    const spentTerm=spentCumulative();if(spentTerm==null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The cumulative total could not be read. Nothing was paid.',say_to_user:'没有付款：暂时核对不了总额。/ Not paid: the total could not be checked.'};
+    try{return cfg.everydayCheck({amount:BigInt(amount),spent24h:everydaySpent(),spentTerm})??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit check failed; nothing was paid. Retry later.',say_to_user:'没有付款：暂时核对不了日常额度，请稍后再试。/ Not paid: your everyday limits could not be checked right now.'};}}
   async function anomalyBefore({payee,amount,tier}){const t=Date.now();
     {const ed=everydayGate(amount,{allowUnknown:true});if(ed)return ed;}/* t609u Layer 2: everyday limits, before signing */for(const [k,ts] of AN.newPayees)if(t-ts>3600e3)AN.newPayees.delete(k);
     if(tier!=='trust_list'&&tier!=='verified'&&payee){const k=lc(payee);if(!AN.newPayees.has(k)){AN.newPayees.set(k,t);if(AN.newPayees.size>=TL.newPayees1h){AN.newPayees.clear();return anomaly('too_many_new_payees');}}}
@@ -949,8 +952,10 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     annualSummary:(year,o={})=>annualSummary(ledger.db,year??new Date().getFullYear(),{tz:cfg.timeZone??'America/Chicago',...o,chainId:cfg.chainId,token:cfg.token}),
     exitPlan,recordGasSettlement,collectFees,floatFund:async o=>{/* t621 #8: funding the float is checked against the everyday 24h limit */const ev=(()=>{try{return cfg.everydayGet?.()??null;}catch{return 'err';}})();
       if(ev==='err')return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};
-      if(ev&&(ev.authorized===false||ev.daily==null))return {state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true}; // t1073: no floor fallback
+      if(ev&&(ev.authorized===false||ev.daily==null||ev.term==null))return {state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true};
       if(ev){let amt;try{amt=o?.amount!==undefined?BigInt(o.amount):BigInt(await rd('floatCap',[p.account]));}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}
+        const spentTerm=spentCumulative();if(spentTerm==null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};
+        if(spentTerm+amt>BigInt(ev.term))return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:ev.term,fix:'Funding the float would exceed the explicit AI total. Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的 AI 总额。/ Not funded: it would go over the total you set.'});
         if(everydaySpent()+amt>BigInt(ev.daily))return capHit({state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:ev.daily,fix:'Funding the micropayment float would go over the owner’s everyday 24h limit (the float counts as spent). Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的日常额度（小额池里的钱算作已花）。/ Not funded: it would go over your everyday limit (the float counts as spent).'});}
       return float.fund(o);},floatReconcile:()=>float.reconcile(),floatStatus:()=>float.status(),gasBook:gas,resetAgentFailures:a=>gas.resetFailures(a),trustRequest,trustSubmit,untrustRequest,untrustSubmit,denySignerRequest,denySignerSubmit,approvalRequest,pause,claimPurchase,merchantInfo,listPurchases,ledger,client:c,permission:p,policy:P};
 }
