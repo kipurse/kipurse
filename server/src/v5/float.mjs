@@ -38,7 +38,11 @@ export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow
     let q;try{q=await quote({mode:'float'},(g??F.fundGas)+BigInt(F.reconcileGas),'fundFloat',args0);}catch(e){return {state:'rejected',reason:e.code??'network_fee_unquotable'};}
     if(q.quote>B('maxNetworkFee'))return {state:'retry_later',reason:'gas_spike',retryAfterSec:60};
     const release=txLock.try(p.account);if(!release)return {state:'retry_later',reason:'tx_in_flight',retryAfterSec:5};
+    let reserved=null;
     try{
+      let ev=null;try{ev=cfg.everydayGet?.()??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}
+      if(ev&&ev.authorized===false)return {state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true};
+      if(ev&&ev.authorized===true&&ev.term!=null){reserved='rsv-'+acct.address.toLowerCase();const gate=ledger.reserveFloat(reserved,amt,BigInt(ev.term));if(!gate.ok)return {state:'rejected',reason:gate.error==='reserve_failed'?'EVERYDAY_CHECK_FAILED':'EVERYDAY_TERM_LIMIT',nothingPaid:true};}
       save({key:pk,address:acct.address,floatVault:fv,expiry:exp,funded:amt.toString(),pending:true}); // persisted BEFORE send: never lose a funded session key
       const tx=await write('fundFloat',[p,acct.address,amt,BigInt(exp),q.total,now+240],{label:'fundFloat'});
       q.applied?.(tx.hash);
@@ -47,7 +51,7 @@ export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow
       ledger.db.prepare(`INSERT OR REPLACE INTO float_sessions(session,float_vault,funded,fee_reserve,network_fee,fund_tx,funded_at) VALUES(?,?,?,?,?,?,?)`).run(acct.address.toLowerCase(),fv,Number(amt),Number(fe),Number(q.total),tx.hash,Date.now());
       return {state:'funded',txHash:tx.hash,floatVault:fv,session:acct.address,amount:amt.toString(),feeReserve:fe.toString(),networkFee:q.total.toString(),expiry:exp,
         note:'sub-threshold x402 payments now settle from the float with no tx of ours; reconcile after expiry'};
-    }finally{release();}
+    }finally{if(reserved)ledger.clearFloatReserve(reserved);release();}
   }
 
   /** Voucher for one x402 exact requirement (n from the detector), or null when the float cannot take it. */

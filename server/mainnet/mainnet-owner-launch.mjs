@@ -9,7 +9,7 @@ await (await import(G+"src/v5/principles.mjs")).assertPrinciples({env:process.en
 const {createEngineV5}=await import(G+'src/v5/engine.mjs');const {createV5HttpServer}=await import(G+'src/v5/http.mjs');
 const {createOwnerSignSurface}=await import(G+'src/v5/owner-sign-surface.mjs');const {v5Abi,permissionFromJson,decodePolicyV5}=await import(G+'src/v5/abi.mjs');
 const {buildMigrationPlanV5}=await import(G+'src/v5/plan.mjs');const {createV5Mcp}=await import(G+'src/v5/mcp.mjs');const {resolveAgent}=await import(G+'src/v4/agents.mjs');
-const {StreamableHTTPServerTransport}=await import('@modelcontextprotocol/sdk/server/streamableHttp.js');const httpMod=await import('node:http');const {createOAuth}=await import(G+'kit/oauth.mjs');const {createPublicTrustApproval}=await import(G+'src/v5/trust-approve-public.mjs');const {createPhoneEnrollment,WALLET_ABI,p256VerifyDigest}=await import(G+'src/v5/phone-signer.mjs');const {createPhoneSession}=await import(G+'src/v5/phone-session.mjs');const {createPublicLimits}=await import(G+'src/v5/limits-public.mjs');
+const {StreamableHTTPServerTransport}=await import('@modelcontextprotocol/sdk/server/streamableHttp.js');const httpMod=await import('node:http');const {createOAuth,reserveOAuthAgent}=await import(G+'kit/oauth.mjs');const {createPublicTrustApproval}=await import(G+'src/v5/trust-approve-public.mjs');const {createPhoneEnrollment,WALLET_ABI,p256VerifyDigest}=await import(G+'src/v5/phone-signer.mjs');const {createPhoneSession}=await import(G+'src/v5/phone-session.mjs');const {createPublicLimits}=await import(G+'src/v5/limits-public.mjs');
 const {createRegistry,createIndex,resolveTenant,sha256}=await import(G+'src/v5/tenancy.mjs');const {createOnboarding,onboardFee}=await import(G+'src/v5/onboard.mjs');
 const {createNewWalletOnboarding}=await import(G+'src/v5/onboard-new.mjs');const {NO_CEILING}=await import(G+'src/v5/phone-signer.mjs');const {createTenantCache,createMcpPool,createAgentRouter,readRaw}=await import(G+'src/v5/router.mjs');
 const {createAnomalyGuard,guardEngine,pauseMsOf}=await import(G+'src/v5/anomaly.mjs');const {createPush,apnsConfigFromEnv}=await import(G+'src/v5/push.mjs');const {createOwnerWithdraw}=await import(G+'src/v5/owner-withdraw.mjs');const {createExecutorKeyring}=await import(G+'src/v5/executor-keys.mjs');const {plainStore,tenantStore,loadDataKey}=await import(G+'src/v5/at-rest.mjs');const {createRateLimiter,kvKey}=await import(G+'src/v5/store.mjs');
@@ -82,7 +82,9 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     engine=createEngineV5(cfg,{ledgerFile:R.engineFiles.ledgerFile??overrides.ledgerFile??cfg.ledgerFile});};boot();
   const E0=new Proxy({},{get:(_,k)=>engine[k]});const E=guardEngine(E0,{guard:SAFE,wallet:R.wallet});const O=()=>cfg.__trustRequestsOwner;
   const pol=()=>decodePolicyV5(permissionFromJson(S.permission).extraData);const target=BigInt(R.targetSingle??decodePolicyV5(permissionFromJson(S.permission).extraData).single);
-  const {createEverydayLimits,changeCost,EVERYDAY_WHY}=await import(G+'src/v5/everyday-limits.mjs');const EVD=createEverydayLimits({kv:KV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
+  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');const {kvKey}=await import(G+'src/v5/store.mjs');
+  const everyKV={get:k=>KV.get(k),set:(k,v)=>KV.put(k,v),del:k=>KV.del(k)};const everyKey=kvKey('everyday',null,String(R.wallet).toLowerCase());
+  const EVD=createEverydayLimits({kv:everyKV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
   const chainNow=async()=>Number((await pub.getBlock()).timestamp);
   async function planCapChange(choice){const {limitsWindow}=await import(G+'src/v5/limits-public.mjs');const cur=S.permission,cp=pol();const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();const fc=await pub.readContract({address:X.adapter,abi:v5Abi,functionName:'fees'});
     const ppm=await pub.readContract({address:fc,abi:v5Abi,functionName:'feePpm'});
@@ -103,14 +105,20 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   const knownIds=new Set((agents??[]).map(a=>a.id));
   const OA=createOAuth({S,save,base:()=>PUBLIC,network:'main',wallet:R.wallet,ownerAddress:R.owner,
     consentScript:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/consent.js');})(),
-    caps:()=>{try{const p=pol(),f=v=>(Number(BigInt(v))/1e6).toString();return {perPayment:f(p.single),perDay:f(p.daily),termTotal:f(p.term)};}catch{return null;}},
+    // t1073: the approval page shows only an explicit AI-limit save. Chain policy (including a 10/50/200 floor) is not spend authorization.
+    spendAuthorization:()=>{try{return consentSpend(EVD.get());}catch{return {authorized:false};}},
+    commitSpend:(amounts)=>{const prior=everyKV.get(everyKey);const r=EVD.set({single:amounts.single,daily:amounts.daily,term:amounts.total});if(!r.ok)return r;const view=consentSpend(EVD.get());
+      return {ok:true,limits:{perPayment:view.perPayment,perDay:view.perDay,termTotal:view.termTotal,at:view.at??null},undo(){if(prior===undefined)EVD.forget();else everyKV.set(everyKey,prior);}};},
+    onConnected:name=>{if(name==='Siri'){S.siriAgent={since:new Date().toISOString()};save();}},
     ownerSession:()=>null,
     // Face ID approval by the ENROLLED phone key (KipursePhoneApprover), re-checked on chain at every decision. Base Account stays as the alternative.
     phoneApprover:{active:()=>PH.active(),verify:(a,d,r,s)=>p256VerifyDigest(a,d,r,s),
       onChain:overrides.phoneOnChain??(async a=>!!await pub.readContract({address:R.wallet,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.approver]}))},
     verifyOwner:overrides.verifyOwner??((message,signature)=>pub.verifyMessage({address:R.owner,message,signature})),
     isAgentLive:id=>!!S.oauthAgents[id]&&!S.oauthAgents[id].revoked,
-    createAgentKey:(name,kind,clientId)=>{const id=knownIds.has(kind)||['grok-bot','claude-code','codex','gemini-cli','gemini-spark'].includes(kind)?kind:'oauth-'+kind;for(const [k,x] of Object.entries(S.oauthAgents))if(k===id&&x.clientId!==clientId)OA.revokeAgent(k);
+    createAgentKey:(name,kind,clientId)=>{
+      if(name==='Siri'||kind==='siri'){const r=reserveOAuthAgent(S.oauthAgents,{name:'Siri',kind,clientId,knownIds});if(!r.ok){const e=Error(r.error);e.code=r.error;throw e;}save();return r.id;}
+      const id=knownIds.has(kind)||['grok-bot','claude-code','codex','gemini-cli','gemini-spark'].includes(kind)?kind:'oauth-'+kind;for(const [k,x] of Object.entries(S.oauthAgents))if(k===id&&x.clientId!==clientId)OA.revokeAgent(k);
       S.oauthAgents[id]={id,name,kind,clientId,created:new Date().toISOString()};save();return id;}});
   // public, signature-gated trust approval page (the link kipurse_request_trust hands to the agent for the owner)
   // phone signer (scoped second owner): enrollment + revoke pages, Base Account signs the on-chain batch; server only verifies
@@ -133,7 +141,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     for(const [id,a] of Object.entries(S.oauthAgents??{}))if(!a.revoked)ag.set(id,{id,name:a.name??id,kind:a.kind??id,via:'oauth',connectedAt:a.created,connected:liveTok(id)||ag.has(id)});
     // t915: Siri is authorized by the enrolled phone (Face ID signer active on the server), not by a token. Stopped via its agent cap.
     if(!ag.has('siri')){let stopped=false;try{stopped=!!E0.mandates?.agents?.().find(x=>x.agentId==='siri')?.stopped;}catch{}
-      if(S.phone?.active||S.siriAgent)ag.set('siri',{id:'siri',name:'Siri',kind:'siri',via:'phone',connected:!!S.phone?.active,paused:stopped,connectedAt:S.siriAgent?.since??null});}
+      if(S.phone?.active||S.siriAgent){let spendOk=false;try{spendOk=EVD.get().authorized===true;}catch{spendOk=false;}ag.set('siri',{id:'siri',name:'Siri',kind:'siri',via:'phone',connected:!!S.phone?.active&&spendOk,paused:stopped,connectedAt:S.siriAgent?.since??null});}}
     // lastUsed = last REAL authenticated call from that agent (MCP request / Siri API), kept in memory, saved at most once a minute.
     const list=[...ag.values()].map(a=>({connected:true,...a,lastUsed:S.agentLastSeen[a.id]??null}));
     const purchases=E.listPurchases({limit:50}).map(r=>({purchaseKey:r.purchaseKey,state:r.state,amount:r.amount,payee:r.payee,agent:r.agent,merchant:r.label??r.merchant??null,txHash:r.txHash,createdAt:r.createdAt}));
@@ -227,7 +235,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
         await server.connect(t);return await t.handleRequest(req,res,body);}
       if(u.pathname==='/everyday'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});return j(200,{...EVD.get(),why:EVERYDAY_WHY});}
       if(u.pathname==='/everyday/preview'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));const f=EVD.get().floor;try{return j(200,{...changeCost({next:{single:b?.single,daily:b?.daily},floor:f,firstFloorDone:true}),floor:f,why:EVERYDAY_WHY});}catch{return j(400,{error:'bad_amount'});}}
-      if(u.pathname==='/everyday'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));let r;try{r=EVD.set({single:b?.single,daily:b?.daily});}catch{r={ok:false,error:'bad_amount'};}OBS.log('everyday_set',{ok:!!r.ok,error:r.error??null});return j(r.ok?200:400,r);}
+      if(u.pathname==='/everyday'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));let r;try{r=EVD.set({single:b?.single,daily:b?.daily,term:b?.term});}catch{r={ok:false,error:'bad_amount'};}OBS.log('everyday_set',{ok:!!r.ok,error:r.error??null});return j(r.ok?200:400,r);}
       if(u.pathname==='/safety/status'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});return j(200,{paused:SAFE.paused(R.wallet),choices:['24h','48h','7d','until_resume']});}
       if(u.pathname==='/safety/withdraw/quote'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});try{return j(200,await WD.quote());}catch(e){return j(503,{error:String(e?.code??'quote_failed')});}}
       if(u.pathname==='/safety/stop'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));const ms=pauseMsOf(b?.duration);if(ms===undefined)return j(400,{error:'bad_duration',choices:['24h','48h','7d','until_resume']});const p=SAFE.pause(R.wallet,'owner_stop',ms);OBS.log('safety_stop',{duration:String(b?.duration??'24h')});

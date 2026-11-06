@@ -8,5 +8,6 @@ test('siri: every authenticated Siri call marks it seen; unauthenticated calls n
   await S.handle('/siri/status',{purchaseKey:'k'},{authed:true,seen:id=>seen.push(id)});
   await S.handle('/siri/buy',{item:'x'},{authed:true,seen:id=>seen.push(id)});assert.deepEqual(seen,['siri','siri','siri']);});
 test('wallet state: Siri entry comes from the active phone signer, lastUsed from real calls only',()=>{const s=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
-  assert.match(s,/if\(S\.phone\?\.active\|\|S\.siriAgent\)ag\.set\('siri',\{id:'siri',name:'Siri',kind:'siri',via:'phone',connected:!!S\.phone\?\.active/);
+  assert.match(s,/if\(S\.phone\?\.active\|\|S\.siriAgent\)/);
+  assert.match(s,/connected:!!S\.phone\?\.active&&spendOk/,'an enrolled phone is not AI spend permission until an explicit total policy exists');
   assert.match(s,/lastUsed:S\.agentLastSeen\[a\.id\]\?\?null/);assert.match(s,/if\(a\)seen\(a\.id\)/,'MCP calls mark the agent seen');});

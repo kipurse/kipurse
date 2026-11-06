@@ -6,7 +6,7 @@ const req=(amount,payTo)=>({scheme:'exact',network:'eip155:84532',amount:String(
 const v2=a=>({status:402,headers:{'PAYMENT-REQUIRED':Buffer.from(JSON.stringify({x402Version:2,resource:{url:'https://m.example/x'},accepts:a})).toString('base64')}});
 function mk(state,ev){const seen=[];const f=async(u,i)=>{const h=Object.entries(i?.headers??{}).find(([k])=>/payment/i.test(k));if(!h)return new Response('',v2([req(state.amount,state.payTo)]));seen.push(h);
     return new Response('ok',{status:200,headers:{'PAYMENT-RESPONSE':Buffer.from(JSON.stringify({success:true,transaction:'0x'+'ab'.repeat(32),network:'eip155:84532'})).toString('base64')}});};
-  const m=new Map();const EVD=createEverydayLimits({kv:{get:k=>m.get(k),set:(k,v)=>m.set(k,v),del:k=>m.delete(k)},wallet:'0xAbc',floor:()=>({single:500_000_000n,daily:900_000_000n})});EVD.set(ev);
+  const m=new Map();const EVD=createEverydayLimits({kv:{get:k=>m.get(k),set:(k,v)=>m.set(k,v),del:k=>m.delete(k)},wallet:'0xAbc',floor:()=>({single:500_000_000n,daily:900_000_000n})});EVD.set({...ev,term:ev.term??'500000000'});
   const e=engineFor({fetch:f,ownerRulesDir:mkdtempSync(join(tmpdir(),'x4e-')),everydayCheck:a=>EVD.check(a),everydayGet:()=>EVD.get()},{bal:1000000000n},{openSingle:'500000000',openDaily:'900000000',single:'500000000',daily:'900000000',term:'900000000'});
   const ok=()=>{for(const p of e.engine.mandates.proposals())e.engine.mandates.approve(p.id,()=>true);};e.engine.mandates.propose({items:BEGINNER_DEFAULTS.map(d=>({...d}))});ok();
   return {...e,seen,ok,buy:createBuy(e.engine,{sleep:async()=>{},waitMs:0})};}
