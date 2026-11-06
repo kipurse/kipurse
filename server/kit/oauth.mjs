@@ -37,8 +37,14 @@ export function mapClient(name){const n=String(name||'').toLowerCase();
  *  The app recomputes it from the fields it shows. */
 export const connectText=({wallet,req,clientId,name,redirect,exp,action})=>`Kipurse approve connection v1\nwallet:${String(wallet).toLowerCase()}\nreq:${req}\nclient:${clientId}\nname:${name}\nredirect:${redirect}\nexp:${Math.floor(exp)}\naction:${action}`;
 export const connectDigest=f=>'0x'+createHash('sha256').update(connectText(f)).digest('hex');
+/** First connect, when no confirmed AI policy exists. The phone key signs this exact text. v1 is not accepted in its place.
+ *  Amounts are atomic USDC integers. A server that only knows v1 cannot verify this signature, so it creates nothing. */
+export const firstConnectText=({wallet,clientId,agent,request,redirect,single,daily,total,action,nonce,exp})=>`Kipurse approve first connection v1\nwallet:${String(wallet).toLowerCase()}\nclient:${clientId}\nagent:${agent}\nrequest:${request}\nredirect:${redirect}\nsingle:${single}\ndaily:${daily}\ntotal:${total}\naction:${action}\nnonce:${nonce}\nexp:${Math.floor(exp)}`;
+export const firstConnectDigest=f=>'0x'+createHash('sha256').update(firstConnectText(f)).digest('hex');
+const atomicDec=v=>{const b=BigInt(v);const whole=b/1000000n,frac=b%1000000n;if(frac===0n)return whole.toString();return `${whole}.${frac.toString().padStart(6,'0').replace(/0+$/,'')}`;};
+const atomic3=b=>{const ok=v=>/^[1-9]\d*$/.test(String(v??''));if(!ok(b?.single)||!ok(b?.daily)||!ok(b?.total))return null;const s=BigInt(b.single),d=BigInt(b.daily),t=BigInt(b.total);if(s>d||d>t)return null;return {single:s.toString(),daily:d.toString(),total:t.toString()};};
 /** phoneApprover (mainnet): {active:()=>{approver,x,y,fingerprint}|null, onChain:async a=>bool (still an owner of the wallet), verify:(a,digestHex,r,s)=>bool} */
-export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null}){
+export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,commitSpend=null,onConnected=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null}){
   S.oauth??={clients:{},pending:{},codes:{},tokens:{}};let O=S.oauth;
   const RES=()=>base()+'/mcp';
   const hits=new Map();// ip -> [count, windowStart]
@@ -132,20 +138,44 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
 ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'Base Mainnet'}</div>`:`<div class=test>${zh?'测试模式 · Base Sepolia · 测试币，不是真钱':'Test mode · Base Sepolia · test money, not real'}</div>`}<div class=w>${inner}</div>${script?`<script nonce="${nonce}">${script}</script>`:''}</html>`;}
   const phoneOn=()=>!!(MAIN&&phoneApprover&&phoneApprover.active());
   function phoneFields(id,action){const p=O.pending[id];const c=O.clients[p.client_id];return {wallet,req:id,clientId:p.client_id,name:c?.name??'AI',redirect:p.redirect_uri,exp:p.exp,action};}
-  function phonePrepare(id){gc();const p=O.pending[id];if(!p||p.status!=='pending'||p.exp<Date.now()/1000)return [400,{error:'expired',error_description:'请求已过期或已处理，请回到 AI 重新连接'}];
-    const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];p.phase='signing';p.phaseAt=Date.now();save();const f=phoneFields(id,'approve');
+  function firstFields(id,action){const p=O.pending[id];const f=phoneFields(id,action);const q=p.proposal;return {wallet,clientId:f.clientId,agent:f.name,request:id,redirect:f.redirect,single:q.single,daily:q.daily,total:q.total,action,nonce:q.nonce,exp:f.exp};}
+  const limitsMatch=(live,q)=>!!live?.authorized&&live.perPayment===atomicDec(q.single)&&live.perDay===atomicDec(q.daily)&&live.termTotal===atomicDec(q.total);
+  function phonePrepare(body){gc();const id=String(body?.req||'');const p=O.pending[id];if(!p||p.status!=='pending'||p.exp<Date.now()/1000)return [400,{error:'expired',error_description:'请求已过期或已处理，请回到 AI 重新连接'}];
+    const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];const live=currentSpend();
     let host='';try{host=new URL(p.redirect_uri).host;}catch{}
-    return [200,{req:id,clientId:f.clientId,name:f.name,kind:mapClient(f.name),redirect:f.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(f.exp),wallet,fingerprint:a.fingerprint,digest:connectDigest(f),rejectDigest:connectDigest({...f,action:'reject'}),access:'request-only'}];}
+    if(live.mode==='enforced'&&live.authorized!==true){const q=atomic3(body);if(!q)return [409,{error:'limits_required',error_description:'AI 总限额还没有确认。连接批准要带上你选的每笔、每天和总额。'}];
+      p.proposal={...q,nonce:rnd(18)};p.phase='signing';p.phaseAt=Date.now();save();const shown=firstFields(id,'approve');
+      return [200,{mode:'first',req:id,clientId:shown.clientId,name:shown.agent,kind:mapClient(shown.agent),redirect:shown.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(shown.exp),wallet,single:q.single,daily:q.daily,total:q.total,nonce:q.nonce,fingerprint:a.fingerprint,digest:firstConnectDigest(shown),rejectDigest:firstConnectDigest({...shown,action:'reject'}),access:'request-only'}];}
+    delete p.proposal;p.phase='signing';p.phaseAt=Date.now();save();const f=phoneFields(id,'approve');
+    return [200,{mode:'reuse',req:id,clientId:f.clientId,name:f.name,kind:mapClient(f.name),redirect:f.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(f.exp),wallet,fingerprint:a.fingerprint,digest:connectDigest(f),rejectDigest:connectDigest({...f,action:'reject'}),access:'request-only'}];}
+  function beginFirst(body){gc();const names={siri:'Siri',muse:'Muse','grok-bot':'Grok Bot',grok:'Grok Bot',claude:'Claude'};const agent=names[String(body?.agent||'').toLowerCase()]||null;if(!agent)return [400,{error:'unknown_agent'}];
+    const live=currentSpend();if(live.mode==='enforced'&&live.authorized===true)return [409,{error:'already_confirmed'}];
+    const q=atomic3(body);if(!q)return [400,{error:'limits_required'}];
+    const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];
+    const id=rnd(18),clientId='kpc_'+rnd(16),redirect='https://kipurse.com/connect/'+encodeURIComponent(agent);
+    O.clients[clientId]={name:agent,redirect_uris:[redirect],created:Date.now()};
+    O.pending[id]={client_id:clientId,redirect_uri:redirect,challenge:'first',state:null,exp:Date.now()/1000+REQ_TTL,status:'pending',origin:'phone',proposal:{...q,nonce:rnd(18)}};save();
+    const shown=firstFields(id,'approve');let host='';try{host=new URL(redirect).host;}catch{}
+    return [200,{mode:'first',req:id,clientId,name:agent,kind:mapClient(agent),redirect,returnsTo:host,origin:'phone',exp:Math.floor(shown.exp),wallet,single:q.single,daily:q.daily,total:q.total,nonce:shown.nonce,fingerprint:a.fingerprint,digest:firstConnectDigest(shown),rejectDigest:firstConnectDigest({...shown,action:'reject'}),access:'request-only'}];}
   async function phoneDecide(b){const id=String(b.req||''),approve=b.approve===true;gc();const p=O.pending[id];
     if(!p||p.status!=='pending'||p.exp<Date.now()/1000)return [400,{error:'expired',error_description:'请求已过期或已处理，请回到 AI 重新连接'}];// replay of a used signature lands here
     const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer',error_description:'这台手机不是确认人'}];
-    let live=false;try{live=await phoneApprover.onChain(a);}catch{live=false;}
-    if(!live)return [403,{error:'phone_revoked',error_description:'手机确认人已不在钱包里（已撤销）'}];
-    const d=connectDigest(phoneFields(id,approve?'approve':'reject'));let ok=false;try{ok=!!phoneApprover.verify(a,d,String(b.r??''),String(b.s??''));}catch{ok=false;}
+    let liveChain=false;try{liveChain=await phoneApprover.onChain(a);}catch{liveChain=false;}
+    if(!liveChain)return [403,{error:'phone_revoked',error_description:'手机确认人已不在钱包里（已撤销）'}];
+    const live=currentSpend();
+    const d=p.proposal?firstConnectDigest(firstFields(id,approve?'approve':'reject')):connectDigest(phoneFields(id,approve?'approve':'reject'));let ok=false;try{ok=!!phoneApprover.verify(a,d,String(b.r??''),String(b.s??''));}catch{ok=false;}
     if(!ok)return [403,{error:'bad_signature',error_description:'确认不是这台已登记手机的'}];
-    if(O.pending[id]?.status!=='pending')return [400,{error:'expired',error_description:'请求已处理'}];// raced with another decision
-    let redirect;try{redirect=decide(id,approve);}catch(e){if(spendError(e))return [403,{error:e.code,error_description:e.message}];throw e;}
-    O.pending[id].by='phone:'+a.fingerprint;save();return [200,{status:approve?'approved':'denied',redirect}];}
+    if(O.pending[id]?.status!=='pending')return [400,{error:'expired',error_description:'请求已处理'}];
+    if(!approve){let redirect;try{redirect=decide(id,false);}catch(e){if(spendError(e))return [403,{error:e.code,error_description:e.message}];throw e;}
+      O.pending[id].by='phone:'+a.fingerprint;save();return [200,{status:'denied',redirect}];}
+    let undo=null;
+    if(p.proposal){if(live.mode==='enforced'&&live.authorized===true&&!limitsMatch(live,p.proposal))return [403,{error:'ai_limits_stale',error_description:'额度已经变了，这次签名里的数字不能用。没有保存，也没有连接。'}];
+      if(live.mode==='enforced'&&live.authorized===true)p.aiLimits={perPayment:live.perPayment,perDay:live.perDay,termTotal:live.termTotal,at:live.at??null};
+      else{let wrote;try{wrote=commitSpend?.({single:p.proposal.single,daily:p.proposal.daily,total:p.proposal.total});}catch{wrote={ok:false,error:'commit_failed'};}
+        if(!wrote?.ok)return [403,{error:wrote?.error||'commit_unavailable',error_description:'额度没有写入，连接也没有创建。'}];
+        undo=wrote.undo||null;p.aiLimits=wrote.limits||null;}}
+    let redirect;try{redirect=decide(id,true);}catch(e){if(undo)try{undo();}catch{}if(p)p.aiLimits=p.proposal?null:p.aiLimits;if(spendError(e))return [403,{error:e.code,error_description:e.message}];throw e;}
+    O.pending[id].by='phone:'+a.fingerprint;save();try{onConnected?.(O.clients[p.client_id]?.name??'');}catch{}return [200,{status:'approved',redirect}];}
   function consentHtml(reqId,client,{owner,csrf,nonce,en}){const p=O.pending[reqId];const spend=bindSpend(p);const kind=mapClient(client.name);const X=(zh,e)=>en?e:zh;
     const what=`<div class=c><b>${X('它能做什么','What it can do')}</b><ul><li>${X('查看余额和付款记录','See your balance and payments')}</li><li>${X('在你设的上限内自动付款','Pay on its own, within your limits')}</li><li>${X('提议信任新的收款方、申请提现到你的钱包——都要你批准','Suggest new shops or withdrawals — you approve each one')}</li></ul><div class=muted>${X('它不能改上限，不能把钱转到别处。随时可以在 Kipurse App 里断开。','It can’t change your limits or send money anywhere else. Disconnect anytime in the Kipurse app.')}</div></div>`;
     const money=v=>en?'$'+esc(v):esc(v)+' USDC';
@@ -195,7 +225,8 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
       let ok=false;try{ok=await verifyOwner(ownerMessage(id),String(b.signature||''));}catch{ok=false;}
       if(!ok){json(403,{error:'not_owner',error_description:'确认不是钱包主人的 Base Account'});return true;}
       try{json(200,{redirect:decide(id,true)});}catch(e){if(spendError(e)){json(403,{error:e.code,error_description:e.message});return true;}throw e;}return true;}
-    if(MAIN&&phoneApprover&&p==='/oauth/phone-prepare'&&req.method==='POST'){const [c,b]=phonePrepare(String((await readBody(req)).req||''));json(c,b);return true;}
+    if(MAIN&&phoneApprover&&p==='/oauth/first'&&req.method==='POST'){const [c,b]=beginFirst(await readBody(req));json(c,b);return true;}
+    if(MAIN&&phoneApprover&&p==='/oauth/phone-prepare'&&req.method==='POST'){const [c,b]=phonePrepare(await readBody(req));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-decide'&&req.method==='POST'){const [c,b]=await phoneDecide(await readBody(req));json(c,b);return true;}
     if(p==='/oauth/status'){const r=O.pending[u.searchParams.get('req')||''];
       json(200,!r||r.exp<Date.now()/1000?{status:'expired'}:MAIN&&r.status==='approved'&&r.codeHash&&!O.codes[r.codeHash]?{status:r.codeExp<Date.now()/1000?'expired':'used',redirect:null}:{status:r.status,redirect:r.redirect??null,...(r.status==='pending'&&r.phase?{phase:r.phase}:{})});

@@ -53,7 +53,7 @@ export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now()}){
     if(s>d)return {ok:false,error:'single_above_daily'};
     if(d>t)return {ok:false,error:'daily_above_term'};
     if(s>f.single||d>f.daily||(f.term!=null&&t>f.term))return {ok:false,error:'above_floor',floor:floorOut(f),cost:{free:false,layer:'floor'},why:EVERYDAY_WHY};
-    kv.set(K,{single:s.toString(),daily:d.toString(),term:t.toString(),at:now(),confirmed:true});
+    const row={single:s.toString(),daily:d.toString(),term:t.toString(),at:now(),confirmed:true};if(typeof kv.set==='function')kv.set(K,row);else kv.put(K,row);
     return {ok:true,free:true,feeUSDC:'0',...get()};}
   /** Engine hook. spentTerm is cumulative AI spend already recorded. Missing total or missing spentTerm refuses.
    *  The chain floor is not used as a stand-in budget. */

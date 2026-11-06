@@ -351,12 +351,17 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       const dup=ledger.db.prepare(`SELECT purchase_key,state,ref FROM purchases WHERE lower(payee)=lower(?) AND amount=? AND purchase_key<>? AND created_at>=? AND state IN ('claimed','submitted','prepared','paid') LIMIT 1`).get(n.payee,n.amount.toString(),key,since);
       if(dup)return {state:'rejected',reason:'possible_duplicate_same_payee_amount',purchaseKey:key,existing:{purchaseKey:dup.purchase_key,state:dup.state,ref:dup.ref},
         detail:'an exact-amount deposit order to this address for this amount was already started/paid under another reference; nothing was sent. Pass allowSameAmount only if this is truly a new order.'};}
-    const claim=ledger.claim(key,n,intentId,agentId);
+    let termLimit=null;
+    if(agentId!=='owner'&&!withdrawalId){try{const ev=cfg.everydayGet?.()??null;if(ev?.authorized===true&&ev.term!=null)termLimit=BigInt(ev.term);}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}}
+    const claim=termLimit!=null?ledger.claimWithin(key,n,intentId,agentId,termLimit):ledger.claim(key,n,intentId,agentId);
     if(!claim.won){const rw=claim.row;return {state:rw.state==='paid'||rw.state==='prepared'?'already_'+rw.state:'in_progress',purchaseKey:key,paidBy:rw.claimed_by,txHash:rw.tx_hash,result:rw.result?JSON.parse(rw.result):null};}
+    if(termLimit!=null&&claim.admitted===false)return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:termLimit.toString(),fix:'Another payment already reserved the explicit AI total. Nothing was paid.',say_to_user:'没有付款：加上还没付完的，会超过你设的 AI 总额。/ Not paid: with payments already reserved, this would go over the total you set.'});
     // one in-flight payment tx per account: a second purchase is told to retry (its claim is released, nothing sent)
     const release=txLock.try(p.account);
     if(!release){ledger.update(key,agentId,{state:'failed'});return {state:'retry_later',reason:'tx_in_flight',purchaseKey:key,retryAfterSec:5,detail:'one payment tx per wallet at a time; nothing was sent'};}
-    try{return await payLocked(n,{agentId,key,id,r,cnow,ownerApproval,networkFee,nfx});}finally{release();}
+    try{
+      if(termLimit!=null){const adm=ledger.admitAmount(key,n.amount,termLimit);if(!adm.ok)return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:termLimit.toString(),fix:'Another payment already reserved the explicit AI total. Nothing was paid.',say_to_user:'没有付款：加上还没付完的，会超过你设的 AI 总额。/ Not paid: with payments already reserved, this would go over the total you set.'});}
+      return await payLocked(n,{agentId,key,id,r,cnow,ownerApproval,networkFee,nfx});}finally{release();}
   }
   async function payLocked(n,{agentId,key,id,r,cnow,ownerApproval,networkFee,nfx}){
     ledger.setMeta(key,agentId,{merchantId:directory(n)?.id??r.merchant??undefined,tier:r.tier});
@@ -467,8 +472,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const v=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(amount),0) AS a FROM float_vouchers WHERE state!='void' AND at>=?`).get(since).a);return f>v?f-v:0n;}catch{return 0n;}};
   const everydaySpent=()=>outflow24h()+floatCommitted24h();
   /** Cumulative recorded payment amount. null means the total cannot be checked, so the caller must refuse. */
-  const spentCumulative=()=>{try{const q=`SELECT o.amount AS amount FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE p.state IN ('claimed','submitted','prepared','paid')`;
-    return ledger.db.prepare(q).all().reduce((a,x)=>a+BigInt(x.amount??0),0n);}catch{return null;}};
+  const spentCumulative=()=>{try{return ledger.committedSpend();}catch{return null;}};
   /** t609u Layer 2 + t621 #6 + t1076 total. Fail CLOSED. allowUnknown: pre-checks before the amount is known. */
   function everydayGate(amount,{allowUnknown=false}={}){if(!cfg.everydayCheck)return null;
     if(amount===undefined||amount===null){if(allowUnknown)return null;return {state:'rejected',reason:'EVERYDAY_AMOUNT_UNKNOWN',nothingPaid:true,fix:'The payment amount is unknown, so the owner’s everyday limits cannot be checked. Nothing was paid.',say_to_user:'没有付款：不知道这笔要付多少，没法核对你的日常额度。/ Not paid: the amount is unknown, so your everyday limits can’t be checked.'};}

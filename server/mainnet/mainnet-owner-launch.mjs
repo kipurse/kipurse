@@ -82,7 +82,9 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     engine=createEngineV5(cfg,{ledgerFile:R.engineFiles.ledgerFile??overrides.ledgerFile??cfg.ledgerFile});};boot();
   const E0=new Proxy({},{get:(_,k)=>engine[k]});const E=guardEngine(E0,{guard:SAFE,wallet:R.wallet});const O=()=>cfg.__trustRequestsOwner;
   const pol=()=>decodePolicyV5(permissionFromJson(S.permission).extraData);const target=BigInt(R.targetSingle??decodePolicyV5(permissionFromJson(S.permission).extraData).single);
-  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');const EVD=createEverydayLimits({kv:KV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
+  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');const {kvKey}=await import(G+'src/v5/store.mjs');
+  const everyKV={get:k=>KV.get(k),set:(k,v)=>KV.put(k,v),del:k=>KV.del(k)};const everyKey=kvKey('everyday',null,String(R.wallet).toLowerCase());
+  const EVD=createEverydayLimits({kv:everyKV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
   const chainNow=async()=>Number((await pub.getBlock()).timestamp);
   async function planCapChange(choice){const {limitsWindow}=await import(G+'src/v5/limits-public.mjs');const cur=S.permission,cp=pol();const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();const fc=await pub.readContract({address:X.adapter,abi:v5Abi,functionName:'fees'});
     const ppm=await pub.readContract({address:fc,abi:v5Abi,functionName:'feePpm'});
@@ -105,13 +107,16 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     consentScript:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/consent.js');})(),
     // t1073: the approval page shows only an explicit AI-limit save. Chain policy (including a 10/50/200 floor) is not spend authorization.
     spendAuthorization:()=>{try{return consentSpend(EVD.get());}catch{return {authorized:false};}},
+    commitSpend:(amounts)=>{const prior=everyKV.get(everyKey);const r=EVD.set({single:amounts.single,daily:amounts.daily,term:amounts.total});if(!r.ok)return r;const view=consentSpend(EVD.get());
+      return {ok:true,limits:{perPayment:view.perPayment,perDay:view.perDay,termTotal:view.termTotal,at:view.at??null},undo(){if(prior===undefined)EVD.forget();else everyKV.set(everyKey,prior);}};},
+    onConnected:name=>{if(name==='Siri'){S.siriAgent={since:new Date().toISOString()};save();}},
     ownerSession:()=>null,
     // Face ID approval by the ENROLLED phone key (KipursePhoneApprover), re-checked on chain at every decision. Base Account stays as the alternative.
     phoneApprover:{active:()=>PH.active(),verify:(a,d,r,s)=>p256VerifyDigest(a,d,r,s),
       onChain:overrides.phoneOnChain??(async a=>!!await pub.readContract({address:R.wallet,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.approver]}))},
     verifyOwner:overrides.verifyOwner??((message,signature)=>pub.verifyMessage({address:R.owner,message,signature})),
     isAgentLive:id=>!!S.oauthAgents[id]&&!S.oauthAgents[id].revoked,
-    createAgentKey:(name,kind,clientId)=>{const id=knownIds.has(kind)||['grok-bot','claude-code','codex','gemini-cli','gemini-spark'].includes(kind)?kind:'oauth-'+kind;for(const [k,x] of Object.entries(S.oauthAgents))if(k===id&&x.clientId!==clientId)OA.revokeAgent(k);
+    createAgentKey:(name,kind,clientId)=>{const id=name==='Siri'?'siri':(knownIds.has(kind)||['grok-bot','claude-code','codex','gemini-cli','gemini-spark'].includes(kind)?kind:'oauth-'+kind);for(const [k,x] of Object.entries(S.oauthAgents))if(k===id&&x.clientId!==clientId)OA.revokeAgent(k);
       S.oauthAgents[id]={id,name,kind,clientId,created:new Date().toISOString()};save();return id;}});
   // public, signature-gated trust approval page (the link kipurse_request_trust hands to the agent for the owner)
   // phone signer (scoped second owner): enrollment + revoke pages, Base Account signs the on-chain batch; server only verifies
@@ -134,7 +139,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     for(const [id,a] of Object.entries(S.oauthAgents??{}))if(!a.revoked)ag.set(id,{id,name:a.name??id,kind:a.kind??id,via:'oauth',connectedAt:a.created,connected:liveTok(id)||ag.has(id)});
     // t915: Siri is authorized by the enrolled phone (Face ID signer active on the server), not by a token. Stopped via its agent cap.
     if(!ag.has('siri')){let stopped=false;try{stopped=!!E0.mandates?.agents?.().find(x=>x.agentId==='siri')?.stopped;}catch{}
-      if(S.phone?.active||S.siriAgent)ag.set('siri',{id:'siri',name:'Siri',kind:'siri',via:'phone',connected:!!S.phone?.active,paused:stopped,connectedAt:S.siriAgent?.since??null});}
+      if(S.phone?.active||S.siriAgent){let spendOk=false;try{spendOk=EVD.get().authorized===true;}catch{spendOk=false;}ag.set('siri',{id:'siri',name:'Siri',kind:'siri',via:'phone',connected:!!S.phone?.active&&spendOk,paused:stopped,connectedAt:S.siriAgent?.since??null});}}
     // lastUsed = last REAL authenticated call from that agent (MCP request / Siri API), kept in memory, saved at most once a minute.
     const list=[...ag.values()].map(a=>({connected:true,...a,lastUsed:S.agentLastSeen[a.id]??null}));
     const purchases=E.listPurchases({limit:50}).map(r=>({purchaseKey:r.purchaseKey,state:r.state,amount:r.amount,payee:r.payee,agent:r.agent,merchant:r.label??r.merchant??null,txHash:r.txHash,createdAt:r.createdAt}));
