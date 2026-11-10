@@ -511,6 +511,7 @@ final class AppModel: ObservableObject {
       catch MainnetSession.Failure.noKey { mainNeedsSignIn = false }
       catch MainnetSession.Failure.unbound { markUnbound() }
       catch { if state == nil { mainError = error.localizedDescription }; await checkServer() }
+      if let read = state?.capRead, case .ready = read {} else if state != nil { await chainBalanceFallback() }
       return
     }
     guard session != nil else { return }
@@ -521,6 +522,25 @@ final class AppModel: ObservableObject {
          Awareness.publish(s) }
     catch KipurseError.notLoggedIn { logout(); show(L("需要重新登录"), KipurseError.notLoggedIn.localizedDescription) }
     catch { /* keep last state; banner shows offline */ }
+  }
+  /// t1094: no phone session (or the session omitted caps). Read the wallet safety limit from chain.
+  /// Does not invent a home screen when there is no state yet.
+  func chainBalanceFallback() async {
+    guard demo == nil, let current = state else { return }
+    if case .ready = current.capRead { return }
+    let w = current.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet)
+    guard let w, case .object(var o) = current.raw else { return }
+    SafetyCaps.rpc = GasCheck.rpc
+    let read = await SafetyCaps.latest(account: w)
+    o["capsUnreadable"] = .null; o["capsUnset"] = .null
+    switch read {
+    case .unreadable: o["capsUnreadable"] = .bool(true); o["caps"] = .null
+    case .unset: o["capsUnset"] = .bool(true); o["caps"] = .null
+    case .ready(let s, let d, let t):
+      o["caps"] = .object(["single": .string(String(s)), "daily": .string(String(d)), "term": .string(String(t))])
+    }
+    if (o["balance"]?.atomic ?? 0) == 0, let b = await VaultCheck.usdcBalance(w), b > 0 { o["balance"] = .string(String(b)) }
+    state = WalletState(.object(o))
   }
   /// Keep Siri's recipient list (and Spotlight / App Shortcut parameters) in step with the real payees.
   func siriSync(_ s: WalletState) { AssistantHooks.stateChanged?(s) }

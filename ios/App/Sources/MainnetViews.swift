@@ -228,6 +228,8 @@ struct DepositView: View {
 struct MainLimitsView: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
+  /// t1094: blank first-connect page. Amounts stay empty. `-kpAILimits` is the UI-test fixture.
+  var firstConnect = CommandLine.arguments.contains("-kpAILimits")
   @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"
   @State private var verifyErr: String?
   @State private var fee: LimitsFee?
@@ -241,15 +243,19 @@ struct MainLimitsView: View {
   var evCostText: String {
     switch evCost { case .free?: return T("这次修改：不收手续费，马上生效", "This change: no fee, instant")
     case .floorChange?: return T("这次修改：超过链上底线。要先调高底线，约 \(fee?.usdcText ?? "0.007") USDC（从启付钱包扣）", "This change: above the on-chain floor. Raise the floor first: about \(fee?.usdcText ?? "0.007") USDC (from your Kipurse wallet)")
-    case nil: return T("请输入金额", "Enter amounts") } }
+    case nil:
+      if AnswerRules.parseUSDC(evSingle) != nil, AnswerRules.parseUSDC(evDaily) != nil {
+        return AILimitGate.line(single: evSingle, daily: evDaily, term: evDaily, caps: s.capRead)
+      }
+      return T("请输入金额", "Enter amounts") } }
   @ViewBuilder var everydayCard: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(T("日常额度", "Everyday limits")).font(.headline).accessibilityIdentifier("everyday.title")
       AmountPicker(title: T("日常每笔最多", "Everyday per payment"), presets: ["1", "2", "5", "10", "100"], unit: "USDC", value: $evSingle)
       AmountPicker(title: T("日常每天最多", "Everyday per day"), presets: ["5", "20", "50", "100", "1000"], unit: "USDC", value: $evDaily)
-      Text(evCostText).font(.subheadline.weight(.semibold)).foregroundStyle(evCost == .free ? Brand.positive : Brand.caution).accessibilityIdentifier("everyday.cost")
+      Text(firstConnect ? AILimitGate.line(single: single, daily: daily, term: term, caps: s.capRead) : evCostText).font(.subheadline.weight(.semibold)).foregroundStyle((firstConnect ? AILimitGate.allowsContinue(single: single, daily: daily, term: term, caps: s.capRead) : evCost == .free) ? Brand.positive : Brand.caution).accessibilityIdentifier("everyday.cost")
       if let e = evMsg { Text(e).font(.footnote).accessibilityIdentifier("everyday.msg") }
-      BigButton(evSaving ? T("正在保存…", "Saving…") : T("保存日常额度（Face ID）", "Save everyday limits (Face ID)"), icon: "faceid", disabled: evCost != .free || evSaving) { Task { await saveEveryday() } }.accessibilityIdentifier("everyday.save")
+      BigButton(evSaving ? T("正在保存…", "Saving…") : T("保存日常额度（Face ID）", "Save everyday limits (Face ID)"), icon: "faceid", disabled: (firstConnect ? !AILimitGate.allowsContinue(single: single, daily: daily, term: term, caps: s.capRead) : evCost != .free) || evSaving) { Task { await saveEveryday() } }.accessibilityIdentifier("everyday.save")
     }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 16)
   }
   @ViewBuilder var freeVsPaid: some View {
@@ -322,12 +328,16 @@ struct MainLimitsView: View {
         }
         everydayCard
       }.padding(20)
-    }.background(Brand.canvas).navigationTitle(T("AI 额度", "AI allowance")).navigationBarTitleDisplayMode(.inline).task { if !DemoGuard.active { fee = await LimitsFee.load() } }
+    }.background(Brand.canvas).navigationTitle(T("AI 额度", "AI allowance")).navigationBarTitleDisplayMode(.inline).task {
+      if case .ready = s.capRead {} else { await m.chainBalanceFallback() }
+      if !DemoGuard.active { fee = await LimitsFee.load() }
+    }
     .alert(T("没有打开确认页", "Signing page not opened"), isPresented: Binding(get: { verifyErr != nil }, set: { if !$0 { verifyErr = nil } })) {
       if topupNeeded { Button(T("去给钱包充值", "Top up wallet")) { topupNeeded = false; showTopup = true }; Button(T("以后再说", "Later"), role: .cancel) { topupNeeded = false } } else { Button(T("好", "OK")) {} }
     } message: { Text(verifyErr ?? "") }
     .sheet(isPresented: $showTopup) { NavigationStack { ScrollView { DepositView(s: s).padding(20) }.navigationTitle(T("充值", "Add money")) } }
     .onAppear {
+      if firstConnect { return }
       if evSingle.isEmpty { evSingle = AnswerRules.format(s.raw["everyday"]?["single"]?.atomic ?? s.capSingle ?? 0); evDaily = AnswerRules.format(s.raw["everyday"]?["daily"]?.atomic ?? s.capDaily ?? 0) }
       if single.isEmpty { single = AnswerRules.format(s.capSingle ?? 1_000_000); daily = AnswerRules.format(s.capDaily ?? 5_000_000); term = AnswerRules.format(s.capTerm ?? 20_000_000) }
     }
