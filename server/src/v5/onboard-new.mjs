@@ -41,6 +41,9 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
     // t621 #1: idempotent. The APP prepares first, decodes + checks the batch and commits to it (#vh); the page then gets the SAME calls.
     if(o.state==='prepared'&&o.owner===owner&&Array.isArray(o.calls)){const paymaster=o.kind==='new'&&sponsor?.enabled&&o.expect===owner&&sponsor.available(owner)?`${base()}/onboard/new/paymaster?id=${id}`:null;
       return o.kind==='tenant'?{calls:o.calls,wallet:o.wallet,existing:true,owner,chainId,summary:'找到你已有的启付钱包'}:{calls:o.calls,wallet:o.wallet,existing:false,owner,chainId,paymaster,summary:'创建你的启付钱包',vault:o.vault,...(o.duesSlot?{duesSlot:{to:DUES_SLOT.to,maxPerOp:DUES_SLOT.maxPerOp.toString(),note:DUES_SLOT_NOTE}}:{})};}
+    // t1086: one user-USDC quote covers opening plus the first phone key. Short balance -> no calls, no charge. Unknown balance does not block here.
+    {let funds=null;try{funds=await quote(owner);}catch{funds=null;}
+      if(funds&&funds.payerCanPayUSDC===false)throw Object.assign(Error('USDC 不够付开户和这台手机钥匙这一笔，已停止，没有扣钱。'),{code:'needs_usdc'});}
     // t763u (locked): the Coinbase Verified Account attestation is required for EVERY opening, including re-opening an existing wallet. Deposit history never counts.
     const v0=await cbv(owner);if(!v0.verified)throw cbvErr(v0);
     const mine=reg.byOwner(owner)[0];const ch=o.choice;

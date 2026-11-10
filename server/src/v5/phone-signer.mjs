@@ -39,6 +39,10 @@ export function p256Key(x,y){if(!hex32(x)||!hex32(y))throw Object.assign(Error('
   return createPublicKey({key:{kty:'EC',crv:'P-256',x:Buffer.from(x.slice(2),'hex').toString('base64url'),y:Buffer.from(y.slice(2),'hex').toString('base64url')},format:'jwk'});}
 /** Verify a raw (r,s) P-256 signature over a 32-byte digest (no extra hashing). */
 export function p256VerifyDigest({x,y},digestHex,r,s){p256Key(x,y);try{return P256.verify({payload:digestHex,publicKey:{prefix:4,x:BigInt(x),y:BigInt(y)},signature:{r:BigInt(r),s:BigInt(s)}});}catch{return false;}}
+// TODO(android): no Android app in this tree. A later device key would export only a device-backed P-256 (x, y)
+// and sign the same raw (r, s) over the 32-byte digest (Keystore NONEwithECDSA, user auth required). Do not send
+// WebAuthn assertion bytes. The first key rides the opening batch; a replacement device still pays upgradeFeeUSDC.
+export const ANDROID_DEVICE_KEY='todo';
 export const fingerprint=(x,y)=>keccak256(concat([x,y])).slice(2,18).toUpperCase().match(/.{4}/g).join('-');
 export function approverInit({wallet,trust,x,y,maxSingle,maxDaily,version='v1'}){const A=ARTS[version];if(!A)throw Object.assign(Error('unknown approver version'),{code:'bad_version'});const args=version==='v3'?encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'}],[getAddress(wallet),getAddress(trust),BigInt(x),BigInt(y)]):encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'},{type:'uint160'},{type:'uint160'}],
   [getAddress(wallet),getAddress(trust),BigInt(x),BigInt(y),BigInt(maxSingle),BigInt(maxDaily)]);const initcode=concat([A.bytecode,args]);const salt=keccak256(concat([toHex('kipurse-phone-approver-'+version),x,y]));
@@ -68,8 +72,15 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     const [bal,eth,gp,obal]=await Promise.all([pub.readContract({address:token,abi:ERC20_ABI,functionName:'balanceOf',args:[W]}),pub.getBalance({address:OWNER}),pub.getGasPrice(),pub.readContract({address:token,abi:ERC20_ABI,functionName:'balanceOf',args:[OWNER]}).catch(()=>0n)]);
     const fee=BigInt(e.fee??0);const ownerGasWei=UPGRADE_GAS*gp+L1_ALLOWANCE_WEI;
     return {fee:fee.toString(),feeUSDC:usd(fee),cap:FEE_CAP.toString(),wallet:W,walletUSDC:bal.toString(),enough:bal>=fee,ownerUSDC:obal.toString(),ownerCanPayUSDC:obal>=fee*3n/2n,usdcReady:e.paymaster?bal>=fee:bal>=fee&&obal>=fee*3n/2n,walletPays:!!e.paymaster,owner:OWNER,ownerEthWei:eth.toString(),ownerGasWei:ownerGasWei.toString(),ownerCanPayEth:eth>=ownerGasWei};}
-  async function enroll({x,y}){gc();p256Key(x,y);if(Object.keys(P().pending).length>=5)throw Object.assign(Error('too many pending enrollments'),{code:'busy'});
-    const c=caps();const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});const q=await quoteNow();const id=randomBytes(12).toString('hex');let remove=await deadOwners(a.address);
+  async function enroll({x,y}){gc();p256Key(x,y);
+    const same=(rec)=>!!rec&&rec.x!=null&&rec.y!=null&&BigInt(rec.x)===BigInt(x)&&BigInt(rec.y)===BigInt(y);
+    // t1086: the first key is already in the user-funded opening batch (fee recorded as 0). Do not charge upgradeFee again for that same key.
+    const opened=same(P().active)?P().active:Object.values(P().pending).find(rec=>same(rec)&&String(rec.fee??'0')==='0');
+    const c=caps();const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});
+    let onChain=false;if(!opened){try{onChain=(await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.address]}))===true;}catch{onChain=false;}}
+    if(opened||onChain)return {already:true,firstKey:true,id:null,url:null,fingerprint:fingerprint(x,y),approver:opened?.approver??a.address,fee:'0',feeUSDC:'0',calls:[],removes:[],replaces:null,owner:OWNER,wallet:W,chainId,version:approverVersion};
+    if(Object.keys(P().pending).length>=5)throw Object.assign(Error('too many pending enrollments'),{code:'busy'});
+    const q=await quoteNow();const id=randomBytes(12).toString('hex');let remove=await deadOwners(a.address);
     // t843: a new phone (or app copy) replaces the active approver in ONE owner signature: add new, then remove exactly the old one
     const old=P().active;const oldIdx=old&&getAddress(old.approver)!==getAddress(a.address)?await findIndex(old.approver):-1;const replaces=oldIdx>=0?getAddress(old.approver):null;
     if(replaces)remove=[{approver:replaces,index:oldIdx}];

@@ -291,7 +291,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     policy:()=>decodePolicyV5(permissionFromJson(X.currentPermission).extraData),quote:async(owner0)=>{const {ONBOARD_GAS,onboardFee}=await import(G+'src/v5/onboard.mjs');const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
       const [gp,rd]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'})]);
       const f=onboardFee({gasPriceWei:gp,ethUsd8:rd[1]});const u=f.usdc>0n?f.usdc:1n;const w=u/1000000n,fr=(u%1000000n).toString().padStart(6,'0').replace(/0+$/,'');
-      const base0={gas:String(ONBOARD_GAS),gasPriceWei:String(gp),feeWei:String(f.wei),feeUSDC:fr?`${w}.${fr}`:`${w}`,sponsoredByKipurse:false,signatures:1,transactions:1,
+      const base0={gas:String(ONBOARD_GAS),gasPriceWei:String(gp),feeWei:String(f.wei),feeUSDC:fr?`${w}.${fr}`:`${w}`,sponsoredByKipurse:false,includesPhoneApprover:true,signatures:1,transactions:1,
         limitsChangeUSDC:await (async()=>{try{const {limitsChangeFee}=await import(G+'src/v5/limits-fee.mjs');const {fmtUsdc}=await import(G+'src/v5/limits-public.mjs');return fmtUsdc(limitsChangeFee({callGas:null,gasPriceWei:gp,ethUsd8:rd[1]}).usdc);}catch{return null;}})(),gasToken:'USDC'};
       // fee-quote fix: always a string payer (the app requires it); balances only for a valid owner. Read failures (new/undeployed Base Account, RPC) never break the quote.
       let o=null;try{if(/^0x[0-9a-fA-F]{40}$/.test(String(owner0??'')))o=getAddress(owner0);}catch{}

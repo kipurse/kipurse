@@ -77,6 +77,7 @@ enum PhoneKey {
   @MainActor static func startUpgrade(_ m: AppModel) async {
     do { let k = try create(); guard let (x, y) = xy(k) else { return }
       let r = try await post("phone/enroll", ["x": Hex.encode(x), "y": Hex.encode(y)])
+      if (r["already"] as? Bool) == true { m.toast = T("已开启", "On"); return }
       let old = (await status())?["approver"] as? String
       m.openPhonePage(url: try verifiedEnrollURL(r, x: x, y: y, replacing: old)) }
     catch { m.toast = error.localizedDescription }
@@ -130,6 +131,7 @@ struct PhoneSignerView: View {
     busy = true; defer { busy = false }; err = ""
     do { let k = try PhoneKey.create(); guard let (x, y) = PhoneKey.xy(k) else { return }; fp = PhoneTrust.fingerprint(x: x, y: y)
       let r = try await PhoneKey.post("phone/enroll", ["x": Hex.encode(x), "y": Hex.encode(y)])
+      if (r["already"] as? Bool) == true { m.toast = T("已开启", "On"); await load(); return }
       m.openPhonePage(url: try PhoneKey.verifiedEnrollURL(r, x: x, y: y, siri: siri, replacing: replacing ?? active?["approver"] as? String)) }
     catch { err = error.localizedDescription }
   }
