@@ -48,8 +48,10 @@ public enum RequestVerify {
   /// registerPermission on the Kipurse adapter, all for THIS wallet, with exactly the caps the user picked.
   /// t767u: Kipurse ops account and per-op cap for repaying fronted onboarding gas (vault fee slot). Fixed here, never from the server.
   public static let duesTo = "0xfc0e68572cdba016c1c90a45e1792f3fe0ee345b", duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
-  public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date()) -> Result {
+  public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false) -> Result {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
+    // t1097: the Kipurse wallet pays the paymaster directly. A refund leg would move USDC a second time.
+    if walletPays && inCalls.count > 1 { bad("wallet pays the fee itself; no refund"); return res }
     // t606u: an optional 2nd call = the wallet refunds the network fee (USDC only, max 0.05) to YOUR Coinbase wallet.
     var calls = inCalls
     if calls.count == 2 { let rf = calls[1]; calls = [calls[0]]

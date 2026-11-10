@@ -30,6 +30,8 @@ export async function startMainnet({overrides={},stateFile=join(DATA,'runtime-st
   // key isolation: the session key file must be private to the service user (checked by mode only; the file is never read here or logged)
   if(!fork&&!overrides.session&&X.engine?.sessionKeyFile){const st=fs.statSync(X.engine.sessionKeyFile);if(st.mode&0o077)throw Error('session key file must be mode 0600 (no group/other access)');}
   const PUBLIC0=overrides.publicBase??X.publicBase??'https://pay.kipurse.com';const ENV=process.env;
+  // t1097: remember the onboarding paymaster URL only so the limits proxy can refuse to reuse it. Never logged.
+  const ONBOARD_PM_URL=String(ENV.KIPURSE_ONBOARD_PAYMASTER_URL??'');
   const ONBOARD_ON=(overrides.onboard??ENV.KIPURSE_ONBOARD)==='1'||overrides.onboard===true;
   const REG=createRegistry({file:overrides.registryFile??join(DATA,'registry.json')});const IDX=createIndex(KV);
   const TROOT=overrides.tenantsDir??join(DATA,'tenants');const TDIR=w=>join(TROOT,String(w).toLowerCase());
@@ -179,18 +181,29 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   const ERASE=createUserDataEraser({kv:KV,tomb:TOMB,onErased:(w,t)=>{S.erasedAt=t;save();},enabled:(overrides.userErase??process.env.KIPURSE_USER_ERASE)==='1'||overrides.userErase===true,resolveTenant:async req=>PS.check(req)?{wallet:R.wallet,phone:PH}:null,
     parts:[{name:'tenant-index',forget:()=>{unindex();return {ok:true};}},{name:'safety',forget:()=>SAFE.forget(R.wallet)},{name:'executor-key',forget:()=>KR.forget(R.wallet)},{name:'withdraw',forget:()=>WD.forget()},...mainnetEraseParts({S,save,ownerPay:OPAY,phone:PH,ledgerCache:LED,limits:{forget:()=>{try{EVD.forget();}catch{}return LIM.forget();}},trustOwner:()=>O(),getDb:()=>E.ledger.db,agents,kv:KV})]});
   const LFEE=await import(G+'src/v5/limits-fee.mjs');
+  const limitsDirect=()=>LFEE.walletPaysLimits(R.wallet);
   const LIM=createPublicLimits({base:()=>PUBLIC,current:async()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term,end:S.permission.end};},
-    plan:async c=>{const pl=await planCapChange(c);const ug=!!SPONSOR_REF()?.usdcGas;const {approveCall}=await import(G+'src/v5/usdc-gas.mjs');return {owner:R.owner,chainId:8453,human:pl.human,labels:pl.calls.map(x=>x.label),calls:[...(ug?[approveCall()]:[]),{to:R.wallet,value:'0x0',data:pl.walletExecuteBatch.data}],raw:pl,usdcGas:ug};},
+    plan:async c=>{const pl=await planCapChange(c);const direct=limitsDirect();const change={to:R.wallet,value:'0x0',data:pl.walletExecuteBatch.data};
+      if(direct)return {owner:R.owner,wallet:R.wallet,chainId:8453,human:pl.human,labels:pl.calls.map(x=>x.label),calls:LFEE.limitsChangeCalls({direct:true,changeCall:change}),raw:pl,fromWallet:true};
+      const ug=!!SPONSOR_REF()?.usdcGas;const {approveCall}=await import(G+'src/v5/usdc-gas.mjs');return {owner:R.owner,chainId:8453,human:pl.human,labels:pl.calls.map(x=>x.label),calls:LFEE.limitsChangeCalls({direct:false,approveCall:ug?approveCall():null,changeCall:change}),raw:pl,usdcGas:ug};},
     confirm:pl=>confirmCapChange(pl),script:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/limits.js');})(),
     // t603u/t604u: first limits authorization free (onboarding sponsorship, once per owner); later changes paid in USDC by the Base Account. Never ETH.
     // t763u (locked): first limits authorization is paid from the wallet like every later change (firstLimitsFree=false). Never sponsored.
     // option A (t1020): limit changes are paid in USDC by the user via the CDP ERC-20 paymaster (approve rides in the batch); off = old Base-Account path
-    sponsor:async(id,pl)=>{const sp=SPONSOR_REF();if(!sp?.usdcGas)return null;const sid=sp.registerUsdcGas(id,{kind:'limits',owner:R.owner,wallet:R.wallet,calls:pl.calls});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},
+    // t1097: allowlisted wallets pay from their own USDC via /owner/limits/paymaster. Empty allowlist keeps the path above.
+    sponsor:async(id,pl)=>{if(pl?.fromWallet)return null;const sp=SPONSOR_REF();if(!sp?.usdcGas)return null;const sid=sp.registerUsdcGas(id,{kind:'limits',owner:R.owner,wallet:R.wallet,calls:pl.calls});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},
     _sponsorFirstLimitsRetired:async(id,pl)=>{const sp=SPONSOR_REF();if(!sp)return null;const sid=sp.registerFirstLimits(id,{owner:R.owner,wallet:R.wallet,calls:pl.calls});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},
-    fee:async pl=>limitsFeeQuote({data:pl.calls[pl.calls.length-1].data,walletPays:true}),
+    fee:async pl=>pl?.fromWallet?limitsWalletDirectQuote({data:pl.calls[pl.calls.length-1]?.data}):limitsFeeQuote({data:pl.calls[pl.calls.length-1].data,walletPays:true}),
     refund:fee=>LFEE.feeRefundCall({wallet:R.wallet,token:X.token,owner:R.owner,fee}),
-    feeQuote:async()=>{const q=await limitsFeeQuote({});const sp=SPONSOR_REF();void sp;return {...q,firstFree:false};},
+    feeQuote:async()=>{if(limitsDirect()){const q=await limitsWalletDirectQuote({});return {...q,firstFree:false,fromWallet:true};}const q=await limitsFeeQuote({});const sp=SPONSOR_REF();void sp;return {...q,firstFree:false};},
+    walletPaymaster:()=>limitsDirect()?`${PUBLIC0}/owner/limits/paymaster`:null,
+    erc20URL:()=>LFEE.erc20PaymasterURL({KIPURSE_ERC20_PAYMASTER_URL:process.env.KIPURSE_ERC20_PAYMASTER_URL,KIPURSE_ONBOARD_PAYMASTER_URL:ONBOARD_PM_URL}),
     onConfirmed:({sponsored})=>{if(sponsored)SPONSOR_REF()?.markFirstLimitsDone(R.owner);}});
+  async function limitsWalletDirectQuote({data}={}){const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
+    const [gp,rd,wb,eg]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'}),
+      pub.readContract({address:X.token,abi:parseAbi(['function balanceOf(address) view returns (uint256)']),functionName:'balanceOf',args:[R.wallet]}).catch(()=>null),
+      data?pub.estimateGas({account:R.wallet,to:R.wallet,data}).catch(()=>null):Promise.resolve(null)]);
+    return LFEE.limitsWalletPaysFee({callGas:eg,gasPriceWei:gp,ethUsd8:rd[1],walletUSDC:wb,cap:LFEE.limitsWalletFeeCap()});}
   async function limitsFeeQuote({data,walletPays=false}){const {limitsChangeFee}=await import(G+'src/v5/limits-fee.mjs');const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
     const [gp,rd,bal,eg]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'}),
       pub.readContract({address:X.token,abi:parseAbi(['function balanceOf(address) view returns (uint256)']),functionName:'balanceOf',args:[R.owner]}).catch(()=>null),

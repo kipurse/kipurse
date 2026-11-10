@@ -916,13 +916,14 @@ struct OnboardView: View {
 }
 
 /// Real per-change fee from the server (/owner/limits/fee): actual network cost in USDC, 0% markup, first authorization free.
-struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool
+struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool; let fromWallet: Bool
   static func load() async -> LimitsFee? {
     guard let (d, resp) = try? await URLSession.shared.data(from: Mainnet.server.appendingPathComponent("owner/limits/fee")), (resp as? HTTPURLResponse)?.statusCode == 200,
           let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any], let t = j["usdcText"] as? String, (j["gasToken"] as? String) == Principles.gasToken else { return nil }
-    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false) }
+    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false, fromWallet: (j["feeFrom"] as? String) == UsdcGas.feeFrom) }
   static func text(_ f: LimitsFee?) -> String {
     guard let f else { return T("手续费按实际成本用 USDC 付，0 加价，永远不用 ETH。", "Network fee: actual cost in USDC, 0% markup. Never ETH.") }
+    if f.fromWallet { return T(UsdcGas.feeDialog(usdc: f.usdcText), "Changing the wallet safety limit needs a small network fee (about \(f.usdcText) USDC), taken from your Kipurse balance.") }
     return f.firstFree ? T("这是你第一次设置上限：手续费由启付代付，你付 $0。以后每次修改约 \(f.usdcText) USDC（实际手续费），用 USDC 付，0 加价，永远不用 ETH。", "This is your first limit setup: Kipurse pays the network fee, you pay $0. Each later change costs about \(f.usdcText) USDC (actual network fee), paid in USDC at 0% markup. Never ETH.")
       : T("这次修改的手续费约 \(f.usdcText) USDC（实际成本），从启付钱包余额扣，用 USDC 付，0 加价，永远不用 ETH。", "Network fee for this change: about \(f.usdcText) USDC (actual cost), paid in USDC from your Coinbase wallet at 0% markup. Never ETH.") }
 }
@@ -945,14 +946,19 @@ extension MainLimitsView {
       if (resp as? HTTPURLResponse)?.statusCode == 402 { let e = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]; let t = (e?["fee"] as? [String: Any])?["usdcText"] as? String ?? "?"
         let det = e?["detail"] as? [String: Any]; let code = e?["error"] as? String
         topupNeeded = code == "wallet_needs_topup"
+        if code == UsdcGas.insufficientCode { verifyErr = T(UsdcGas.insufficientZH, "The Kipurse balance can't cover the network fee."); return }
         verifyErr = (det?["zh"] as? String).flatMap { z in (det?["en"] as? String).map { T(z, $0) } ?? z } ?? T("手续费约 \(t) USDC，用 USDC 付（永远不用 ETH）。现在 USDC 不够，已停止，没有扣钱。", "The network fee (about \(t) USDC) is paid in USDC (never ETH). There isn't enough USDC now, so nothing was sent or charged."); return }
       guard let j = try JSONSerialization.jsonObject(with: d) as? [String: Any], let id = j["id"] as? String, let calls = j["calls"] as? [[String: Any]] else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       let chain = (j["chainId"] as? Int) ?? Int(j["chainId"] as? String ?? "") ?? 0
       if let o = j["owner"] as? String, let own = Operator.ownerAccount, o.lowercased() != own.lowercased() { verifyErr = T("确认人不是你的 Coinbase 钱包，已停止。", "The signer isn't your Coinbase wallet. Stopped."); return }
-      let res = RequestVerify.limitsBatch(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, currentExecutor: nil, owner: Operator.ownerAccount ?? (j["owner"] as? String))
+      let fromWallet = (j["feeFrom"] as? String) == UsdcGas.feeFrom
+      let wallet = (j["wallet"] as? String) ?? ""
+      if fromWallet && wallet.isEmpty { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
+      let res = RequestVerify.limitsBatch(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, currentExecutor: nil, owner: Operator.ownerAccount ?? (j["owner"] as? String), walletPays: fromWallet)
       guard res.ok else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + res.problems.joined(separator: "; "); return }
       var c = URLComponents(url: u0, resolvingAgainstBaseURL: false)!; c.queryItems = (c.queryItems ?? []) + [.init(name: "plan", value: id)]
-      guard let u1 = c.url, let from = Operator.ownerAccount ?? (j["owner"] as? String), let u = BatchVerify.committedURL(u1, chainId: chain, from: from, calls: calls) else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
+      let from = UsdcGas.limitsSender(owner: Operator.ownerAccount ?? (j["owner"] as? String) ?? "", wallet: wallet, fromWallet: fromWallet)
+      guard let u1 = c.url, !from.isEmpty, let u = BatchVerify.committedURL(u1, chainId: chain, from: from, calls: calls) else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       m.openLimitsSigning(u)
     } catch { verifyErr = T("暂时连不上，请稍后再试。", "Can't connect right now. Try again later.") }
   }
