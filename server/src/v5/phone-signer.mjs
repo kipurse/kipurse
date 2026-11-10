@@ -54,7 +54,7 @@ export function phoneTrustWrapper(ownerIndex,m,r,s){const body=encodeAbiParamete
   const data=encodeAbiParameters([{type:'uint8'},{type:'bytes'},{type:'uint256'},{type:'uint256'}],[1,body,BigInt(r),BigInt(s)]);
   return encodeAbiParameters([{type:'tuple',components:[{name:'ownerIndex',type:'uint256'},{name:'signatureData',type:'bytes'}]}],[{ownerIndex:BigInt(ownerIndex),signatureData:data}]);}
 
-export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null}){
+export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null,log=null}){
   // t906 (owner): the fee comes from the KIPURSE WALLET; the Base Account only signs. sponsor = {available():bool, register(id,{owner,wallet,calls,reimburse})->paymasterUrl|null}.
   const statusLimit=limiter({max:60,windowMs:60e3});   // t629: public status read, 60/min per network; key x/y and owner index are no longer exposed
   S.phone??={pending:{},active:null};S.phone.pending??={};const P=()=>S.phone;   // tenants created by new-user onboarding start with only {active}
@@ -140,7 +140,8 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     try{
       if(p==='/phone/enroll.js'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end(script());return true;}
       if(p==='/phone/status'&&req.method==='GET'){if(!statusLimit(clientOf(req))){json(429,{error:'rate_limited'});return true;}const a=P().active;json(200,{active:a?{approver:a.approver,fingerprint:a.fingerprint,maxSingle:a.maxSingle,maxDaily:a.maxDaily,version:a.version??'v1',...(approverVersion==='v3'&&(a.version??'v1')!=='v3'?{upgradeTo:'v3'}:{})}:null,wallet:W,chainId});return true;}
-      if(p==='/phone/enroll'&&req.method==='POST'){const b=await readBody(req);json(200,await enroll({x:String(b.x),y:String(b.y)}));return true;}
+      if(p==='/phone/enroll'&&req.method==='POST'){const t0=Date.now();try{const b=await readBody(req);const out=await enroll({x:String(b.x),y:String(b.y)});
+        const reason=out.already?'already':'ok';try{log?.('phone_enroll',{status:200,ms:Date.now()-t0,reason});}catch{}json(200,out);}catch(e){const reason=/^[a-z0-9_]{1,40}$/.test(String(e.code??''))?String(e.code):'failed';try{log?.('phone_enroll',{status:400,ms:Date.now()-t0,reason});}catch{}throw e;}return true;}
       if(p==='/phone/enroll/quote'&&req.method==='GET'){json(200,await quote(String(u.searchParams.get('id')??'')));return true;}
       if(p==='/phone/enroll'&&req.method==='GET'){gc();const lang=langOf(req,u),t=X(lang);const id=String(u.searchParams.get('id')??'');const e=P().pending[id];
         if(!e){html(404,page(t('找不到','Not found'),`<div class=t>${t('这个添加请求不存在或已过期','This request doesn’t exist or has expired')}</div><p>${t('请在 Kipurse App 里重新点「添加这台手机」。','Tap “Add this phone” again in the Kipurse app.')}</p>`,nonce,null,lang));return true;}

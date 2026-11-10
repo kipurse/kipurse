@@ -127,7 +127,8 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     caps:()=>{const p=pol();return {single:BigInt(p.single),daily:BigInt(p.daily)};},script:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/phone-enroll.js');})(),
     // t906: enrollment fee from the Kipurse wallet (sponsor fronts gas, same caps; repaid in the same batch to the fixed fee address)
     feeTo:(v=>v==='off'?null:/^0x[0-9a-fA-F]{40}$/.test(v)?v:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9')(process.env.KIPURSE_WITHDRAW_FEE_TO??''),
-    sponsor:{available:()=>!!SPONSOR_REF()?.withdrawAvailable?.(),register:async(id,a)=>{const sp=SPONSOR_REF();const sid=sp?.registerEnroll?.(id,a);return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;}}});
+    sponsor:{available:()=>!!SPONSOR_REF()?.withdrawAvailable?.(),register:async(id,a)=>{const sp=SPONSOR_REF();const sid=sp?.registerEnroll?.(id,a);return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;}},
+    log:(event,fields)=>OBS.log(event,fields)});
   const TA=createPublicTrustApproval({addressCheck:p=>engine?.verifyPayee?.({address:p}),phone:{active:()=>PH.active(),verifyWrapped:async(digest,w)=>String(await pub.readContract({address:R.wallet,abi:WALLET_ABI,functionName:'isValidSignature',args:[digest,w]})).toLowerCase()==='0x1626ba7e'},owner:R.owner,wallet:R.wallet,base:()=>PUBLIC,
     ownerApi:{list:()=>O().api.list(O().cap),approve:id=>O().api.approve(O().cap,id),submitSignature:(id,s,o)=>O().api.submitSignature(O().cap,id,s,o),reject:id=>O().api.reject(O().cap,id)},
     verifyTypedData:overrides.verifyTypedData??(a=>pub.verifyTypedData(a)),verifyMessage:overrides.verifyMessage??(a=>pub.verifyMessage(a)),
