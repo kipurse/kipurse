@@ -80,7 +80,7 @@ enum PhoneKey {
       if (r["already"] as? Bool) == true { m.toast = T("已开启", "On"); return }
       let old = (await status())?["approver"] as? String
       m.openPhonePage(url: try verifiedEnrollURL(r, x: x, y: y, replacing: old)) }
-    catch { m.toast = error.localizedDescription }
+    catch { m.toast = PhoneEnrollCopy.line(error) }
   }
   static func status() async -> [String: Any]? {
     #if DEBUG
@@ -94,7 +94,7 @@ enum PhoneKey {
 /// 设置 → 手机确认（主网）: create the key, show its fingerprint, open the enrollment page (Coinbase wallet signs once), or revoke.
 struct PhoneSignerView: View {
   @EnvironmentObject var m: AppModel
-  @State private var fp: String? = nil; @State private var active: [String: Any]? = nil; @State private var err = ""; @State private var busy = false
+  @State private var fp: String? = nil; @State private var active: [String: Any]? = nil; @State private var err = ""; @State private var errLine = ""; @State private var busy = false
   var mine: Bool { guard let a = active, let f = fp else { return false }; return (a["fingerprint"] as? String) == f }
   var body: some View {
     List {
@@ -106,7 +106,7 @@ struct PhoneSignerView: View {
           } else if Operator.ownerPayEnabled && GasCheck.upgradeToV3(active) {   // only offered when the server turned V3 on
           Button { Task { await enroll(siri: true) } } label: { Label(T("更新 Face ID 批准（一次，手续费用 USDC 付）", "Update Face ID approvals (one time, fee in USDC)"), systemImage: "arrow.up.circle") }.disabled(busy).accessibilityIdentifier("phone.upgradeV3")
           }
-          Button(T("关闭 Face ID 批准", "Turn off Face ID approvals")) { Task { do { m.openPhonePage(url: try await PhoneKey.verifiedRevokeURL()) } catch { err = error.localizedDescription } } }.foregroundStyle(Brand.negative)
+          Button(T("关闭 Face ID 批准", "Turn off Face ID approvals")) { Task { do { m.openPhonePage(url: try await PhoneKey.verifiedRevokeURL()) } catch { note(error) } } }.foregroundStyle(Brand.negative)
         } else {
           if active != nil {   // t843: approvals live on another phone / app copy -> replace them here in one Coinbase confirmation (no dead end)
             Text(T("这台手机还没开启 Face ID 批准。开启后，旧手机或旧 App 里的批准会自动失效，你的钱不受影响。", "Face ID approvals aren't on for this phone yet. Turning them on here automatically retires the old phone or app copy. Your money isn't affected.")).foregroundStyle(.secondary).accessibilityIdentifier("phone.replaceNote")
@@ -117,7 +117,7 @@ struct PhoneSignerView: View {
         }
         Button(T("刷新", "Refresh")) { Task { await load() } }
       }
-      if !err.isEmpty { Section { Label(T("没能开启，请检查网络后再试一次。", "Couldn't turn it on. Check your connection and try again."), systemImage: "exclamationmark.triangle").foregroundStyle(Brand.negative).accessibilityIdentifier("phone.error")
+      if !err.isEmpty { Section { Label(errLine, systemImage: "exclamationmark.triangle").foregroundStyle(Brand.negative).accessibilityIdentifier("phone.error")
         DisclosureGroup(T("详细信息", "Details")) { Text(err).font(.caption).foregroundStyle(.secondary) } } }
     }.scrollContentBackground(.hidden).background(Brand.canvas).navigationTitle(T("Face ID 批准", "Face ID approvals")).task { await load() }
     .onChange(of: m.phoneSignerChanged) { v in if v != nil { Task { await load() } } }
@@ -127,13 +127,18 @@ struct PhoneSignerView: View {
     let fps = PhoneKey.all().compactMap { PhoneKey.fingerprint($0) }
     if let w = want, fps.contains(w) { fp = w; UserDefaults.standard.set(w, forKey: "kp.phoneFP") } else { fp = fps.first }
   }
+  func note(_ error: Error) {
+    let raw = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    errLine = PhoneEnrollCopy.line(error)
+    err = raw.isEmpty ? errLine : raw
+  }
   func enroll(siri: Bool = false, replacing: String? = nil) async {
-    busy = true; defer { busy = false }; err = ""
+    busy = true; defer { busy = false }; err = ""; errLine = ""
     do { let k = try PhoneKey.create(); guard let (x, y) = PhoneKey.xy(k) else { return }; fp = PhoneTrust.fingerprint(x: x, y: y)
       let r = try await PhoneKey.post("phone/enroll", ["x": Hex.encode(x), "y": Hex.encode(y)])
       if (r["already"] as? Bool) == true { m.toast = T("已开启", "On"); await load(); return }
       m.openPhonePage(url: try PhoneKey.verifiedEnrollURL(r, x: x, y: y, siri: siri, replacing: replacing ?? active?["approver"] as? String)) }
-    catch { err = error.localizedDescription }
+    catch { note(error) }
   }
 }
 

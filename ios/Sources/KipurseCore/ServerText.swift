@@ -61,8 +61,12 @@ public enum ServerText {
     let ref = tag.isEmpty ? (status > 0 ? "\(status)" : "") : tag
     return T("这一步没有完成，没有转出任何钱，也没有扣费。请稍后再试。", "That didn't go through. Nothing was sent or charged. Please try again.") + (ref.isEmpty ? "" : "（\(ref)）".replacingOccurrences(of: "（", with: Loc.isChinese ? "（" : " (").replacingOccurrences(of: "）", with: Loc.isChinese ? "）" : ")"))
   }
+  /// Machine code from a gateway JSON body. The headline classifier reads this; it is not shown by itself.
+  public static let errorCodeKey = "kipurse.errorCode"
   /// Error to throw from an HTTP answer: never carries the server's English "detail".
   public static func error(_ j: [String: Any], status: Int, domain: String = "kipurse") -> NSError {
-    NSError(domain: domain, code: status, userInfo: [NSLocalizedDescriptionKey: text(code: j["error"] as? String, status: status)])
+    var info: [String: Any] = [NSLocalizedDescriptionKey: text(code: j["error"] as? String, status: status)]
+    if let c = j["error"] as? String { let t = c.trimmingCharacters(in: .whitespaces); if !t.isEmpty { info[errorCodeKey] = t } }
+    return NSError(domain: domain, code: status, userInfo: info)
   }
 }
