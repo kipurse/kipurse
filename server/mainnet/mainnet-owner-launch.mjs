@@ -82,7 +82,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     engine=createEngineV5(cfg,{ledgerFile:R.engineFiles.ledgerFile??overrides.ledgerFile??cfg.ledgerFile});};boot();
   const E0=new Proxy({},{get:(_,k)=>engine[k]});const E=guardEngine(E0,{guard:SAFE,wallet:R.wallet});const O=()=>cfg.__trustRequestsOwner;
   const pol=()=>decodePolicyV5(permissionFromJson(S.permission).extraData);const target=BigInt(R.targetSingle??decodePolicyV5(permissionFromJson(S.permission).extraData).single);
-  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');const {kvKey}=await import(G+'src/v5/store.mjs');
+  const {createEverydayLimits,changeCost,EVERYDAY_WHY,consentSpend}=await import(G+'src/v5/everyday-limits.mjs');
   const everyKV={get:k=>KV.get(k),set:(k,v)=>KV.put(k,v),del:k=>KV.del(k)};const everyKey=kvKey('everyday',null,String(R.wallet).toLowerCase());
   const EVD=createEverydayLimits({kv:everyKV,wallet:R.wallet,floor:()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term};}});cfg.everydayCheck=a=>EVD.check(a);cfg.everydayGet=()=>EVD.get();
   const chainNow=async()=>Number((await pub.getBlock()).timestamp);
@@ -105,7 +105,6 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   const knownIds=new Set((agents??[]).map(a=>a.id));
   const OA=createOAuth({S,save,base:()=>PUBLIC,network:'main',wallet:R.wallet,ownerAddress:R.owner,
     consentScript:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/consent.js');})(),
-    // t1073: the approval page shows only an explicit AI-limit save. Chain policy (including a 10/50/200 floor) is not spend authorization.
     spendAuthorization:()=>{try{return consentSpend(EVD.get());}catch{return {authorized:false};}},
     commitSpend:(amounts)=>{const prior=everyKV.get(everyKey);const r=EVD.set({single:amounts.single,daily:amounts.daily,term:amounts.total});if(!r.ok)return r;const view=consentSpend(EVD.get());
       return {ok:true,limits:{perPayment:view.perPayment,perDay:view.perDay,termTotal:view.termTotal,at:view.at??null},undo(){if(prior===undefined)EVD.forget();else everyKV.set(everyKey,prior);}};},
@@ -161,7 +160,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     feeTo:(v=>v==='off'?null:/^0x[0-9a-fA-F]{40}$/.test(v)?v:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9')(process.env.KIPURSE_WITHDRAW_FEE_TO??''),
     walletPays:{dues:()=>{const sp=SPONSOR_REF();let d=sp?.dues?.(R.wallet)??0n;try{d+=BigInt(engine?.gasBook?.outstanding?.(R.wallet)??0n);}catch{}return d;},
       paid:n=>{const sp=SPONSOR_REF();const t=sp?.payDue?.(R.wallet,n)??0n;const rest=n-t;if(rest>0n)try{engine?.gasBook?.applyRecovery?.(R.wallet,rest,null);}catch{}},
-      available:()=>!!SPONSOR_REF()?.withdrawAvailable(),register:async(id,a)=>{const sp=SPONSOR_REF();const sid=sp?.registerWithdraw(id,a);return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;}}});
+      available:()=>!!SPONSOR_REF()?.withdrawAvailable(),usdcGas:()=>!!SPONSOR_REF()?.usdcGas,registerUsdcGas:async(id,a)=>{const sp=SPONSOR_REF();const sid=sp?.registerUsdcGas?.(id,{kind:'withdraw',...a});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},register:async(id,a)=>{const sp=SPONSOR_REF();const sid=sp?.registerWithdraw(id,a);return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;}}});
   // EMERGENCY without a bound phone (reinstall / new phone): Base Account signature only, verified here before acting. Pause + cancel holds.
   const {createOwnerEmergency}=await import(G+'src/v5/owner-emergency.mjs');
   const EM=createOwnerEmergency({wallet:R.wallet,owner:R.owner,obs:OBS,verifyOwner:overrides.verifyOwner??((message,signature)=>pub.verifyMessage({address:R.owner,message,signature})),
@@ -180,13 +179,14 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     parts:[{name:'tenant-index',forget:()=>{unindex();return {ok:true};}},{name:'safety',forget:()=>SAFE.forget(R.wallet)},{name:'executor-key',forget:()=>KR.forget(R.wallet)},{name:'withdraw',forget:()=>WD.forget()},...mainnetEraseParts({S,save,ownerPay:OPAY,phone:PH,ledgerCache:LED,limits:{forget:()=>{try{EVD.forget();}catch{}return LIM.forget();}},trustOwner:()=>O(),getDb:()=>E.ledger.db,agents,kv:KV})]});
   const LFEE=await import(G+'src/v5/limits-fee.mjs');
   const LIM=createPublicLimits({base:()=>PUBLIC,current:async()=>{const p=pol();return {single:p.single,daily:p.daily,term:p.term,end:S.permission.end};},
-    plan:async c=>{const pl=await planCapChange(c);return {owner:R.owner,chainId:8453,human:pl.human,labels:pl.calls.map(x=>x.label),calls:[{to:R.wallet,value:'0x0',data:pl.walletExecuteBatch.data}],raw:pl};},
+    plan:async c=>{const pl=await planCapChange(c);const ug=!!SPONSOR_REF()?.usdcGas;const {approveCall}=await import(G+'src/v5/usdc-gas.mjs');return {owner:R.owner,chainId:8453,human:pl.human,labels:pl.calls.map(x=>x.label),calls:[...(ug?[approveCall()]:[]),{to:R.wallet,value:'0x0',data:pl.walletExecuteBatch.data}],raw:pl,usdcGas:ug};},
     confirm:pl=>confirmCapChange(pl),script:(()=>{let c;return()=>c??=fs.readFileSync(G+'owner-sign/static/limits.js');})(),
     // t603u/t604u: first limits authorization free (onboarding sponsorship, once per owner); later changes paid in USDC by the Base Account. Never ETH.
     // t763u (locked): first limits authorization is paid from the wallet like every later change (firstLimitsFree=false). Never sponsored.
-    sponsor:async()=>null,
+    // option A (t1020): limit changes are paid in USDC by the user via the CDP ERC-20 paymaster (approve rides in the batch); off = old Base-Account path
+    sponsor:async(id,pl)=>{const sp=SPONSOR_REF();if(!sp?.usdcGas)return null;const sid=sp.registerUsdcGas(id,{kind:'limits',owner:R.owner,wallet:R.wallet,calls:pl.calls});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},
     _sponsorFirstLimitsRetired:async(id,pl)=>{const sp=SPONSOR_REF();if(!sp)return null;const sid=sp.registerFirstLimits(id,{owner:R.owner,wallet:R.wallet,calls:pl.calls});return sid?`${PUBLIC0}/onboard/new/paymaster?id=${sid}`:null;},
-    fee:async pl=>limitsFeeQuote({data:pl.calls[0].data,walletPays:true}),
+    fee:async pl=>limitsFeeQuote({data:pl.calls[pl.calls.length-1].data,walletPays:true}),
     refund:fee=>LFEE.feeRefundCall({wallet:R.wallet,token:X.token,owner:R.owner,fee}),
     feeQuote:async()=>{const q=await limitsFeeQuote({});const sp=SPONSOR_REF();void sp;return {...q,firstFree:false};},
     onConfirmed:({sponsored})=>{if(sponsored)SPONSOR_REF()?.markFirstLimitsDone(R.owner);}});
@@ -235,7 +235,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
         await server.connect(t);return await t.handleRequest(req,res,body);}
       if(u.pathname==='/everyday'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});return j(200,{...EVD.get(),why:EVERYDAY_WHY});}
       if(u.pathname==='/everyday/preview'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));const f=EVD.get().floor;try{return j(200,{...changeCost({next:{single:b?.single,daily:b?.daily},floor:f,firstFloorDone:true}),floor:f,why:EVERYDAY_WHY});}catch{return j(400,{error:'bad_amount'});}}
-      if(u.pathname==='/everyday'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));let r;try{r=EVD.set({single:b?.single,daily:b?.daily,term:b?.term});}catch{r={ok:false,error:'bad_amount'};}OBS.log('everyday_set',{ok:!!r.ok,error:r.error??null});return j(r.ok?200:400,r);}
+      if(u.pathname==='/everyday'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));let r;try{r=EVD.set({single:b?.single,daily:b?.daily});}catch{r={ok:false,error:'bad_amount'};}OBS.log('everyday_set',{ok:!!r.ok,error:r.error??null});return j(r.ok?200:400,r);}
       if(u.pathname==='/safety/status'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});return j(200,{paused:SAFE.paused(R.wallet),choices:['24h','48h','7d','until_resume']});}
       if(u.pathname==='/safety/withdraw/quote'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});try{return j(200,await WD.quote());}catch(e){return j(503,{error:String(e?.code??'quote_failed')});}}
       if(u.pathname==='/safety/stop'&&req.method==='POST'){if(!PS.check(req))return j(401,{error:'phone_session_required'});const b=await readJson(req).catch(()=>({}));const ms=pauseMsOf(b?.duration);if(ms===undefined)return j(400,{error:'bad_duration',choices:['24h','48h','7d','until_resume']});const p=SAFE.pause(R.wallet,'owner_stop',ms);OBS.log('safety_stop',{duration:String(b?.duration??'24h')});
@@ -288,10 +288,10 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   // t796 M4: default 'sponsor' (free first setup only with a genuine-app attestation). The Debug/TestFlight bundle (.test) of the same team is accepted too.
   const AA_IDS=[AA_ID,AA_ID+'.test'];const APP_ATTEST={mode:process.env.KIPURSE_APP_ATTEST??'sponsor',verify:a=>{let r={ok:false,reason:'none'};for(const id of AA_IDS){r=verifyAttestation({...a,appId:id});if(r.ok)return r;}return r;},log:(k,v)=>OBS.log(k,v)};
   const NEW=createNewWalletOnboarding({appAttest:APP_ATTEST,verified:process.env.KIPURSE_REQUIRE_CBV==='0'?null:(o=>checkVerifiedMulti([pub,...String(process.env.KIPURSE_CBV_RPCS??'https://mainnet.base.org,https://base-rpc.publicnode.com').split(',').filter(Boolean).map(u=>createPublicClient({transport:http(u,{timeout:8000})}))],o,{log:x=>console.log(JSON.stringify({t:'cbv',...x}))})),enabled:ONBOARD_ON,sponsor:SPONSOR,executorFor:w=>KR.ensure(w),kv:KV,pub,cfg:{adapter:X.adapter,trust:X.trust,token:X.token,manager:X.manager,approverVersion:overrides.approverVersion??process.env.KIPURSE_PHONE_APPROVER},reg:REG,base:()=>PUBLIC0,chainId:8453,
-    policy:()=>decodePolicyV5(permissionFromJson(X.currentPermission).extraData),quote:async(owner0)=>{const {ONBOARD_GAS,onboardFee}=await import(G+'src/v5/onboard.mjs');const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
+    policy:()=>decodePolicyV5(permissionFromJson(X.currentPermission).extraData),noteFirstKey:({x,y,approver})=>{try{PH.addPending({x,y,approver,maxSingle:'1',maxDaily:'1',version:APPROVER_VERSION==='v3'?'v3':'v2'});}catch{}},quote:async(owner0)=>{const {OPENING_WITH_FIRST_KEY_GAS,openingFeeUSDC,fmtOpeningFeeUSDC}=await import(G+'src/v5/usdc-gas.mjs');const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
       const [gp,rd]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'})]);
-      const f=onboardFee({gasPriceWei:gp,ethUsd8:rd[1]});const u=f.usdc>0n?f.usdc:1n;const w=u/1000000n,fr=(u%1000000n).toString().padStart(6,'0').replace(/0+$/,'');
-      const base0={gas:String(ONBOARD_GAS),gasPriceWei:String(gp),feeWei:String(f.wei),feeUSDC:fr?`${w}.${fr}`:`${w}`,sponsoredByKipurse:false,includesPhoneApprover:true,signatures:1,transactions:1,
+      const of=openingFeeUSDC({gasPriceWei:gp,ethUsd8:rd[1],gas:OPENING_WITH_FIRST_KEY_GAS});const u=of.fee;const f={wei:of.wei,usdc:u};
+      const base0={gas:String(OPENING_WITH_FIRST_KEY_GAS),gasPriceWei:String(gp),feeWei:String(f.wei),feeUSDC:fmtOpeningFeeUSDC(u),sponsoredByKipurse:false,includesPhoneApprover:true,signatures:1,transactions:1,
         limitsChangeUSDC:await (async()=>{try{const {limitsChangeFee}=await import(G+'src/v5/limits-fee.mjs');const {fmtUsdc}=await import(G+'src/v5/limits-public.mjs');return fmtUsdc(limitsChangeFee({callGas:null,gasPriceWei:gp,ethUsd8:rd[1]}).usdc);}catch{return null;}})(),gasToken:'USDC'};
       // fee-quote fix: always a string payer (the app requires it); balances only for a valid owner. Read failures (new/undeployed Base Account, RPC) never break the quote.
       let o=null;try{if(/^0x[0-9a-fA-F]{40}$/.test(String(owner0??'')))o=getAddress(owner0);}catch{}

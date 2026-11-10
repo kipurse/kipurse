@@ -23,7 +23,7 @@ export const APPROVER_ABI=ART.abi;
 // Upgrade gas paid from the KIPURSE WALLET's own USDC: the owner's Base Account sends the batch (pays gas up front, its own
 // money) and the same atomic batch has the wallet send `fee` USDC back to that Base Account. Nobody else fronts or sponsors.
 export const BASE_USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-export const ETH_USD_FEED='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31'; // Chainlink ETH/USD on Base (8 decimals)
+export const ETH_USD_FEED='0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70'; // Chainlink ETH/USD on Base (8 decimals); t1026u: was 0xc0de… (no data on Base RPCs)
 export const UPGRADE_GAS=1_800_000n;          // measured 1,758,806 on a Base fork (deploy V2 + addOwnerAddress + USDC refund: 1,775,833)
 export const L1_ALLOWANCE_WEI=1_000_000_000_000n; // Base L1 data fee allowance (0.000001 ETH)
 export const FEE_MARGIN_PCT=0n;export const FEE_CAP=50_000n;export const FEE_MIN=0n; // atomic USDC: actual cost, no markup, no minimum; cap 0.05
