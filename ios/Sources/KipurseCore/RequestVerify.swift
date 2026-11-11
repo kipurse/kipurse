@@ -118,6 +118,18 @@ public enum RequestVerify {
     } else { bad("bad term") }
     return res
   }
+  /// t1104: the App's check of a /owner/limits/prepare reply (calls exactly as the server sent them).
+  /// Wallet-pays (feeFrom = kipurse_wallet): the WHOLE batch goes to limitsBatch(walletPays:), which allows only
+  /// [USDC.approve(Pimlico 0x6666…c68b, 0 < n <= 0.05 USDC), cap change]. The older UsdcGas.split rules (approve only to the
+  /// CDP paymaster, <= 0.25 USDC) stay exactly as before for every other batch.
+  public static func limitsPrepared(calls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, owner: String?, walletPays: Bool, now: Date = Date()) -> Result {
+    if walletPays { return limitsBatch(calls: calls, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: true) }
+    let ug = UsdcGas.split(calls, wallet: wallet)
+    if !ug.problems.isEmpty || ug.deposit > 0 {
+      var r = Result(); r.problems = ug.problems.isEmpty ? ["USDC deposit inside a limits change"] : ug.problems; return r
+    }
+    return limitsBatch(calls: ug.rest, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: false)
+  }
 
   /// Extra checks on a trust request beyond PhoneTrust.problems: payees sane, short deadline, expiry within a year, caps within the
   /// ceiling this phone remembers from its own enrollment (not only what the server says).

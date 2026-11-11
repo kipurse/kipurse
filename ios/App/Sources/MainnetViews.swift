@@ -954,7 +954,8 @@ extension MainLimitsView {
       let fromWallet = (j["feeFrom"] as? String) == UsdcGas.feeFrom
       let wallet = (j["wallet"] as? String) ?? ""
       if fromWallet && wallet.isEmpty { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
-      let res = RequestVerify.limitsBatch(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, currentExecutor: nil, owner: Operator.ownerAccount ?? (j["owner"] as? String), walletPays: fromWallet)
+      // t1104: wallet-pays batches are checked whole by the Pimlico rule; the old UsdcGas.split rule only for other batches
+      let res = RequestVerify.limitsPrepared(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, owner: Operator.ownerAccount ?? (j["owner"] as? String), walletPays: fromWallet)
       guard res.ok else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + res.problems.joined(separator: "; "); return }
       var c = URLComponents(url: u0, resolvingAgainstBaseURL: false)!; c.queryItems = (c.queryItems ?? []) + [.init(name: "plan", value: id)]
       let from = UsdcGas.limitsSender(owner: Operator.ownerAccount ?? (j["owner"] as? String) ?? "", wallet: wallet, fromWallet: fromWallet)
