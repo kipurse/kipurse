@@ -205,6 +205,7 @@ public enum Loc {
     "开通": "Set up",
     "开通 Kipurse": "Set up Kipurse",
     "开通（一次确认）": "Set up (one signature)",
+    "充值并开通": "Add money and set up",
     "总额最多": "Total at most",
     "打开钱包": "Open wallet",
     "改上限要用你的 Coinbase 钱包（你的 Coinbase 账户）确认一次。": "Changing limits needs one confirmation with your Coinbase wallet (your Coinbase account).",

@@ -796,7 +796,7 @@ enum OnboardAPI {
   func loadQuote() async { do { let owner = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey).flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil }
     let qj = try await OnboardAPI.get(OnboardAPI.isNew ? "onboard/new/quote" : "onboard/quote", owner: OnboardAPI.isNew ? owner : nil)
     quote = Onboard.Quote(qj); laterChangeUSDC = qj["limitsChangeUSDC"]?.string; if quote == nil { err = L("读不到手续费") } } catch { err = error.localizedDescription } }
-  func start(_ m: AppModel, single: String, daily: String, term: String, days: String) async {
+  func start(_ m: AppModel, single: String, daily: String, term: String, days: String, deposit: String = "") async {
     err = nil; phase = .starting
     do {
       let (x, y) = try OnboardAPI.key(); fingerprint = PhoneTrust.fingerprint(x: x, y: y)
@@ -807,7 +807,7 @@ enum OnboardAPI {
       if case .array(let a)? = r["removes"] { removes = a.count }
       if let sfp = r["fingerprint"]?.string, sfp != fingerprint { fpMismatch = sfp; throw NSError(domain: "kipurse", code: 3, userInfo: [NSLocalizedDescriptionKey: T("安全检查没通过：服务器发来的内容和这台 iPhone 的不一样。已停止，没有扣钱。", "Safety check failed: the server's data doesn't match this iPhone. Stopped; nothing charged.")]) }
       // t621 #1: the phone decodes the exact batch first and commits to it (#vh); the signing page refuses anything else.
-      let (url, verifiedW) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days)
+      let (url, verifiedW) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit)
       phase = .signing
       m.openOwnerPage(url) { [weak self] mm in
         guard let j = try? await OnboardAPI.post("onboard/confirm", ["id": id]), j["ok"]?.bool == true else { return false }
@@ -821,7 +821,7 @@ enum OnboardAPI {
 extension OnboardFlow {
   static func stop(_ msg: String) -> NSError { NSError(domain: "kipurse", code: 4, userInfo: [NSLocalizedDescriptionKey: msg]) }
   /// Returns the signing-page URL with the commitment, and the wallet the phone itself checked (nil for the simulator mock).
-  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String) async throws -> (URL, String?) {
+  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "") async throws -> (URL, String?) {
     #if DEBUG
     if UserDefaults.standard.string(forKey: "kpOnboardServer") != nil { return (u, nil) }   // UI tests: local simulator mock, no real batch
     #endif
@@ -830,7 +830,9 @@ extension OnboardFlow {
     var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil
     if OnboardAPI.isNew {
       guard let o = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey), CoinbaseIdentity.isAddress(o) else { throw stop(T("请先用 Coinbase 登录。", "Please sign in with Coinbase first.")) }
-      let p = try await OnboardAPI.post("onboard/new/prepare", ["id": id, "owner": o, "features": ["dues_slot"]])
+      var prep: [String: Any] = ["id": id, "owner": o, "features": ["dues_slot"]]
+      if let d = Onboard.depositAtomic(deposit) { prep["deposit"] = String(d) }
+      let p = try await OnboardAPI.post("onboard/new/prepare", prep)
       guard let c = BatchVerify.calls(p["calls"]), let w = p["wallet"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
       if let po = p["owner"]?.string, po.lowercased() != o.lowercased() { throw bad(["owner"]) }
       owner = o; wallet = w; calls = c; chain = BatchVerify.chainId(p["chainId"]) ?? 8453; newWallet = !(p["existing"]?.bool ?? false); vault = p["vault"]?.string
@@ -852,6 +854,7 @@ struct OnboardView: View {
   @StateObject private var f = OnboardFlow()
   @StateObject private var cbv = CBVerifyModel()
   @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"   // t603u: no preset limits
+  @State private var deposit = ""
   var limitsErr: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days) }
   var body: some View {
     ScrollView {
@@ -870,12 +873,17 @@ struct OnboardView: View {
       Text(T("没有默认值，由你自己选：每笔、每天、总额。上限内 AI 自己付，超出会发到手机请你 Face ID 确认。", "No defaults: you choose per payment, per day and total. Within them your AI pays; anything above comes to your phone for Face ID.")).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Text(T("确认一次，同时开启 AI 付款上限、Face ID 批准和 Siri 付款。没成功就什么都不变。", "One confirmation turns on AI limits, Face ID approvals and Siri payments. If it fails, nothing changes.")).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
     }
+    Text(T("选一个金额，在 Coinbase 里确认一次就开好。", "Pick an amount and confirm once in Coinbase.")).font(.subheadline).foregroundStyle(.secondary)
+    AmountPicker(title: T("充值金额", "Deposit"), presets: ["1", "5", "10", "50", "100"], unit: "USDC", value: $deposit).card(padding: 18).accessibilityIdentifier("onboard.deposit")
+    Text(Onboard.minBaseNote(quoted: f.quote?.feeUSDC, deposit: deposit)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.minBase")   // t1113u: one added line, existing footnote style
+    Text(T("付款上限（开通后也能改）", "Payment limits (you can change these later)")).font(.headline).padding(.top, 8)
     GuidedSetupCard(single: $single, daily: $daily, term: $term, days: $days)
-    Text(T("或者自己填 / 修改", "Or fill in / edit yourself")).font(.headline).accessibilityIdentifier("onboard.manual")
-    AmountPicker(title: L("每笔最多"), presets: ["1", "2", "5", "10", "100", "1000"], unit: "USDC", value: $single).card(padding: 18)
-    AmountPicker(title: L("每天最多"), presets: ["5", "20", "50", "100", "1000", "10000"], unit: "USDC", value: $daily).card(padding: 18)
-    AmountPicker(title: L("总额最多"), presets: ["100", "200", "500", "1000"], unit: "USDC", value: $term).card(padding: 18)
-    AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days).card(padding: 18)
+    DisclosureGroup(T("自己填", "Enter manually")) {
+      AmountPicker(title: L("每笔最多"), presets: ["1", "2", "5", "10", "100", "1000"], unit: "USDC", value: $single).card(padding: 18)
+      AmountPicker(title: L("每天最多"), presets: ["5", "20", "50", "100", "1000", "10000"], unit: "USDC", value: $daily).card(padding: 18)
+      AmountPicker(title: L("总额最多"), presets: ["100", "200", "500", "1000"], unit: "USDC", value: $term).card(padding: 18)
+      AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days)
+    }.accessibilityIdentifier("onboard.manual")
     VStack(alignment: .leading, spacing: 8) {
       Text(L("这一笔确认会做")).font(.headline)
       ForEach(Onboard.steps(removes: f.removes, siri: true), id: \.self) { s in Label(s, systemImage: "checkmark.circle").font(.subheadline) }
@@ -883,8 +891,10 @@ struct OnboardView: View {
     }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 16)
     feeCard
     if let e = limitsErr ?? f.err { WarnBox(text: e, tone: Brand.caution, icon: "info.circle.fill") }   // t769u: calm, not red
-    BigButton(f.phase == .starting ? L("正在准备…") : L("开通（一次确认）"), icon: "signature", disabled: limitsErr != nil || f.phase == .starting || !(f.quote?.acceptable ?? false)) {
-      Task { await f.start(m, single: single, daily: daily, term: term, days: days) }
+    BigButton(f.phase == .starting ? L("正在准备…") : L("充值并开通"), icon: "arrow.down.circle.fill", disabled: !Onboard.canOpen(quote: f.quote, starting: f.phase == .starting, deposit: deposit, limitsError: limitsErr)) {
+      // t1113u (§6#59, supersedes 0B.3 "limits never block opening"): no silent default plan; the user's own three limits go into the one opening batch.
+      guard limitsErr == nil else { return }
+      Task { await f.start(m, single: single, daily: daily, term: term, days: days, deposit: deposit) }
     }.accessibilityIdentifier("onboard.go")
     if f.phase == .signing, f.fingerprint != nil {
       VStack(alignment: .leading, spacing: 6) {
