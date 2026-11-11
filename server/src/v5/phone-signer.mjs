@@ -23,7 +23,7 @@ export const APPROVER_ABI=ART.abi;
 // Upgrade gas paid from the KIPURSE WALLET's own USDC: the owner's Base Account sends the batch (pays gas up front, its own
 // money) and the same atomic batch has the wallet send `fee` USDC back to that Base Account. Nobody else fronts or sponsors.
 export const BASE_USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-export const ETH_USD_FEED='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31'; // Chainlink ETH/USD on Base (8 decimals)
+export const ETH_USD_FEED='0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70'; // Chainlink ETH/USD on Base (8 decimals); t1026u: was 0xc0de… (no data on Base RPCs)
 export const UPGRADE_GAS=1_800_000n;          // measured 1,758,806 on a Base fork (deploy V2 + addOwnerAddress + USDC refund: 1,775,833)
 export const L1_ALLOWANCE_WEI=1_000_000_000_000n; // Base L1 data fee allowance (0.000001 ETH)
 export const FEE_MARGIN_PCT=0n;export const FEE_CAP=50_000n;export const FEE_MIN=0n; // atomic USDC: actual cost, no markup, no minimum; cap 0.05
@@ -39,6 +39,10 @@ export function p256Key(x,y){if(!hex32(x)||!hex32(y))throw Object.assign(Error('
   return createPublicKey({key:{kty:'EC',crv:'P-256',x:Buffer.from(x.slice(2),'hex').toString('base64url'),y:Buffer.from(y.slice(2),'hex').toString('base64url')},format:'jwk'});}
 /** Verify a raw (r,s) P-256 signature over a 32-byte digest (no extra hashing). */
 export function p256VerifyDigest({x,y},digestHex,r,s){p256Key(x,y);try{return P256.verify({payload:digestHex,publicKey:{prefix:4,x:BigInt(x),y:BigInt(y)},signature:{r:BigInt(r),s:BigInt(s)}});}catch{return false;}}
+// TODO(android): no Android app in this tree. A later device key would export only a device-backed P-256 (x, y)
+// and sign the same raw (r, s) over the 32-byte digest (Keystore NONEwithECDSA, user auth required). Do not send
+// WebAuthn assertion bytes. The first key rides the opening batch; a replacement device still pays upgradeFeeUSDC.
+export const ANDROID_DEVICE_KEY='todo';
 export const fingerprint=(x,y)=>keccak256(concat([x,y])).slice(2,18).toUpperCase().match(/.{4}/g).join('-');
 export function approverInit({wallet,trust,x,y,maxSingle,maxDaily,version='v1'}){const A=ARTS[version];if(!A)throw Object.assign(Error('unknown approver version'),{code:'bad_version'});const args=version==='v3'?encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'}],[getAddress(wallet),getAddress(trust),BigInt(x),BigInt(y)]):encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'},{type:'uint160'},{type:'uint160'}],
   [getAddress(wallet),getAddress(trust),BigInt(x),BigInt(y),BigInt(maxSingle),BigInt(maxDaily)]);const initcode=concat([A.bytecode,args]);const salt=keccak256(concat([toHex('kipurse-phone-approver-'+version),x,y]));
@@ -50,7 +54,7 @@ export function phoneTrustWrapper(ownerIndex,m,r,s){const body=encodeAbiParamete
   const data=encodeAbiParameters([{type:'uint8'},{type:'bytes'},{type:'uint256'},{type:'uint256'}],[1,body,BigInt(r),BigInt(s)]);
   return encodeAbiParameters([{type:'tuple',components:[{name:'ownerIndex',type:'uint256'},{name:'signatureData',type:'bytes'}]}],[{ownerIndex:BigInt(ownerIndex),signatureData:data}]);}
 
-export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null}){
+export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null,log=null}){
   // t906 (owner): the fee comes from the KIPURSE WALLET; the Base Account only signs. sponsor = {available():bool, register(id,{owner,wallet,calls,reimburse})->paymasterUrl|null}.
   const statusLimit=limiter({max:60,windowMs:60e3});   // t629: public status read, 60/min per network; key x/y and owner index are no longer exposed
   S.phone??={pending:{},active:null};S.phone.pending??={};const P=()=>S.phone;   // tenants created by new-user onboarding start with only {active}
@@ -68,8 +72,15 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     const [bal,eth,gp,obal]=await Promise.all([pub.readContract({address:token,abi:ERC20_ABI,functionName:'balanceOf',args:[W]}),pub.getBalance({address:OWNER}),pub.getGasPrice(),pub.readContract({address:token,abi:ERC20_ABI,functionName:'balanceOf',args:[OWNER]}).catch(()=>0n)]);
     const fee=BigInt(e.fee??0);const ownerGasWei=UPGRADE_GAS*gp+L1_ALLOWANCE_WEI;
     return {fee:fee.toString(),feeUSDC:usd(fee),cap:FEE_CAP.toString(),wallet:W,walletUSDC:bal.toString(),enough:bal>=fee,ownerUSDC:obal.toString(),ownerCanPayUSDC:obal>=fee*3n/2n,usdcReady:e.paymaster?bal>=fee:bal>=fee&&obal>=fee*3n/2n,walletPays:!!e.paymaster,owner:OWNER,ownerEthWei:eth.toString(),ownerGasWei:ownerGasWei.toString(),ownerCanPayEth:eth>=ownerGasWei};}
-  async function enroll({x,y}){gc();p256Key(x,y);if(Object.keys(P().pending).length>=5)throw Object.assign(Error('too many pending enrollments'),{code:'busy'});
-    const c=caps();const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});const q=await quoteNow();const id=randomBytes(12).toString('hex');let remove=await deadOwners(a.address);
+  async function enroll({x,y}){gc();p256Key(x,y);
+    const same=(rec)=>!!rec&&rec.x!=null&&rec.y!=null&&BigInt(rec.x)===BigInt(x)&&BigInt(rec.y)===BigInt(y);
+    // t1086: the first key is already in the user-funded opening batch (fee recorded as 0). Do not charge upgradeFee again for that same key.
+    const opened=same(P().active)?P().active:Object.values(P().pending).find(rec=>same(rec)&&String(rec.fee??'0')==='0');
+    const c=caps();const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});
+    let onChain=false;if(!opened){try{onChain=(await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.address]}))===true;}catch{onChain=false;}}
+    if(opened||onChain)return {already:true,firstKey:true,id:null,url:null,fingerprint:fingerprint(x,y),approver:opened?.approver??a.address,fee:'0',feeUSDC:'0',calls:[],removes:[],replaces:null,owner:OWNER,wallet:W,chainId,version:approverVersion};
+    if(Object.keys(P().pending).length>=5)throw Object.assign(Error('too many pending enrollments'),{code:'busy'});
+    const q=await quoteNow();const id=randomBytes(12).toString('hex');let remove=await deadOwners(a.address);
     // t843: a new phone (or app copy) replaces the active approver in ONE owner signature: add new, then remove exactly the old one
     const old=P().active;const oldIdx=old&&getAddress(old.approver)!==getAddress(a.address)?await findIndex(old.approver):-1;const replaces=oldIdx>=0?getAddress(old.approver):null;
     if(replaces)remove=[{approver:replaces,index:oldIdx}];
@@ -129,7 +140,8 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     try{
       if(p==='/phone/enroll.js'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end(script());return true;}
       if(p==='/phone/status'&&req.method==='GET'){if(!statusLimit(clientOf(req))){json(429,{error:'rate_limited'});return true;}const a=P().active;json(200,{active:a?{approver:a.approver,fingerprint:a.fingerprint,maxSingle:a.maxSingle,maxDaily:a.maxDaily,version:a.version??'v1',...(approverVersion==='v3'&&(a.version??'v1')!=='v3'?{upgradeTo:'v3'}:{})}:null,wallet:W,chainId});return true;}
-      if(p==='/phone/enroll'&&req.method==='POST'){const b=await readBody(req);json(200,await enroll({x:String(b.x),y:String(b.y)}));return true;}
+      if(p==='/phone/enroll'&&req.method==='POST'){const t0=Date.now();try{const b=await readBody(req);const out=await enroll({x:String(b.x),y:String(b.y)});
+        const reason=out.already?'already':'ok';try{log?.('phone_enroll',{status:200,ms:Date.now()-t0,reason});}catch{}json(200,out);}catch(e){const reason=/^[a-z0-9_]{1,40}$/.test(String(e.code??''))?String(e.code):'failed';try{log?.('phone_enroll',{status:400,ms:Date.now()-t0,reason});}catch{}throw e;}return true;}
       if(p==='/phone/enroll/quote'&&req.method==='GET'){json(200,await quote(String(u.searchParams.get('id')??'')));return true;}
       if(p==='/phone/enroll'&&req.method==='GET'){gc();const lang=langOf(req,u),t=X(lang);const id=String(u.searchParams.get('id')??'');const e=P().pending[id];
         if(!e){html(404,page(t('找不到','Not found'),`<div class=t>${t('这个添加请求不存在或已过期','This request doesn’t exist or has expired')}</div><p>${t('请在 Kipurse App 里重新点「添加这台手机」。','Tap “Add this phone” again in the Kipurse app.')}</p>`,nonce,null,lang));return true;}

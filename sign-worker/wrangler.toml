@@ -1,0 +1,10 @@
+# Existing sign.kipurse.com worker. A deploy uploads public/ as a whole, so the
+# old / and /v2–/v8 files below stay byte-identical and the v9 set is added.
+# Set `name` to that worker before deploying. This file does not deploy by itself.
+name = "kipurse-sign"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+[assets]
+directory = "public"
+binding = "ASSETS"

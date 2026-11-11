@@ -167,7 +167,7 @@ final class Batch2UITests: XCTestCase {
       let a1 = XCTAttachment(screenshot: app.screenshot()); a1.lifetime = .keepAlways; a1.name = "t885-cbwallet-\(lang)"; add(a1)
       let o = app.buttons["cbdep.go"].firstMatch; for _ in 0..<4 where !o.isHittable { app.swipeUp() }; o.tap()
       let dl = app.descendants(matching: .any)["debug.launch"].firstMatch; XCTAssertTrue(dl.waitForExistence(timeout: 5), lang)
-      XCTAssertTrue(dl.label.hasPrefix("https://sign.kipurse.com/v7/deposit#u=") && dl.label.contains("mode%3Dtap") && dl.label.contains("&vw=0x"), dl.label); XCTAssertFalse(dl.label.contains("pay.coinbase.com") || dl.label.contains("coinbase.com/send"), dl.label)
+      XCTAssertTrue(dl.label.hasPrefix("https://sign.kipurse.com/v9/deposit#u=") && dl.label.contains("mode%3Dtap") && dl.label.contains("&vw=0x"), dl.label); XCTAssertFalse(dl.label.contains("pay.coinbase.com") || dl.label.contains("coinbase.com/send"), dl.label)
       XCTAssertTrue(dl.label.contains("amount%3D14304957"), "t886: default = full Coinbase wallet balance: \(dl.label)")
       app.terminate()
     }

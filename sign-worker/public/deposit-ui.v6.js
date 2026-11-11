@@ -1,0 +1,8 @@
+(function(){var d=JSON.parse(document.getElementById('kp-data').textContent),EN=document.documentElement.lang!=='zh';
+var cp=document.getElementById('cp');if(cp)cp.onclick=function(){var ok=function(){cp.textContent=EN?'Copied ✓':'已复制 ✓';setTimeout(function(){cp.textContent=EN?'Copy address':'复制地址';},2000);};
+ if(navigator.clipboard)navigator.clipboard.writeText(d.wallet).then(ok,function(){prompt('',d.wallet);});else prompt('',d.wallet);};
+var b=document.getElementById('chk'),cs=document.getElementById('cs'),n=0,tm=null;function f(x){var a=BigInt(x),i=a/1000000n,r=(a%1000000n).toString().padStart(6,'0').slice(0,2);return i.toLocaleString('en-US')+(r==='00'?'':'.'+r);}
+function once(){return fetch(d.check,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){if(j.wallet==null)throw 0;var now=BigInt(j.wallet),was=d.wb0==null?null:BigInt(d.wb0);
+ document.getElementById('wb').textContent=f(j.wallet)+' USDC';if(was!==null&&now>was){cs.style.color='#080';cs.textContent=(EN?'✅ Arrived: +':'✅ 已到账：+')+f(String(now-was))+' USDC. '+(EN?'You can go back to the Kipurse app.':'可以回到启付 App 了。');d.wb0=j.wallet;return true;}return false;});}
+if(b)b.onclick=function(){if(tm)return;n=0;cs.style.color='';cs.textContent=EN?'Checking…':'正在查看…';(function loop(){once().then(function(ok){if(ok){tm=null;return;}n++;if(n>=24){tm=null;cs.textContent=EN?'Not arrived yet. A transfer from your Coinbase Wallet usually arrives within a minute — tap again to check.':'还没到账。从 Coinbase 钱包转入一般 1 分钟内到账，稍后再点一次查看。';return;}
+ cs.textContent=EN?'Not arrived yet, still checking…':'还没到账，正在继续查看…';tm=setTimeout(loop,5000);}).catch(function(){tm=null;cs.style.color='#c81e1e';cs.textContent=EN?'Couldn’t check right now. Try again.':'暂时查不到，请再试一次。';});})();};})();

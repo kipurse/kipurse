@@ -25,7 +25,7 @@ export function createOnboarding({S,save,pub,wallet,owner,trust,chainId=8453,bas
       token?pub.readContract({address:token,abi:ERC20,functionName:'balanceOf',args:[OWNER]}):Promise.resolve(null)]);
     const f=onboardFee({gasPriceWei:gp,ethUsd8:rd[1]});
     return {gas:ONBOARD_GAS.toString(),gasPriceWei:gp.toString(),feeWei:f.wei.toString(),feeUSDC:usd(f.usdc>0n?f.usdc:1n),payer:OWNER,payerEthWei:eth.toString(),payerUSDC:bal===null?null:bal.toString(),
-      payerCanPayEth:eth>=f.wei,payerCanPayUSDC:bal===null?null:bal>=f.usdc+(f.usdc/2n),sponsoredByKipurse:false,signatures:1,transactions:1};}
+      payerCanPayEth:eth>=f.wei,payerCanPayUSDC:bal===null?null:bal>=f.usdc+(f.usdc/2n),sponsoredByKipurse:false,includesPhoneApprover:true,signatures:1,transactions:1};}
   /** The ordered call list for ONE wallet_sendCalls (atomicRequired) from the Base Account. */
   function batch({approver,plan:pl,remove}){return [{to:DETERMINISTIC_DEPLOYER,value:'0x0',data:approver.deployData,label:'deploy phone approver ('+approverVersion+')'},
     {to:W,value:'0x0',data:pl.walletExecuteBatch.data,label:'spend permission + caps: '+pl.calls.map(c=>c.label).join(' · ')},
@@ -33,6 +33,7 @@ export function createOnboarding({S,save,pub,wallet,owner,trust,chainId=8453,bas
     ...remove.map(r=>({...phone.removeCall(r),label:'remove dead approver '+r.approver}))];}
   async function start({x,y,single,daily,term,days}){gc();if(Object.keys(O()).length>=5)throw Object.assign(Error('too many pending setups'),{code:'busy'});
     const c=checkLimits({single,daily,term,days:days??90});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});
+    const quoted=await quote();if(quoted.payerCanPayUSDC===false)throw Object.assign(Error('USDC 不够付开户和这台手机钥匙这一笔，已停止，没有扣钱。'),{code:'needs_usdc'});
     const pl=await plan(c);const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});
     // dead approvers + the current/retiring approver (a new key replaces it), never the new one
     const seen=new Set([getAddress(a.address)]);const remove=[];for(const r of await phone.deadOwners(a.address))if(!seen.has(r.approver)){seen.add(r.approver);remove.push(r);}
@@ -40,7 +41,7 @@ export function createOnboarding({S,save,pub,wallet,owner,trust,chainId=8453,bas
     const pid=phone.addPending({x,y,remove:[],maxSingle:c.single.toString(),maxDaily:c.daily.toString(),approver:a.address,version:approverVersion});
     const id=randomBytes(12).toString('hex');O()[id]={pid,plan:pl,remove,approver:a.address,fingerprint:fingerprint(x,y),choice:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),days:c.days},exp:Date.now()+30*60e3};save();
     const calls=batch({approver:a,plan:pl,remove});O()[id].calls=calls.map(({to,value,data})=>({to,value,data}));save();
-    return {id,url:`${base()}/onboard?id=${id}`,approver:a.address,fingerprint:fingerprint(x,y),removes:remove.map(r=>r.approver),labels:calls.map(c=>c.label),calls:O()[id].calls,quote:await quote()};}
+    return {id,url:`${base()}/onboard?id=${id}`,approver:a.address,fingerprint:fingerprint(x,y),removes:remove.map(r=>r.approver),labels:calls.map(c=>c.label),calls:O()[id].calls,quote:quoted};}
   async function confirm(id){const o=O()[id];if(!o)throw Object.assign(Error('unknown or expired setup'),{code:'unknown'});
     const ph=await phone.confirm(o.pid);if(!ph.ok)return {ok:false,detail:ph.detail};
     const pv=await confirmPlan(o.plan);if(!pv.valid)return {ok:false,detail:'permission not valid on chain yet'};

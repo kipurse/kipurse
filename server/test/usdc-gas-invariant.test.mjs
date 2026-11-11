@@ -28,7 +28,7 @@ test('limits prepare: later change with USDC in the Base Account -> user pays US
 test('limits page states the per-change fee in USDC and never asks for ETH',async()=>{const {L}=mkLim({});const r=await call(L,'/owner/limits?single=1&daily=5&term=20',{},'GET');
   assert.equal(r.code,200);assert.match(r.out,/0\.002345 USDC/);assert.match(r.out,/ETH/);assert.doesNotMatch(r.out,/需要 ETH|need ETH|pay in ETH/i);});
 test('guard: every wallet_sendCalls in signing pages is known; the limits page only sends via sponsorship or a USDC check',()=>{
-  const dir=new URL('../owner-sign/consent/',import.meta.url);const known={'limits.js':2,'consent.js':-1,'approve-trust.js':-1,'phone-enroll.js':-1,'emergency.js':-1,'withdraw.js':-1};
+  const dir=new URL('../owner-sign/consent/',import.meta.url);const known={'limits.js':3,'consent.js':-1,'approve-trust.js':-1,'phone-enroll.js':-1,'emergency.js':-1,'withdraw.js':-1};
   for(const f of fs.readdirSync(dir)){const s=fs.readFileSync(new URL(f,dir),'utf8');const n=(s.match(/wallet_sendCalls/g)??[]).length;if(!n)continue;
     assert.ok(f in known,`new signing page ${f} sends transactions: add a USDC/sponsorship gas guard and list it here`);if(known[f]>=0)assert.equal(n,known[f],f);}
   const L=fs.readFileSync(new URL('limits.js',dir),'utf8');assert.match(L,/paymasterService/);assert.match(L,/canPayUSDC/);

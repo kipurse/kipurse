@@ -25,7 +25,14 @@ const post=async(p,b)=>{const r=await fetch(p,{method:'POST',headers:{'content-t
 let busy=false;go.onclick=async()=>{if(busy)return;busy=true;go.disabled=true;try{
   say((KPEN?'Preparing…':'正在准备…'));const pl=await post('/owner/limits/prepare',D.plan?{plan:D.plan}:{single:D.single,daily:D.daily,term:D.term,days:D.days});
   say((KPEN?'Opening Base Account…':'正在打开 Base Account…'));const [a]=await prov().request({method:'eth_requestAccounts'});if(a.toLowerCase()!==pl.owner.toLowerCase())throw Error((KPEN?'Please sign in with the wallet owner’s Base Account: ':'请用钱包主人的 Base Account 登录：')+pl.owner);
-  await(async()=>{const b={version:'2.0.0',chainId:'0x'+Number(pl.chainId).toString(16),from:a,atomicRequired:true,calls:pl.calls};
+  await(async()=>{
+    // t1097: allowlisted wallets pay the network fee from the Kipurse smart wallet's own USDC. No Base float, no refund.
+    if(pl.feeFrom==='kipurse_wallet'){if(!pl.pm||!pl.wallet||!String(pl.pm).endsWith('/owner/limits/paymaster'))throw Error(KPEN?'Stopped: this change is paid from the Kipurse wallet. Nothing was charged.':'已停止：这次手续费要从启付余额扣。没有扣钱。');
+      const bw={version:'2.0.0',chainId:'0x'+Number(pl.chainId).toString(16),from:pl.wallet,atomicRequired:true,calls:pl.calls};
+      // Coinbase only accepts a send from a sub-account after this session imports it. type "deployed" does not create a wallet.
+      try{await prov().request({method:'wallet_addSubAccount',params:[{version:'1',account:{type:'deployed',address:pl.wallet,chainId:8453}}]});}catch(x){if(x&&(x.code===4001||/reject|cancel/i.test(String(x.message))))throw x;}
+      return await prov().request(await kpVH({method:'wallet_sendCalls',params:[{...bw,capabilities:{paymasterService:{url:pl.pm}}}]}));}
+    const b={version:'2.0.0',chainId:'0x'+Number(pl.chainId).toString(16),from:a,atomicRequired:true,calls:pl.calls};
     // USDC-only gas (t604u): sponsored first authorization, else the Base Account pays in USDC. Never an ETH-funded send.
     if(pl.pm){try{return await prov().request(await kpVH({method:'wallet_sendCalls',params:[{...b,capabilities:{paymasterService:{url:pl.pm}}}]}));}catch(x){if(x&&(x.code===4001||/reject|cancel/i.test(String(x.message))))throw x;if(!(pl.fee&&pl.fee.canPayUSDC))throw Error(KPEN?'The free sponsorship is unavailable right now. Nothing was charged; try again later.':'免费赞助暂时不可用，没有扣钱，请稍后再试。');}}
     if(!(pl.fee&&pl.fee.canPayUSDC))throw Error(KPEN?'Stopped: the network fee must be paid in USDC from your Base Account and there isn’t enough. Nothing was charged.':'已停止：手续费要用你 Base Account 里的 USDC 付，现在不够。没有扣钱。');

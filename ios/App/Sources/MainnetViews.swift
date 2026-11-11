@@ -228,6 +228,8 @@ struct DepositView: View {
 struct MainLimitsView: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
+  /// t1094: blank first-connect page. Amounts stay empty. `-kpAILimits` is the UI-test fixture.
+  var firstConnect = CommandLine.arguments.contains("-kpAILimits")
   @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"
   @State private var verifyErr: String?
   @State private var fee: LimitsFee?
@@ -241,15 +243,19 @@ struct MainLimitsView: View {
   var evCostText: String {
     switch evCost { case .free?: return T("这次修改：不收手续费，马上生效", "This change: no fee, instant")
     case .floorChange?: return T("这次修改：超过链上底线。要先调高底线，约 \(fee?.usdcText ?? "0.007") USDC（从启付钱包扣）", "This change: above the on-chain floor. Raise the floor first: about \(fee?.usdcText ?? "0.007") USDC (from your Kipurse wallet)")
-    case nil: return T("请输入金额", "Enter amounts") } }
+    case nil:
+      if AnswerRules.parseUSDC(evSingle) != nil, AnswerRules.parseUSDC(evDaily) != nil {
+        return AILimitGate.line(single: evSingle, daily: evDaily, term: evDaily, caps: s.capRead)
+      }
+      return T("请输入金额", "Enter amounts") } }
   @ViewBuilder var everydayCard: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(T("日常额度", "Everyday limits")).font(.headline).accessibilityIdentifier("everyday.title")
       AmountPicker(title: T("日常每笔最多", "Everyday per payment"), presets: ["1", "2", "5", "10", "100"], unit: "USDC", value: $evSingle)
       AmountPicker(title: T("日常每天最多", "Everyday per day"), presets: ["5", "20", "50", "100", "1000"], unit: "USDC", value: $evDaily)
-      Text(evCostText).font(.subheadline.weight(.semibold)).foregroundStyle(evCost == .free ? Brand.positive : Brand.caution).accessibilityIdentifier("everyday.cost")
+      Text(firstConnect ? AILimitGate.line(single: single, daily: daily, term: term, caps: s.capRead) : evCostText).font(.subheadline.weight(.semibold)).foregroundStyle((firstConnect ? AILimitGate.allowsContinue(single: single, daily: daily, term: term, caps: s.capRead) : evCost == .free) ? Brand.positive : Brand.caution).accessibilityIdentifier("everyday.cost")
       if let e = evMsg { Text(e).font(.footnote).accessibilityIdentifier("everyday.msg") }
-      BigButton(evSaving ? T("正在保存…", "Saving…") : T("保存日常额度（Face ID）", "Save everyday limits (Face ID)"), icon: "faceid", disabled: evCost != .free || evSaving) { Task { await saveEveryday() } }.accessibilityIdentifier("everyday.save")
+      BigButton(evSaving ? T("正在保存…", "Saving…") : T("保存日常额度（Face ID）", "Save everyday limits (Face ID)"), icon: "faceid", disabled: (firstConnect ? !AILimitGate.allowsContinue(single: single, daily: daily, term: term, caps: s.capRead) : evCost != .free) || evSaving) { Task { await saveEveryday() } }.accessibilityIdentifier("everyday.save")
     }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 16)
   }
   @ViewBuilder var freeVsPaid: some View {
@@ -322,12 +328,16 @@ struct MainLimitsView: View {
         }
         everydayCard
       }.padding(20)
-    }.background(Brand.canvas).navigationTitle(T("AI 额度", "AI allowance")).navigationBarTitleDisplayMode(.inline).task { if !DemoGuard.active { fee = await LimitsFee.load() } }
+    }.background(Brand.canvas).navigationTitle(T("AI 额度", "AI allowance")).navigationBarTitleDisplayMode(.inline).task {
+      if case .ready = s.capRead {} else { await m.chainBalanceFallback() }
+      if !DemoGuard.active { fee = await LimitsFee.load() }
+    }
     .alert(T("没有打开确认页", "Signing page not opened"), isPresented: Binding(get: { verifyErr != nil }, set: { if !$0 { verifyErr = nil } })) {
       if topupNeeded { Button(T("去给钱包充值", "Top up wallet")) { topupNeeded = false; showTopup = true }; Button(T("以后再说", "Later"), role: .cancel) { topupNeeded = false } } else { Button(T("好", "OK")) {} }
     } message: { Text(verifyErr ?? "") }
     .sheet(isPresented: $showTopup) { NavigationStack { ScrollView { DepositView(s: s).padding(20) }.navigationTitle(T("充值", "Add money")) } }
     .onAppear {
+      if firstConnect { return }
       if evSingle.isEmpty { evSingle = AnswerRules.format(s.raw["everyday"]?["single"]?.atomic ?? s.capSingle ?? 0); evDaily = AnswerRules.format(s.raw["everyday"]?["daily"]?.atomic ?? s.capDaily ?? 0) }
       if single.isEmpty { single = AnswerRules.format(s.capSingle ?? 1_000_000); daily = AnswerRules.format(s.capDaily ?? 5_000_000); term = AnswerRules.format(s.capTerm ?? 20_000_000) }
     }
@@ -786,7 +796,7 @@ enum OnboardAPI {
   func loadQuote() async { do { let owner = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey).flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil }
     let qj = try await OnboardAPI.get(OnboardAPI.isNew ? "onboard/new/quote" : "onboard/quote", owner: OnboardAPI.isNew ? owner : nil)
     quote = Onboard.Quote(qj); laterChangeUSDC = qj["limitsChangeUSDC"]?.string; if quote == nil { err = L("读不到手续费") } } catch { err = error.localizedDescription } }
-  func start(_ m: AppModel, single: String, daily: String, term: String, days: String) async {
+  func start(_ m: AppModel, single: String, daily: String, term: String, days: String, deposit: String = "") async {
     err = nil; phase = .starting
     do {
       let (x, y) = try OnboardAPI.key(); fingerprint = PhoneTrust.fingerprint(x: x, y: y)
@@ -797,7 +807,7 @@ enum OnboardAPI {
       if case .array(let a)? = r["removes"] { removes = a.count }
       if let sfp = r["fingerprint"]?.string, sfp != fingerprint { fpMismatch = sfp; throw NSError(domain: "kipurse", code: 3, userInfo: [NSLocalizedDescriptionKey: T("安全检查没通过：服务器发来的内容和这台 iPhone 的不一样。已停止，没有扣钱。", "Safety check failed: the server's data doesn't match this iPhone. Stopped; nothing charged.")]) }
       // t621 #1: the phone decodes the exact batch first and commits to it (#vh); the signing page refuses anything else.
-      let (url, verifiedW) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days)
+      let (url, verifiedW) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit)
       phase = .signing
       m.openOwnerPage(url) { [weak self] mm in
         guard let j = try? await OnboardAPI.post("onboard/confirm", ["id": id]), j["ok"]?.bool == true else { return false }
@@ -811,7 +821,7 @@ enum OnboardAPI {
 extension OnboardFlow {
   static func stop(_ msg: String) -> NSError { NSError(domain: "kipurse", code: 4, userInfo: [NSLocalizedDescriptionKey: msg]) }
   /// Returns the signing-page URL with the commitment, and the wallet the phone itself checked (nil for the simulator mock).
-  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String) async throws -> (URL, String?) {
+  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "") async throws -> (URL, String?) {
     #if DEBUG
     if UserDefaults.standard.string(forKey: "kpOnboardServer") != nil { return (u, nil) }   // UI tests: local simulator mock, no real batch
     #endif
@@ -820,7 +830,9 @@ extension OnboardFlow {
     var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil
     if OnboardAPI.isNew {
       guard let o = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey), CoinbaseIdentity.isAddress(o) else { throw stop(T("请先用 Coinbase 登录。", "Please sign in with Coinbase first.")) }
-      let p = try await OnboardAPI.post("onboard/new/prepare", ["id": id, "owner": o, "features": ["dues_slot"]])
+      var prep: [String: Any] = ["id": id, "owner": o, "features": ["dues_slot"]]
+      if let d = Onboard.depositAtomic(deposit) { prep["deposit"] = String(d) }
+      let p = try await OnboardAPI.post("onboard/new/prepare", prep)
       guard let c = BatchVerify.calls(p["calls"]), let w = p["wallet"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
       if let po = p["owner"]?.string, po.lowercased() != o.lowercased() { throw bad(["owner"]) }
       owner = o; wallet = w; calls = c; chain = BatchVerify.chainId(p["chainId"]) ?? 8453; newWallet = !(p["existing"]?.bool ?? false); vault = p["vault"]?.string
@@ -842,6 +854,7 @@ struct OnboardView: View {
   @StateObject private var f = OnboardFlow()
   @StateObject private var cbv = CBVerifyModel()
   @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"   // t603u: no preset limits
+  @State private var deposit = ""
   var limitsErr: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days) }
   var body: some View {
     ScrollView {
@@ -860,12 +873,17 @@ struct OnboardView: View {
       Text(T("没有默认值，由你自己选：每笔、每天、总额。上限内 AI 自己付，超出会发到手机请你 Face ID 确认。", "No defaults: you choose per payment, per day and total. Within them your AI pays; anything above comes to your phone for Face ID.")).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Text(T("确认一次，同时开启 AI 付款上限、Face ID 批准和 Siri 付款。没成功就什么都不变。", "One confirmation turns on AI limits, Face ID approvals and Siri payments. If it fails, nothing changes.")).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
     }
+    Text(T("选一个金额，在 Coinbase 里确认一次就开好。", "Pick an amount and confirm once in Coinbase.")).font(.subheadline).foregroundStyle(.secondary)
+    AmountPicker(title: T("充值金额", "Deposit"), presets: ["1", "5", "10", "50", "100"], unit: "USDC", value: $deposit).card(padding: 18).accessibilityIdentifier("onboard.deposit")
+    Text(Onboard.minBaseNote(quoted: f.quote?.feeUSDC, deposit: deposit)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.minBase")   // t1113u: one added line, existing footnote style
+    Text(T("付款上限（开通后也能改）", "Payment limits (you can change these later)")).font(.headline).padding(.top, 8)
     GuidedSetupCard(single: $single, daily: $daily, term: $term, days: $days)
-    Text(T("或者自己填 / 修改", "Or fill in / edit yourself")).font(.headline).accessibilityIdentifier("onboard.manual")
-    AmountPicker(title: L("每笔最多"), presets: ["1", "2", "5", "10", "100", "1000"], unit: "USDC", value: $single).card(padding: 18)
-    AmountPicker(title: L("每天最多"), presets: ["5", "20", "50", "100", "1000", "10000"], unit: "USDC", value: $daily).card(padding: 18)
-    AmountPicker(title: L("总额最多"), presets: ["100", "200", "500", "1000"], unit: "USDC", value: $term).card(padding: 18)
-    AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days).card(padding: 18)
+    DisclosureGroup(T("自己填", "Enter manually")) {
+      AmountPicker(title: L("每笔最多"), presets: ["1", "2", "5", "10", "100", "1000"], unit: "USDC", value: $single).card(padding: 18)
+      AmountPicker(title: L("每天最多"), presets: ["5", "20", "50", "100", "1000", "10000"], unit: "USDC", value: $daily).card(padding: 18)
+      AmountPicker(title: L("总额最多"), presets: ["100", "200", "500", "1000"], unit: "USDC", value: $term).card(padding: 18)
+      AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days)
+    }.accessibilityIdentifier("onboard.manual")
     VStack(alignment: .leading, spacing: 8) {
       Text(L("这一笔确认会做")).font(.headline)
       ForEach(Onboard.steps(removes: f.removes, siri: true), id: \.self) { s in Label(s, systemImage: "checkmark.circle").font(.subheadline) }
@@ -873,8 +891,10 @@ struct OnboardView: View {
     }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 16)
     feeCard
     if let e = limitsErr ?? f.err { WarnBox(text: e, tone: Brand.caution, icon: "info.circle.fill") }   // t769u: calm, not red
-    BigButton(f.phase == .starting ? L("正在准备…") : L("开通（一次确认）"), icon: "signature", disabled: limitsErr != nil || f.phase == .starting || !(f.quote?.acceptable ?? false)) {
-      Task { await f.start(m, single: single, daily: daily, term: term, days: days) }
+    BigButton(f.phase == .starting ? L("正在准备…") : L("充值并开通"), icon: "arrow.down.circle.fill", disabled: !Onboard.canOpen(quote: f.quote, starting: f.phase == .starting, deposit: deposit, limitsError: limitsErr)) {
+      // t1113u (§6#59, supersedes 0B.3 "limits never block opening"): no silent default plan; the user's own three limits go into the one opening batch.
+      guard limitsErr == nil else { return }
+      Task { await f.start(m, single: single, daily: daily, term: term, days: days, deposit: deposit) }
     }.accessibilityIdentifier("onboard.go")
     if f.phase == .signing, f.fingerprint != nil {
       VStack(alignment: .leading, spacing: 6) {
@@ -906,13 +926,14 @@ struct OnboardView: View {
 }
 
 /// Real per-change fee from the server (/owner/limits/fee): actual network cost in USDC, 0% markup, first authorization free.
-struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool
+struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool; let fromWallet: Bool
   static func load() async -> LimitsFee? {
     guard let (d, resp) = try? await URLSession.shared.data(from: Mainnet.server.appendingPathComponent("owner/limits/fee")), (resp as? HTTPURLResponse)?.statusCode == 200,
           let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any], let t = j["usdcText"] as? String, (j["gasToken"] as? String) == Principles.gasToken else { return nil }
-    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false) }
+    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false, fromWallet: (j["feeFrom"] as? String) == UsdcGas.feeFrom) }
   static func text(_ f: LimitsFee?) -> String {
     guard let f else { return T("手续费按实际成本用 USDC 付，0 加价，永远不用 ETH。", "Network fee: actual cost in USDC, 0% markup. Never ETH.") }
+    if f.fromWallet { return T(UsdcGas.feeDialog(usdc: f.usdcText), "Changing the wallet safety limit needs a small network fee (about \(f.usdcText) USDC), taken from your Kipurse balance.") }
     return f.firstFree ? T("这是你第一次设置上限：手续费由启付代付，你付 $0。以后每次修改约 \(f.usdcText) USDC（实际手续费），用 USDC 付，0 加价，永远不用 ETH。", "This is your first limit setup: Kipurse pays the network fee, you pay $0. Each later change costs about \(f.usdcText) USDC (actual network fee), paid in USDC at 0% markup. Never ETH.")
       : T("这次修改的手续费约 \(f.usdcText) USDC（实际成本），从启付钱包余额扣，用 USDC 付，0 加价，永远不用 ETH。", "Network fee for this change: about \(f.usdcText) USDC (actual cost), paid in USDC from your Coinbase wallet at 0% markup. Never ETH.") }
 }
@@ -935,14 +956,20 @@ extension MainLimitsView {
       if (resp as? HTTPURLResponse)?.statusCode == 402 { let e = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]; let t = (e?["fee"] as? [String: Any])?["usdcText"] as? String ?? "?"
         let det = e?["detail"] as? [String: Any]; let code = e?["error"] as? String
         topupNeeded = code == "wallet_needs_topup"
+        if code == UsdcGas.insufficientCode { verifyErr = T(UsdcGas.insufficientZH, "The Kipurse balance can't cover the network fee."); return }
         verifyErr = (det?["zh"] as? String).flatMap { z in (det?["en"] as? String).map { T(z, $0) } ?? z } ?? T("手续费约 \(t) USDC，用 USDC 付（永远不用 ETH）。现在 USDC 不够，已停止，没有扣钱。", "The network fee (about \(t) USDC) is paid in USDC (never ETH). There isn't enough USDC now, so nothing was sent or charged."); return }
       guard let j = try JSONSerialization.jsonObject(with: d) as? [String: Any], let id = j["id"] as? String, let calls = j["calls"] as? [[String: Any]] else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       let chain = (j["chainId"] as? Int) ?? Int(j["chainId"] as? String ?? "") ?? 0
       if let o = j["owner"] as? String, let own = Operator.ownerAccount, o.lowercased() != own.lowercased() { verifyErr = T("确认人不是你的 Coinbase 钱包，已停止。", "The signer isn't your Coinbase wallet. Stopped."); return }
-      let res = RequestVerify.limitsBatch(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, currentExecutor: nil, owner: Operator.ownerAccount ?? (j["owner"] as? String))
+      let fromWallet = (j["feeFrom"] as? String) == UsdcGas.feeFrom
+      let wallet = (j["wallet"] as? String) ?? ""
+      if fromWallet && wallet.isEmpty { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
+      // t1104: wallet-pays batches are checked whole by the Pimlico rule; the old UsdcGas.split rule only for other batches
+      let res = RequestVerify.limitsPrepared(calls: calls, wallet: PhoneTrust.mainnetWallet, chainId: chain, choice: choice, owner: Operator.ownerAccount ?? (j["owner"] as? String), walletPays: fromWallet)
       guard res.ok else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + res.problems.joined(separator: "; "); return }
       var c = URLComponents(url: u0, resolvingAgainstBaseURL: false)!; c.queryItems = (c.queryItems ?? []) + [.init(name: "plan", value: id)]
-      guard let u1 = c.url, let from = Operator.ownerAccount ?? (j["owner"] as? String), let u = BatchVerify.committedURL(u1, chainId: chain, from: from, calls: calls) else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
+      let from = UsdcGas.limitsSender(owner: Operator.ownerAccount ?? (j["owner"] as? String) ?? "", wallet: wallet, fromWallet: fromWallet)
+      guard let u1 = c.url, !from.isEmpty, let u = BatchVerify.committedURL(u1, chainId: chain, from: from, calls: calls) else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       m.openLimitsSigning(u)
     } catch { verifyErr = T("暂时连不上，请稍后再试。", "Can't connect right now. Try again later.") }
   }

@@ -6,9 +6,9 @@ const mk=sponsor=>createNewWalletOnboarding({enabled:true,kv:{get(){},put(){}},b
 test('onboard/new: sponsorship off -> quote user-paid, paymaster route 404',async()=>{const N=mk(null);
   const q=await call(N,'GET','/onboard/new/quote?owner='+own);assert.equal(q.b.sponsoredByKipurse,false);assert.equal(q.b.sponsored,false);
   assert.equal((await call(N,'POST','/onboard/new/paymaster?id=a')).code,404);});
-test('onboard/new: sponsorship on -> quote marked sponsored for an eligible owner; CORS preflight; rpc goes through the gate',async()=>{
-  const seen=[];const N=mk({enabled:true,available:o=>o===own,rpc:async(id,b)=>{seen.push([id,b.method]);return {jsonrpc:'2.0',id:1,result:{}};}});
-  const q=await call(N,'GET','/onboard/new/quote?owner='+own);assert.equal(q.b.sponsoredByKipurse,true);assert.equal(q.b.sponsored,true);
+test('onboard/new: same-tx repay quote is user-paid; CORS preflight; rpc goes through the gate (t1022u)',async()=>{
+  const seen=[];const N=mk({enabled:true,available:o=>o===own,sameTxRepayAvailable:o=>o===own,rpc:async(id,b)=>{seen.push([id,b.method]);return {jsonrpc:'2.0',id:1,result:{}};}});
+  const q=await call(N,'GET','/onboard/new/quote?owner='+own);assert.equal(q.b.feePaidBy,'user_usdc');assert.equal(q.b.sponsored,false);assert.equal(q.b.sponsoredByKipurse,false);
   const q2=await call(N,'GET','/onboard/new/quote?owner=0x'+'2'.repeat(40));assert.equal(q2.b.sponsored,false);
   const o=await call(N,'OPTIONS','/onboard/new/paymaster?id=a');assert.equal(o.code,204);assert.equal(o.h['access-control-allow-origin'],'*');
   const r=await call(N,'POST','/onboard/new/paymaster?id=a',{method:'pm_getPaymasterStubData',params:[]});assert.equal(r.code,200);assert.deepEqual(seen,[['a','pm_getPaymasterStubData']]);});

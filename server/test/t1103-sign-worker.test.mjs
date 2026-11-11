@@ -1,0 +1,40 @@
+// t1103: the app loads sign.kipurse.com/v9, which pins kpshell.v8.js, which pins limits.v2.js.
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {createHash} from 'node:crypto';
+import {signAssetPath} from '../../sign-worker/src/worker.js';
+const pub=new URL('../../sign-worker/public/',import.meta.url);
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const sri=b=>'sha384-'+createHash('sha384').update(b).digest('base64');
+const read=rel=>fs.readFileSync(new URL(rel,pub));
+test('v9 shell pins the wallet-pays limits bundle and leaves the old shell pins alone',()=>{
+  const limits=read('limits.v2.js');
+  const gateway=fs.readFileSync(new URL('../owner-sign/static/limits.js',import.meta.url));
+  assert.equal(sha(limits),sha(gateway));
+  const v7=read('kpshell.v7.js').toString('utf8');
+  const v8=read('kpshell.v8.js').toString('utf8');
+  assert.match(v7,/\/owner\/limits\.js':'limits\.js'/);
+  assert.match(v8,/\/owner\/limits\.js':'limits\.v2\.js'/);
+  assert.match(v8,new RegExp(sri(limits).replace(/[+]/g,'\\+')));
+  assert.match(read('limits.v2.js').toString('utf8'),/type:"deployed",address:e\.wallet/);
+  const index=read('v9/index.html').toString('utf8');
+  const shellSri=sri(read('kpshell.v8.js'));
+  assert.match(index,new RegExp('src="/kpshell\\.v8\\.js" integrity="'+shellSri.replace(/[+]/g,'\\+')+'"'));
+  assert.doesNotMatch(index,/kpshell\.v7\.js/);
+  const hashes=JSON.parse(fs.readFileSync(new URL('../../sign-worker/HASHES.json',import.meta.url),'utf8'));
+  assert.equal(hashes['limits.v2.js'],sha(limits));
+  assert.equal(hashes['kpshell.v8.js'],sha(read('kpshell.v8.js')));
+  assert.equal(hashes['v9/index.html'],sha(read('v9/index.html')));
+  assert.equal(sha(read('v8/index.html')),'f27cad0e2f9484b68925ed2047ca6386b389d545dbdd8f098c386b0863dec5e4');
+  assert.equal(sha(read('limits.js')),'8f0ddf638557616ceb5d078ad48c3009623d6a0421cc178846b2d13f3bde0c6d');
+  assert.equal(sha(read('kpshell.v7.js')),'abbddf9fe4e39eb3cf1c2d2251ff222f6b01c776301e73cd6b4c10c48680c44f');
+  const toml=fs.readFileSync(new URL('../../sign-worker/wrangler.toml',import.meta.url),'utf8');
+  assert.match(toml,/directory = "public"/);assert.match(toml,/name = "kipurse-sign"/);
+});
+test('versioned paths keep serving that version index; real files stay themselves',()=>{
+  assert.equal(signAssetPath('/v9/owner/limits'),'/v9/index.html');
+  assert.equal(signAssetPath('/v9/t/0x'+'ab'.repeat(20)+'/owner/limits'),'/v9/index.html');
+  assert.equal(signAssetPath('/v8/owner/limits'),'/v8/index.html');
+  assert.equal(signAssetPath('/v8/index.html'),'/v8/index.html');
+  assert.equal(signAssetPath('/kpshell.v7.js'),'/kpshell.v7.js');
+  assert.equal(signAssetPath('/limits.v2.js'),'/limits.v2.js');
+  assert.equal(signAssetPath('/'),'/index.html');
+});
