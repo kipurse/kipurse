@@ -142,7 +142,7 @@ final class KipurseUITests: XCTestCase {
     shot("deposit")
     let cbw = app.buttons["deposit.coinbase"]; for _ in 0..<4 where !cbw.isHittable { app.swipeUp() }; cbw.tap()   // t885: Coinbase Wallet transfer page in the in-app browser, never the exchange
     let dl = app.descendants(matching: .any)["debug.launch"].firstMatch; XCTAssertTrue(dl.waitForExistence(timeout: 5))
-    XCTAssertTrue(dl.label.hasPrefix("https://sign.kipurse.com/v7/deposit#u=") && dl.label.contains("mode%3Dtap") && dl.label.contains("&vw=0x"), dl.label); XCTAssertFalse(dl.label.contains("coinbase.com/send"), dl.label)
+    XCTAssertTrue(dl.label.hasPrefix("https://sign.kipurse.com/v9/deposit#u=") && dl.label.contains("mode%3Dtap") && dl.label.contains("&vw=0x"), dl.label); XCTAssertFalse(dl.label.contains("coinbase.com/send"), dl.label)
     for _ in 0..<4 where !app.buttons["sheet.done"].exists { app.swipeDown(velocity: .slow) }   // longer page: the toolbar hides after scrolling
     XCTAssertTrue(app.buttons["sheet.done"].waitForExistence(timeout: 5)); app.buttons["sheet.done"].tap()
   }
@@ -193,7 +193,7 @@ final class KipurseUITests: XCTestCase {
       let enabled = NSPredicate(format: "isEnabled == true"); expectation(for: enabled, evaluatedWith: feeSign); waitForExpectations(timeout: 20)
       shot("limits-fee"); feeSign.tap()
     }
-    let page = app.webViews.staticTexts["修改 AI 付款上限"]
+    let page = app.webViews.staticTexts["修改钱包安全上限"]
     XCTAssertTrue(page.waitForExistence(timeout: 25), "public signing page loads with the chosen caps")
     XCTAssertTrue(app.webViews.staticTexts["用 Coinbase 确认"].exists || app.webViews.buttons["用 Coinbase 确认"].exists)
     // Leave for another app (e.g. Mail for a code) and come back: the signing page must still be there, same state.
@@ -201,7 +201,7 @@ final class KipurseUITests: XCTestCase {
     let other = XCUIApplication(bundleIdentifier: "com.apple.Preferences"); other.activate(); XCTAssertTrue(other.wait(for: .runningForeground, timeout: 10))
     sleep(4)   // longer than one 3 s poll tick
     app.activate()
-    XCTAssertTrue(app.webViews.staticTexts["修改 AI 付款上限"].waitForExistence(timeout: 10), "signing page survives app switching")
+    XCTAssertTrue(app.webViews.staticTexts["修改钱包安全上限"].waitForExistence(timeout: 10), "signing page survives app switching")
     XCTAssertTrue(app.webViews.staticTexts["用 Coinbase 确认"].exists || app.webViews.buttons["用 Coinbase 确认"].exists)
     shot("limits-page-after-switch")
     shot("limits-page")

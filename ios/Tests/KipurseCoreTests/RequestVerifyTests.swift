@@ -27,12 +27,25 @@ final class RequestVerifyTests: XCTestCase {
   func testExecutorChangeIsFlagged() { let r = check("newExec"); XCTAssertTrue(r.ok); XCTAssertEqual(r.notes.count, 1) }
   func testGarbageRejected() { XCTAssertFalse(RequestVerify.limitsBatch(calls: [["to": Self.W, "data": "0x1234"]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: nil).ok)
     XCTAssertFalse(RequestVerify.limitsBatch(calls: [], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: nil).ok) }
-  func testWalletPaysRejectsRefundLeg() {
-    let r = RequestVerify.limitsBatch(calls: [["to": Self.W, "value": "0x0", "data": Self.V["good"]!], ["to": Self.W, "value": "0x0", "data": "0x"]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
-    XCTAssertFalse(r.ok); XCTAssertTrue(r.problems.contains("wallet pays the fee itself; no refund")) }
+  func approveCall(amount: UInt64, spender: String = UsdcGas.erc20Paymaster) -> [String: Any] {
+    let sp = String(spender.dropFirst(spender.hasPrefix("0x") ? 2 : 0)).lowercased()
+    let amt = String(amount, radix: 16)
+    let data = "0x095ea7b3" + String(repeating: "0", count: 64 - sp.count) + sp + String(repeating: "0", count: 64 - amt.count) + amt
+    return ["to": RequestVerify.usdc, "value": "0x0", "data": data]
+  }
+  func testWalletPaysRejectsAnythingButApproveThenCapChange() {
+    let extra = RequestVerify.limitsBatch(calls: [["to": Self.W, "value": "0x0", "data": Self.V["good"]!], ["to": Self.W, "value": "0x0", "data": "0x"], ["to": Self.W, "data": "0x"]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
+    XCTAssertFalse(extra.ok); XCTAssertTrue(extra.problems.contains("wallet pays the fee itself; no refund"))
+    let high = RequestVerify.limitsBatch(calls: [approveCall(amount: 50_001), ["to": Self.W, "value": "0x0", "data": Self.V["good"]!]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
+    XCTAssertFalse(high.ok); XCTAssertTrue(high.problems.contains("fee approve above 0.05 USDC"))
+    let other = RequestVerify.limitsBatch(calls: [approveCall(amount: 8_000, spender: "0x2FAEB0760D4230Ef2aC21496Bb4F0b47D634FD4c"), ["to": Self.W, "value": "0x0", "data": Self.V["good"]!]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
+    XCTAssertFalse(other.ok); XCTAssertTrue(other.problems.contains("fee approve pays someone other than the USDC paymaster"))
+  }
   func testWalletPaysKeepsTheCapChange() {
-    let r = RequestVerify.limitsBatch(calls: [["to": Self.W, "value": "0x0", "data": Self.V["good"]!]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
-    XCTAssertTrue(r.ok, "\(r.problems)") }
+    let r = RequestVerify.limitsBatch(calls: [approveCall(amount: 8_000), ["to": Self.W, "value": "0x0", "data": Self.V["good"]!]], wallet: Self.W, chainId: 8453, choice: choice, currentExecutor: Self.EX, now: now, walletPays: true)
+    XCTAssertTrue(r.ok, "\(r.problems)")
+    XCTAssertTrue(UsdcGas.approveTargetAllowed(UsdcGas.erc20Paymaster))
+  }
   func trustMsg(payees: [String] = ["0x3000000000000000000000000000000000000003"], single: String = "1000000", daily: String = "2000000", deadline: Int = 1_800_000_600, expiry: Int = 1_800_000_100 + 90 * 86400) -> OwnerTrustMessage {
     OwnerTrustMessage(account: Self.W, merchant: "0x" + String(repeating: "0", count: 64), name: "shop", epoch: "0", payees: payees, signers: [], single: single, daily: daily, expiry: String(expiry), nonce: "0x" + String(repeating: "1", count: 64), deadline: String(deadline)) }
   func testReusableTrustGood() { let e = 1_800_000_000 + 89 * 86400

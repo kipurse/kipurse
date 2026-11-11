@@ -9,11 +9,15 @@ public enum UsdcGas {
   public static let paymasterMethods: Set<String> = ["pm_getPaymasterStubData", "pm_getPaymasterData", "pimlico_getTokenQuotes"]
   /// 0.01 USDC, in atomic units. A quoted fee at or above this is not offered for signing.
   public static let defaultFeeCapAtomic: UInt64 = 10_000
+  /// USDC.approve to the Pimlico paymaster may not exceed 0.05 USDC.
+  public static let approveCapAtomic: UInt64 = 50_000
   public static let feeFrom = "kipurse_wallet"
   public static let insufficientCode = "kipurse_balance_insufficient_for_fee"
   public static let insufficientZH = "启付余额不足以支付网络费"
 
   public static func paymasterMethodAllowed(_ method: String) -> Bool { paymasterMethods.contains(method) }
+  /// The only spender a wallet-pays cap change may approve.
+  public static func approveTargetAllowed(_ address: String) -> Bool { address.lowercased() == erc20Paymaster.lowercased() }
 
   /// #vh sender. The new path commits the Kipurse smart wallet; the old path commits the Base Account.
   public static func limitsSender(owner: String, wallet: String, fromWallet: Bool) -> String { fromWallet ? wallet : owner }

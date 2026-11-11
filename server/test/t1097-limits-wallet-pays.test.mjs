@@ -2,11 +2,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {createPublicLimits} from '../src/v5/limits-public.mjs';
 import {wrap} from '../owner-sign/guard/apply.mjs';
-import {limitsWalletPaysFee,limitsChangeFee,limitsWalletFeeCap,limitsWalletPaysAllowlist,walletPaysLimits,erc20PaymasterURL,rewritePaymasterBody,sanitizePaymasterResponse,limitsChangeCalls,LIMITS_REFUND_GAS,ERC20_PAYMASTER,ENTRYPOINT_V06,BASE_USDC,LIMITS_PAYMASTER_METHODS} from '../src/v5/limits-fee.mjs';
+import {limitsWalletPaysFee,limitsChangeFee,limitsWalletFeeCap,limitsWalletPaysAllowlist,walletPaysLimits,erc20PaymasterURL,rewritePaymasterBody,sanitizePaymasterResponse,limitsChangeCalls,limitsTokenApprove,limitsPaymasterApprove,parseTokenQuote,LIMITS_REFUND_GAS,ERC20_PAYMASTER,ENTRYPOINT_V06,BASE_USDC,LIMITS_PAYMASTER_METHODS} from '../src/v5/limits-fee.mjs';
 const O='0x'+'1'.repeat(40),W='0x'+'2'.repeat(40);
 const tiny={callGas:1n,gasPriceWei:1n,ethUsd8:1n};
-async function call(L,path,body,method='POST'){let code,out='';const res={writeHead:c=>{code=c;},end:s=>{out=s;}};
-  await L.handle({method},res,new URL('https://x'+path),{readBody:async()=>body,ip:'9'});return {code,j:(()=>{try{return JSON.parse(out);}catch{return null;}})(),out};}
+async function call(L,path,body,method='POST',headers={}){let code,out='',hdr={};const res={writeHead:(c,h)=>{code=c;hdr=h??{};},end:s=>{out=s??'';}};
+  await L.handle({method,headers},res,new URL('https://x'+path),{readBody:async()=>body,ip:'9'});return {code,j:(()=>{try{return out?JSON.parse(out):null;}catch{return null;}})(),out,hdr};}
 function lim(extra){const calls=[];const L=createPublicLimits({base:()=>'https://x',current:async()=>null,confirm:async()=>({valid:true,permissionHash:'0x1'}),script:()=>'',
   plan:async()=>({owner:O,wallet:W,chainId:8453,human:[],labels:[],calls:[{to:W,value:'0x0',data:'0x34fcd5be'}],raw:{},...extra.plan}),
   sponsor:extra.sponsor??(async()=>null),fee:extra.fee,feeQuote:extra.feeQuote??(async()=>null),refund:extra.refund??(()=>{throw Error('refund');}),
@@ -32,11 +32,15 @@ test('direct quote has no refund gas and no Base float',()=>{
   assert.equal(f.gas,1n+150_000n);
   const old=limitsChangeFee({...tiny,payerUSDC:10n**6n,walletUSDC:10n**6n});
   assert.equal(old.gas,f.gas+LIMITS_REFUND_GAS);assert.equal(old.reason,null);
-  const cap=limitsWalletPaysFee({...tiny,walletUSDC:100n,cap:1n});assert.equal(cap.usdc,1n);assert.equal(cap.reason,'fee_above_cap');
+  const cap=limitsWalletPaysFee({...tiny,walletUSDC:100n,cap:1n});assert.equal(cap.usdc,1n);assert.equal(cap.reason,'kipurse_balance_insufficient_for_fee');
   const under=limitsWalletPaysFee({...tiny,walletUSDC:100n,cap:2n});assert.equal(under.reason,null);
   const low=limitsWalletPaysFee({...tiny,walletUSDC:0n});assert.equal(low.reason,'kipurse_balance_insufficient_for_fee');
   const big=limitsWalletPaysFee({callGas:200000n,gasPriceWei:10n**12n,ethUsd8:4000_00000000n,walletUSDC:10n**18n});
-  assert.equal(big.reason,'fee_above_cap');assert.ok(big.usdc>=10_000n);});
+  assert.equal(big.reason,'kipurse_balance_insufficient_for_fee');assert.ok(big.usdc>=10_000n);
+  const sized=limitsTokenApprove({gasWei:10n**15n,gasPriceWei:1n,postOpGas:0n,exchangeRate:5_000n*10n**3n,marginBps:2_000n});
+  assert.equal(sized.ok,true);assert.equal(sized.quote,5_000n);assert.equal(sized.amount,6_000n);
+  const tooBig=limitsTokenApprove({gasWei:10n**18n,gasPriceWei:1n,postOpGas:0n,exchangeRate:10n**18n});
+  assert.equal(tooBig.ok,false);assert.equal(tooBig.reason,'kipurse_balance_insufficient_for_fee');});
 test('cap-change calls drop the approve and the refund when the wallet pays',()=>{
   const change={to:W,data:'0xabc'},approve={to:O,data:'0xapp'};
   assert.deepEqual(limitsChangeCalls({direct:true,approveCall:approve,changeCall:change}),[change]);
@@ -49,15 +53,17 @@ test('old path still 402s for a missing Base float and still appends the refund'
     refund:fee=>{n++;assert.equal(fee,1000n);return {to:W,value:'0x0',data:'0xrefund'};}});
   const b=await call(on.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(b.code,200);assert.equal(b.j.calls.length,2);assert.equal(b.j.calls[1].data,'0xrefund');assert.equal(n,1);assert.equal(b.j.feeFrom,undefined);});
-test('new path: one call, from the wallet, same-origin paymaster, no refund',async()=>{
+test('new path: approve plus the cap change, from the wallet, same-origin paymaster, no refund',async()=>{
   let sponsored=0,refunded=0;
-  const {L}=lim({plan:{fromWallet:true},fee:async()=>limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),
+  const {L}=lim({plan:{fromWallet:true},fee:async()=>({...limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),approve:8_000n}),
     sponsor:async()=>{sponsored++;return 'https://x/onboard/new/paymaster?id=1';},refund:()=>{refunded++;throw Error('refund');},
     walletPaymaster:()=>'https://x/owner/limits/paymaster'});
   const r=await call(L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(r.code,200);assert.equal(r.j.feeFrom,'kipurse_wallet');assert.equal(r.j.from,W);assert.equal(r.j.wallet,W);
-  assert.equal(r.j.calls.length,1);assert.equal(r.j.sponsored,false);assert.equal(r.j.pm,'https://x/owner/limits/paymaster');
-  assert.equal(sponsored,0);assert.equal(refunded,0);assert.equal(r.j.calls[0].data,'0x34fcd5be');
+  assert.equal(r.j.calls.length,2);assert.equal(r.j.sponsored,false);assert.equal(r.j.pm,'https://x/owner/limits/paymaster');
+  assert.equal(sponsored,0);assert.equal(refunded,0);assert.equal(r.j.calls[1].data,'0x34fcd5be');
+  const approve=limitsPaymasterApprove(8_000n);assert.equal(r.j.calls[0].to.toLowerCase(),approve.to.toLowerCase());assert.equal(r.j.calls[0].data,approve.data);
+  assert.match(r.j.calls[0].data.toLowerCase(),/6666666666667849c56f2850848ce1c4da65c68b/);
   const again=await call(L,'/owner/limits/prepare',{plan:r.j.id});
   assert.equal(again.j.from,W);assert.equal(again.j.feeFrom,'kipurse_wallet');assert.deepEqual(again.j.calls,r.j.calls);
   const page=await call(createPublicLimits({base:()=>'https://x',current:async()=>null,plan:async()=>({}),confirm:async()=>({}),script:()=>'',
@@ -70,14 +76,17 @@ test('new path: one call, from the wallet, same-origin paymaster, no refund',asy
 test('new path refuses a fee at the cap and a wallet that cannot cover it, with no calls',async()=>{
   const high=lim({plan:{fromWallet:true},fee:async()=>limitsWalletPaysFee({callGas:200000n,gasPriceWei:10n**12n,ethUsd8:4000_00000000n,walletUSDC:10n**18n}),walletPaymaster:()=>'https://x/owner/limits/paymaster'});
   const a=await call(high.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
-  assert.equal(a.code,402);assert.equal(a.j.error,'fee_above_cap');assert.equal(a.j.calls,undefined);
+  assert.equal(a.code,402);assert.equal(a.j.error,'kipurse_balance_insufficient_for_fee');assert.equal(a.j.calls,undefined);
   const low=lim({plan:{fromWallet:true},fee:async()=>limitsWalletPaysFee({...tiny,walletUSDC:0n}),walletPaymaster:()=>'https://x/owner/limits/paymaster'});
   const b=await call(low.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(b.code,402);assert.equal(b.j.error,'kipurse_balance_insufficient_for_fee');assert.equal(b.j.detail.zh,'启付余额不足以支付手续费');assert.equal(b.j.calls,undefined);
-  const closed=lim({plan:{fromWallet:true},fee:async()=>limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),walletPaymaster:()=>null});
+  const overApprove=lim({plan:{fromWallet:true},fee:async()=>({...limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),approve:60_000n}),walletPaymaster:()=>'https://x/owner/limits/paymaster'});
+  const oa=await call(overApprove.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
+  assert.equal(oa.code,402);assert.equal(oa.j.error,'kipurse_balance_insufficient_for_fee');assert.equal(oa.j.calls,undefined);
+  const closed=lim({plan:{fromWallet:true},fee:async()=>({...limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),approve:8_000n}),walletPaymaster:()=>null});
   const c=await call(closed.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(c.code,503);assert.equal(c.j.calls,undefined);
-  const reused=lim({plan:{fromWallet:true},fee:async()=>limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),walletPaymaster:()=>'https://x/owner/limits/paymaster',
+  const reused=lim({plan:{fromWallet:true},fee:async()=>({...limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n}),approve:8_000n}),walletPaymaster:()=>'https://x/owner/limits/paymaster',
     erc20URL:()=>{throw Object.assign(Error('erc20 paymaster url must not be the onboard paymaster'),{code:'paymaster_url'});}});
   const d=await call(reused.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(d.code,503);assert.equal(d.j.error,'paymaster_unavailable');assert.equal(d.j.calls,undefined);});
@@ -116,4 +125,24 @@ test('shipped limits page sends the wallet-pays batch only through the guard',()
   const launch=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
   assert.match(launch,/\/owner\/limits\/paymaster/);assert.match(launch,/limitsWalletPaysFee/);
   assert.match(launch,/KIPURSE_ONBOARD_PAYMASTER_URL:ONBOARD_PM_URL/);
-  assert.doesNotMatch(launch,/KIPURSE_ERC20_PAYMASTER_URL\s*=\s*process\.env\.KIPURSE_ONBOARD_PAYMASTER_URL/);});
+  assert.doesNotMatch(launch,/KIPURSE_ERC20_PAYMASTER_URL\s*=\s*process\.env\.KIPURSE_ONBOARD_PAYMASTER_URL/);
+  assert.match(consent,/wallet_addSubAccount/);assert.match(consent,/type:'deployed'/);assert.doesNotMatch(consent,/type:'create'/);
+  assert.match(bundled,/wallet_addSubAccount/);assert.match(bundled,/type:"deployed",address:e\.wallet/);
+  const pub=fs.readFileSync(new URL('../src/v5/limits-public.mjs',import.meta.url),'utf8');
+  assert.match(pub,/修改钱包安全上限/);assert.doesNotMatch(pub,/修改 AI 付款上限/);
+  const q=rewritePaymasterBody({method:'pimlico_getTokenQuotes',params:[{tokens:['0x'+'11'.repeat(20)]},'0xdead','0x1']});
+  assert.equal(q.body.params[0].tokens[0],BASE_USDC);assert.equal(q.body.params[1],ENTRYPOINT_V06);assert.equal(q.body.params[2],'0x2105');
+  const parsed=parseTokenQuote({result:{quotes:[{token:BASE_USDC,paymaster:ERC20_PAYMASTER,postOpGas:'0x10',exchangeRate:'0x2a'},{token:'0x'+'22'.repeat(20),paymaster:ERC20_PAYMASTER,exchangeRate:'0x1'}]}});
+  assert.equal(parsed.exchangeRate,42n);assert.equal(parsed.postOpGas,16n);});
+test('paymaster proxy answers CORS for the Coinbase wallet and the sign host',async()=>{
+  const {L}=lim({walletPaymaster:()=>'https://x/owner/limits/paymaster',paymasterFetch:async()=>({jsonrpc:'2.0',id:1,result:{paymasterAndData:ERC20_PAYMASTER+'ab'}})});
+  const ok=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://keys.coinbase.com'});
+  assert.equal(ok.code,204);assert.equal(ok.hdr['access-control-allow-origin'],'https://keys.coinbase.com');assert.match(ok.hdr['access-control-allow-methods'],/POST/);
+  const sign=await call(L,'/owner/limits/paymaster',{method:'pm_getPaymasterStubData',params:[{},ENTRYPOINT_V06,'0x2105',{token:'0x'+'11'.repeat(20)}]},'POST',{origin:'https://sign.kipurse.com'});
+  assert.equal(sign.code,200);assert.equal(sign.hdr['access-control-allow-origin'],'https://sign.kipurse.com');
+  const wallet=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://wallet.coinbase.com'});
+  assert.equal(wallet.code,204);assert.equal(wallet.hdr['access-control-allow-origin'],'https://wallet.coinbase.com');
+  const evil=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://evil.example'});
+  assert.equal(evil.code,403);assert.equal(evil.hdr['access-control-allow-origin'],undefined);
+  const page=await call(L,'/owner/limits?single=1&daily=5&term=20',{},'GET',{'x-kp-lang':'zh'});
+  assert.match(page.out,/修改钱包安全上限/);assert.doesNotMatch(page.out,/修改 AI 付款上限/);});

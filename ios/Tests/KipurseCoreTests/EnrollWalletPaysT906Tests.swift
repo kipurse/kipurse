@@ -29,5 +29,5 @@ final class EnrollWalletPaysT906Tests: XCTestCase {
   func testOtherFlowsStillOwnerOnly() {
     XCTAssertNotNil(RequestVerify.feeRefundProblem(feeCall(swapFee(calls("enroll"), to: RequestVerify.duesTo))!, wallet: wallet, owner: owner), "limits/setup refunds stay owner-only")
   }
-  func testSignSetIsV7() { XCTAssertEqual(SignHost.setPrefix, "/v7"); XCTAssertEqual(SignHost.previousPrefix, "/v6") }
+  func testSignSetIsV9() { XCTAssertEqual(SignHost.setPrefix, "/v9"); XCTAssertEqual(SignHost.previousPrefix, "/v8") }
 }

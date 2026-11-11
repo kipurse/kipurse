@@ -33,6 +33,16 @@ public enum RequestVerify {
     for i in 0..<12 { if i == 0 || i == 1 || i == 9 { guard let x = pr.addr(i * 32) else { return nil }; pol.append(x) } else { guard let x = pr.dec(i * 32) else { return nil }; pol.append(x) } }
     return Permission(account: a, spender: s, token: tok, allowance: r.u64(t + 96), period: r.u64(t + 128), start: r.u64(t + 160), end: r.u64(t + 192), policy: pol)
   }
+  /// USDC.approve(Pimlico ERC-20 paymaster, amount in (0, 0.05 USDC]). nil = OK.
+  public static func paymasterApproveProblem(_ c: [String: Any]) -> String? {
+    guard let to = c["to"] as? String, lc(to) == lc(usdc) else { return "fee approve is not USDC" }
+    if let v = c["value"] as? String, v != "0x0", v != "0" { return "fee approve sends value" }
+    guard let d = (c["data"] as? String).flatMap(Hex.decode), d.count == 68, Hex.encode(Array(d.prefix(4))) == "0x095ea7b3" else { return "fee approve is not an ERC-20 approve" }
+    let r = R(b: Array(d.dropFirst(4)))
+    guard let spender = r.addr(0), UsdcGas.approveTargetAllowed(spender) else { return "fee approve pays someone other than the USDC paymaster" }
+    guard let amt = r.dec(32), let n = UInt64(amt), n > 0, n <= UsdcGas.approveCapAtomic else { return "fee approve above 0.05 USDC" }
+    return nil
+  }
   /// wallet.execute(USDC, 0, transfer(owner, fee<=0.05 USDC)). nil = OK.
   public static func feeRefundProblem(_ c: [String: Any], wallet: String, owner: String?, alsoTo: String? = nil) -> String? {
     guard let o = owner, let to = c["to"] as? String, lc(to) == lc(wallet), let d = (c["data"] as? String).flatMap(Hex.decode), d.count >= 4, Hex.encode(Array(d.prefix(4))) == "0xb61d27f6" else { return "unexpected extra call" }
@@ -50,11 +60,14 @@ public enum RequestVerify {
   public static let duesTo = "0xfc0e68572cdba016c1c90a45e1792f3fe0ee345b", duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
   public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false) -> Result {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
-    // t1097: the Kipurse wallet pays the paymaster directly. A refund leg would move USDC a second time.
-    if walletPays && inCalls.count > 1 { bad("wallet pays the fee itself; no refund"); return res }
+    // t1103: wallet-pays is exactly USDC.approve(Pimlico, <= 0.05) then the cap change. No refund, no other call.
+    if walletPays {
+      if inCalls.count != 2 { bad("wallet pays the fee itself; no refund"); return res }
+      if let why = paymasterApproveProblem(inCalls[0]) { bad(why); return res }
+    }
     // t606u: an optional 2nd call = the wallet refunds the network fee (USDC only, max 0.05) to YOUR Coinbase wallet.
-    var calls = inCalls
-    if calls.count == 2 { let rf = calls[1]; calls = [calls[0]]
+    var calls = walletPays ? [inCalls[1]] : inCalls
+    if !walletPays && calls.count == 2 { let rf = calls[1]; calls = [calls[0]]
       if let why = feeRefundProblem(rf, wallet: wallet, owner: owner) { bad(why) } else { res.notes.append("wallet pays the network fee in USDC") } }
     if chainId != 8453 { bad("wrong chain \(chainId)") }
     guard calls.count == 1, let c = calls.first, let to = c["to"] as? String, let data = (c["data"] as? String).flatMap(Hex.decode) else { bad("expected exactly one call"); return res }

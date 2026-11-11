@@ -22,6 +22,9 @@ final class T1097LimitsWalletPaysTests: XCTestCase {
     XCTAssertEqual(UsdcGas.limitsFeeBlock(fee: 100, wallet: 99), UsdcGas.insufficientCode)
     XCTAssertEqual(UsdcGas.limitsFeeBlock(fee: 100, wallet: nil), UsdcGas.insufficientCode)
     XCTAssertEqual(UsdcGas.insufficientCode, "kipurse_balance_insufficient_for_fee")
+    XCTAssertEqual(UsdcGas.approveCapAtomic, 50_000)
+    XCTAssertTrue(UsdcGas.approveTargetAllowed(UsdcGas.erc20Paymaster))
+    XCTAssertFalse(UsdcGas.approveTargetAllowed("0x2FAEB0760D4230Ef2aC21496Bb4F0b47D634FD4c"))
   }
   func testDialogCopy() {
     XCTAssertEqual(UsdcGas.feeDialog(usdc: "0.006"), "修改钱包安全上限需要一点网络费（约 0.006 USDC），从启付余额里扣")

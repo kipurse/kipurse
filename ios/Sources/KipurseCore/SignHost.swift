@@ -11,10 +11,10 @@ public enum SignHost {
   public static let legacyHost = "kipurse-sign.example.workers.dev"
   public static let apiHost = "pay.kipurse.com"
   /// sha256(index.html) of the published static build (gateway/pages/PIN.json).
-  public static let indexSHA256 = "b24980af655c000e33c0d12f620e773dfa689855ae3066152e801c7f986656d7"  // t906 /v7 set (enroll bundle v2: wallet pays fee, gas sponsored); /v6 = 6def…; t887b /v6 set (Coinbase 钱包 wording); /v5 = 5c1b…, v1–v4 stay live for older builds
-  /// The signing set this build uses on the sign host (the v1 set at "/" stays byte-identical for older builds).
-  public static let setPrefix = "/v7"   // t906: /v7 = v6 + phone-enroll.v2.js (gasSponsorService).  t887b: /v6 = v5 shell + reworded deposit bundles (same tight CSP); "/v5" unchanged for installed builds
-  public static let previousPrefix = "/v6"   // t796: /v5 = the same pinned v4 bytes served with a tight CSP
+  public static let indexSHA256 = "a9007ee641b4df31efa8437e485ec68fd9e321d36f7ec216a6c860a1e8c67096"  // t1103 /v9 = kpshell.v8.js + limits.v2.js. /v8 = f27cad0e… stays live for build 49.
+  /// The signing set this build uses on the sign host (v1–v8 stay byte-identical for older builds).
+  public static let setPrefix = "/v9"   // t1103: wallet-pays limits bundle. /v8 remains for the previous build.
+  public static let previousPrefix = "/v8"
   /// Server pages that run a Coinbase wallet batch and therefore must open through the pinned shell.
   public static let moved: Set<String> = ["/onboard", "/onboard/new", "/deposit", "/owner/limits", "/owner/withdraw", "/owner/emergency", "/approve/trust", "/phone/enroll", "/phone/revoke"]
 

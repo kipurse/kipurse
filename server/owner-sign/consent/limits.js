@@ -29,6 +29,8 @@ let busy=false;go.onclick=async()=>{if(busy)return;busy=true;go.disabled=true;tr
     // t1097: allowlisted wallets pay the network fee from the Kipurse smart wallet's own USDC. No Base float, no refund.
     if(pl.feeFrom==='kipurse_wallet'){if(!pl.pm||!pl.wallet||!String(pl.pm).endsWith('/owner/limits/paymaster'))throw Error(KPEN?'Stopped: this change is paid from the Kipurse wallet. Nothing was charged.':'已停止：这次手续费要从启付余额扣。没有扣钱。');
       const bw={version:'2.0.0',chainId:'0x'+Number(pl.chainId).toString(16),from:pl.wallet,atomicRequired:true,calls:pl.calls};
+      // Coinbase only accepts a send from a sub-account after this session imports it. type "deployed" does not create a wallet.
+      try{await prov().request({method:'wallet_addSubAccount',params:[{version:'1',account:{type:'deployed',address:pl.wallet,chainId:8453}}]});}catch(x){if(x&&(x.code===4001||/reject|cancel/i.test(String(x.message))))throw x;}
       return await prov().request(await kpVH({method:'wallet_sendCalls',params:[{...bw,capabilities:{paymasterService:{url:pl.pm}}}]}));}
     const b={version:'2.0.0',chainId:'0x'+Number(pl.chainId).toString(16),from:a,atomicRequired:true,calls:pl.calls};
     // USDC-only gas (t604u): sponsored first authorization, else the Base Account pays in USDC. Never an ETH-funded send.

@@ -3,7 +3,7 @@
 // wallet batch for exactly those numbers and the owner sends it from HIS Base Account. Nothing changes unless that batch lands on chain:
 // confirm only swaps the runtime to the new permission once it is valid ON CHAIN. No key here; anyone can open the page, only the owner can sign.
 import {langOf,X,en} from './i18n.mjs';import {randomBytes} from 'node:crypto';
-import {rewritePaymasterBody,sanitizePaymasterResponse,erc20PaymasterURL} from './limits-fee.mjs';
+import {rewritePaymasterBody,sanitizePaymasterResponse,erc20PaymasterURL,limitsPaymasterApprove,paymasterCorsHeaders,LIMITS_APPROVE_CAP} from './limits-fee.mjs';
 const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=a=>{const n=BigInt(a),w=n/1000000n,f=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
@@ -76,7 +76,7 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
       const feeLine=fq?(fq.fromWallet?t(`修改钱包安全上限需要一点手续费（约 ${fmtUsdc(fq.usdc)} USDC），从启付余额里扣`,`Changing the wallet safety limit needs a small network fee (about ${fmtUsdc(fq.usdc)} USDC), taken from your Kipurse balance.`):(fq.firstFree?t(`这是你第一次设置上限：手续费由 Kipurse 代付，你付 $0。以后每次修改上限，手续费按实际成本约 ${fmtUsdc(fq.usdc)} USDC，从你的启付钱包里用 USDC 扣，0 加价，永远不用 ETH。`,`This is your first limit setup: Kipurse pays the network fee, you pay $0. Each later change costs the actual network fee, about ${fmtUsdc(fq.usdc)} USDC, taken in USDC from your Kipurse wallet at 0% markup. Never ETH.`):t(`手续费按实际成本约 ${fmtUsdc(fq.usdc)} USDC，从你的启付钱包里用 USDC 扣，0 加价，永远不用 ETH。`,`Network fee: about ${fmtUsdc(fq.usdc)} USDC at actual cost, taken in USDC from your Kipurse wallet, 0% markup. Never ETH.`))):t('手续费只用 USDC 付，永远不用 ETH。','The network fee is paid in USDC only, never ETH.');
       const end=c.days?new Date((limitsWindow(Math.floor(now()/1000),c.days).end)*1000):cur?.end?new Date(Number(cur.end)*1000):null;
       const row=(k,o,n)=>`<div class=row><span>${k}</span><span class=n>${o&&o!==n?`<span class=o>${esc(o)}</span>`:''}${esc(n)}</span></div>`;
-      res.end(shell(`<div class=t>${t('修改 AI 付款上限','Change AI payment limits')}</div><p class=s>${t('用你的 Base Account 确认一次，链上生效。','Sign once with your Base Account; it takes effect on chain.')}</p>
+      res.end(shell(`<div class=t>${t('修改钱包安全上限','Change AI payment limits')}</div><p class=s>${t('用你的 Base Account 确认一次，链上生效。','Sign once with your Base Account; it takes effect on chain.')}</p>
 <div class=c>${row(t('每笔最多','Max per payment'),cur?usd(cur.single)+' USDC':'',usd(c.single)+' USDC')}${row(t('每天最多','Max per day'),cur?usd(cur.daily)+' USDC':'',usd(c.daily)+' USDC')}${row(t('总额最多','Max total'),cur?usd(cur.term)+' USDC':'',usd(c.term)+' USDC')}${row(t('到期','Ends'),null,end?end.toISOString().slice(0,10):t('不变','Unchanged'))}</div>
 <p class=m>${t('确认后：旧授权作废，新授权生效（新总额从 0 开始算）。不会转走任何钱。','After signing, the old authorization ends and the new one starts (the new total counts from 0). No money moves.')}</p>
 <p class=m id=fee>${feeLine}</p><p class=m id=why>${t(WHY_FEE.zh,WHY_FEE.en)}</p>
@@ -85,12 +85,15 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
       const out={usdc:String(fq.usdc),usdcText:fmtUsdc(fq.usdc),firstFree:!!fq.firstFree,gasToken:'USDC',markupBps:0,paidFrom:fq.fromWallet?'kipurse_wallet_usdc':'kipurse_wallet',why:WHY_FEE};
       if(fq.fromWallet){out.feeFrom='kipurse_wallet';out.fromWallet=true;}
       json(200,out);return true;}
-    if(p==='/owner/limits/paymaster'){if(req.method!=='POST'){json(405,{error:'method'});return true;}
-      const open=walletPaymaster?.()??null;if(!open||!String(open).endsWith('/owner/limits/paymaster')||String(open).includes('/onboard/')){json(404,{error:'not_found'});return true;}
-      const b=await readBody(req);if(JSON.stringify(b??null).length>200000){json(413,{error:'too_large'});return true;}
-      const rw=rewritePaymasterBody(b);if(!rw.ok){json(400,{error:rw.error});return true;}
-      let up;try{up=await forward(rw.body);}catch{json(502,{error:'paymaster_unavailable'});return true;}
-      json(200,sanitizePaymasterResponse(rw.body.method,up));return true;}
+    if(p==='/owner/limits/paymaster'){const cors=paymasterCorsHeaders(req.headers?.origin);
+      const reply=(c,o,extra)=>{res.writeHead(c,{...(cors??{}),'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff',...extra});res.end(o==null?'':J(o));};
+      if(req.method==='OPTIONS'){if(!cors){reply(403,{error:'origin'});return true;}res.writeHead(204,cors);res.end();return true;}
+      if(req.method!=='POST'){reply(405,{error:'method'});return true;}
+      const open=walletPaymaster?.()??null;if(!open||!String(open).endsWith('/owner/limits/paymaster')||String(open).includes('/onboard/')){reply(404,{error:'not_found'});return true;}
+      const b=await readBody(req);if(JSON.stringify(b??null).length>200000){reply(413,{error:'too_large'});return true;}
+      const rw=rewritePaymasterBody(b);if(!rw.ok){reply(400,{error:rw.error});return true;}
+      let up;try{up=await forward(rw.body);}catch{reply(502,{error:'paymaster_unavailable'});return true;}
+      reply(200,sanitizePaymasterResponse(rw.body.method,up));return true;}
     if(req.method!=='POST'){json(405,{error:'method'});return true;}
     const b=await readBody(req);gc();
     try{
@@ -102,14 +105,21 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
         if(c.error){json(400,c);return true;}if(prepared.size>50){json(429,{error:'slow_down'});return true;}
         let pl=await plan(c);const id=randomBytes(16).toString('hex');
         if(pl?.fromWallet){let f=null;try{f=await fee(pl);}catch{f=null;}
-          const feeOut=f?{gas:String(f.gas??''),gasPriceWei:String(f.gasPriceWei??''),usdc:String(f.usdc),usdcText:fmtUsdc(f.usdc),walletUSDC:f.walletUSDC==null?null:String(f.walletUSDC),canPayUSDC:f.canPayUSDC===true,fromWallet:true,walletPays:false,reason:f.reason??null,cap:f.cap==null?null:String(f.cap)}:null;
-          const over=!f||f.reason==='fee_above_cap'||(f.cap!=null&&BigInt(f.usdc)>=BigInt(f.cap));
-          const short=!over&&(f.reason==='kipurse_balance_insufficient_for_fee'||f.walletUSDC==null||BigInt(f.walletUSDC)<BigInt(f.usdc));
-          if(over||short){const code=!f?'fee_unavailable':over?'fee_above_cap':'kipurse_balance_insufficient_for_fee';
-            const detail=code==='kipurse_balance_insufficient_for_fee'?{zh:'启付余额不足以支付手续费',en:'The Kipurse balance can’t cover the network fee.'}:code==='fee_above_cap'?{zh:`这次手续费约 ${feeOut?.usdcText??'?'} USDC，超过了允许的上限，已停止，没有扣钱。`,en:`This network fee is about ${feeOut?.usdcText??'?'} USDC, over the allowed cap. Stopped. Nothing was charged.`}:{zh:'现在算不出手续费，已停止，没有扣钱。请稍后再试。',en:'Could not work out the network fee right now. Stopped; nothing was charged. Please try again later.'};
-            json(code==='fee_unavailable'?503:402,{error:code,fee:feeOut,detail});return true;}
+          const feeOut=f?{gas:String(f.gas??''),gasPriceWei:String(f.gasPriceWei??''),usdc:String(f.usdc),usdcText:fmtUsdc(f.usdc),walletUSDC:f.walletUSDC==null?null:String(f.walletUSDC),canPayUSDC:f.canPayUSDC===true,fromWallet:true,walletPays:false,reason:f.reason??null,cap:f.cap==null?null:String(f.cap),approve:f.approve==null?null:String(f.approve)}:null;
+          const feeCap=f?.cap!=null?BigInt(f.cap):10_000n;
+          const usdc=f?.usdc==null?null:BigInt(f.usdc);
+          const approve=f?.approve==null?null:BigInt(f.approve);
+          const walletBal=f?.walletUSDC==null?null:BigInt(f.walletUSDC);
+          const stop=(code)=>{const detail=code==='kipurse_balance_insufficient_for_fee'?{zh:'启付余额不足以支付手续费',en:'The Kipurse balance can’t cover the network fee.'}:{zh:'现在算不出手续费，已停止，没有扣钱。请稍后再试。',en:'Could not work out the network fee right now. Stopped; nothing was charged. Please try again later.'};
+            json(code==='kipurse_balance_insufficient_for_fee'?402:503,{error:code,fee:feeOut,detail});};
+          if(!f||usdc==null){stop('fee_unavailable');return true;}
+          if(f.reason==='kipurse_balance_insufficient_for_fee'||f.reason==='fee_above_cap'||usdc>=feeCap){stop('kipurse_balance_insufficient_for_fee');return true;}
+          if(f.reason==='paymaster_unavailable'||approve==null||pl.calls?.length!==1){stop('paymaster_unavailable');return true;}
+          if(approve<=0n||approve>LIMITS_APPROVE_CAP||walletBal==null||walletBal<usdc||walletBal<approve){stop('kipurse_balance_insufficient_for_fee');return true;}
           let pmUrl=null;try{erc20();pmUrl=walletPaymaster?.()??null;}catch{pmUrl=null;}
           if(!pmUrl||!String(pmUrl).endsWith('/owner/limits/paymaster')||String(pmUrl).includes('/onboard/')){json(503,{error:'paymaster_unavailable'});return true;}
+          let approveCall;try{approveCall=limitsPaymasterApprove(approve);}catch{json(402,{error:'kipurse_balance_insufficient_for_fee',fee:feeOut,detail:{zh:'启付余额不足以支付手续费',en:'The Kipurse balance can’t cover the network fee.'}});return true;}
+          pl={...pl,calls:[approveCall,pl.calls[0]]};
           prepared.set(id,{plan:pl,at:now(),choice:c,pm:pmUrl,fee:feeOut,feeFrom:'kipurse_wallet'});
           json(200,{id,owner:pl.owner,wallet:pl.wallet,from:pl.wallet,chainId:pl.chainId,human:pl.human,labels:pl.labels,calls:pl.calls,pm:pmUrl,sponsored:false,fee:feeOut,feeFrom:'kipurse_wallet',gasToken:'USDC'});return true;}
         let pm=null;try{pm=await sponsor(id,pl);}catch{pm=null;}let f=null;try{f=await fee(pl);}catch{f=null;}

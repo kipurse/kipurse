@@ -203,7 +203,17 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     const [gp,rd,wb,eg]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'}),
       pub.readContract({address:X.token,abi:parseAbi(['function balanceOf(address) view returns (uint256)']),functionName:'balanceOf',args:[R.wallet]}).catch(()=>null),
       data?pub.estimateGas({account:R.wallet,to:R.wallet,data}).catch(()=>null):Promise.resolve(null)]);
-    return LFEE.limitsWalletPaysFee({callGas:eg,gasPriceWei:gp,ethUsd8:rd[1],walletUSDC:wb,cap:LFEE.limitsWalletFeeCap()});}
+    const base=LFEE.limitsWalletPaysFee({callGas:eg,gasPriceWei:gp,ethUsd8:rd[1],walletUSDC:wb,cap:LFEE.limitsWalletFeeCap()});
+    if(base.reason)return {...base,approve:null};
+    let quote=null;try{const url=LFEE.erc20PaymasterURL({KIPURSE_ERC20_PAYMASTER_URL:process.env.KIPURSE_ERC20_PAYMASTER_URL,KIPURSE_ONBOARD_PAYMASTER_URL:ONBOARD_PM_URL});
+      const body=LFEE.rewritePaymasterBody({id:1,method:'pimlico_getTokenQuotes',params:[{tokens:[LFEE.BASE_USDC]}]});
+      const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json','accept':'application/json'},body:JSON.stringify(body.body)});
+      quote=LFEE.parseTokenQuote(await r.json());}catch{quote=null;}
+    if(!quote)return {...base,reason:'paymaster_unavailable',canPayUSDC:false,approve:null};
+    const cost=LFEE.limitsTokenApprove({gasWei:base.wei,gasPriceWei:base.gasPriceWei,postOpGas:quote.postOpGas,exchangeRate:quote.exchangeRate,feeCap:base.cap});
+    if(!cost.ok)return {...base,reason:cost.reason,approve:cost.amount,canPayUSDC:false,pimlicoQuote:cost.quote};
+    if(base.walletUSDC==null||base.walletUSDC<cost.amount)return {...base,reason:'kipurse_balance_insufficient_for_fee',approve:cost.amount,canPayUSDC:false,pimlicoQuote:cost.quote};
+    return {...base,approve:cost.amount,pimlicoQuote:cost.quote};}
   async function limitsFeeQuote({data,walletPays=false}){const {limitsChangeFee}=await import(G+'src/v5/limits-fee.mjs');const {ETH_USD_FEED}=await import(G+'src/v5/phone-signer.mjs');
     const [gp,rd,bal,eg]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'}),
       pub.readContract({address:X.token,abi:parseAbi(['function balanceOf(address) view returns (uint256)']),functionName:'balanceOf',args:[R.owner]}).catch(()=>null),
