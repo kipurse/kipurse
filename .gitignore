@@ -1,0 +1,54 @@
+# OS / editors
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+*.bak*
+*.pre-*
+*.orig
+
+# secrets and local config (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+!server/src/v5/data/apple-app-attest-root.pem
+*.p8
+*.p12
+*.key
+*.mobileprovision
+ios/Config/Local.xcconfig
+# operator config belongs OUTSIDE the repository (docs/ARCHITECTURE_LAYERS.md)
+operator.json
+mainnet-trustflow.config.json
+*.sqlite
+*.sqlite3
+*.db
+
+# iOS / Swift
+ios/Kipurse.xcodeproj/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+.build/
+.swiftpm/
+build/
+*.ipa
+*.xcresult
+
+# Node
+node_modules/
+npm-debug.log*
+coverage/
+*.log
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+contracts/spm
+
+# archives
+*.tgz

@@ -1,0 +1,38 @@
+// Scaling seams: shared KV across "workers", rate limits, revocation feed, RPC fallback, no-PII logs, backpressure.
+import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import http from 'node:http';
+import {createSqliteKV,createMemoryKV,createRateLimiter,kvKey,createFileTenantState,tenantKey} from '../src/v5/store.mjs';
+import {rpcUrls,rpcTransport,createReadCache} from '../src/v5/rpc.mjs';import {createObs} from '../src/v5/obs.mjs';
+import {revokeAllAgents,reloadRevocations,createUserDataEraser} from '../src/v5/user-data.mjs';import {createPhoneSession} from '../src/v5/phone-session.mjs';
+import {hashToken,resolveAgent} from '../src/v4/agents.mjs';import {createPublicClient} from 'viem';
+const dir=()=>mkdtempSync(join(tmpdir(),'scale-'));
+test('sqlite KV: two handles on one file behave like two workers (put/take single-use, TTL, incr, list)',()=>{
+  const f=join(dir(),'kv.sqlite');let t=1000;const A=createSqliteKV({file:f,now:()=>t}),B=createSqliteKV({file:f,now:()=>t});
+  A.put('chal:0xabc:n1',{exp:5},100);assert.deepEqual(B.take('chal:0xabc:n1'),{exp:5});assert.equal(A.take('chal:0xabc:n1'),undefined,'single use across workers');
+  A.put('x',1,10);t+=11;assert.equal(B.get('x'),undefined,'expired');
+  assert.equal(A.incr('rl:k',1000),1);assert.equal(B.incr('rl:k',1000),2);t+=1001;assert.equal(A.incr('rl:k',1000),1,'new window');
+  A.put('revoked-agent:global:aa',1);B.put('revoked-agent:global:bb',1);assert.deepEqual(A.list('revoked-agent:global:').map(e=>e.k).sort(),['revoked-agent:global:aa','revoked-agent:global:bb']);
+  A.close();B.close();});
+test('key scheme is tenant-partitioned',()=>{assert.equal(kvKey('chal','0xABC','n'),'chal:0xabc:n');assert.equal(kvKey('rl',null,'x'),'rl:global:x');assert.equal(tenantKey('0xAbC'),'0xabc');
+  const d=dir();const st=createFileTenantState({dir:d});st.save('0xAA',{a:1});st.save('0xBB',{b:2});assert.deepEqual(st.load('0xaa'),{a:1});assert.deepEqual(st.load('0xbb'),{b:2});assert.deepEqual(st.load('0xcc',{}),{});});
+test('rate limiter: per key and global',()=>{const L=createRateLimiter(createMemoryKV(),{perKey:2,global:3,windowMs:1000});
+  assert.equal(L.hit('s','a'),false);assert.equal(L.hit('s','a'),false);assert.equal(L.hit('s','a'),true,'per-key');assert.equal(L.hit('s','b'),true,'global');});
+test('revocation feed: erase on worker A disables the token on worker B after reload',()=>{const kv=createSqliteKV({file:join(dir(),'kv.sqlite')});const tok='kpa_'+'x'.repeat(40);
+  const mk=()=>[{id:'muse',tokenSha256:hashToken(tok)}];const a=mk(),b=mk();const S={};revokeAllAgents(S,()=>{},a,kv);
+  assert.equal(resolveAgent(a,tok),null);assert.ok(resolveAgent(b,tok),'B not yet reloaded');assert.equal(reloadRevocations(kv,b),1);assert.equal(resolveAgent(b,tok),null);assert.equal(reloadRevocations(kv,b),0);});
+test('phone-session + erase challenges live in the shared KV (issued on A, usable once on B)',async()=>{const kv=createSqliteKV({file:join(dir(),'kv.sqlite')});
+  const mk=()=>createPhoneSession({phone:{active:()=>null},wallet:'0x0000000000000000000000000000000000000001',readState:async()=>({}),kv});const A=mk(),B=mk();
+  const call=async(P,p,body)=>{const srv=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');let b='';for await(const c of req)b+=c;await P.handle(req,res,u,{readBody:async()=>b?JSON.parse(b):{},ip:'t'});});
+    await new Promise(r=>srv.listen(0,'127.0.0.1',r));const r=await fetch(`http://127.0.0.1:${srv.address().port}${p}`,{method:'POST',body:JSON.stringify(body??{})});const j=await r.json();srv.close();return [r.status,j];};
+  const [,c]=await call(A,'/phone/session/challenge');const [s1]=await call(B,'/phone/session',{nonce:c.nonce,r:'0x1',s:'0x1'});assert.equal(s1,409,'B found the challenge (no active phone)');
+  const [s2]=await call(B,'/phone/session',{nonce:c.nonce,r:'0x1',s:'0x1'});assert.equal(s2,400,'single use across workers');
+  const E=createUserDataEraser({enabled:true,kv,resolveTenant:async()=>({wallet:'0x1',phone:{active:()=>null}}),parts:[]});assert.ok(E);});
+test('RPC list + fallback transport',async()=>{assert.deepEqual(rpcUrls('http://a, http://b'),['http://a','http://b']);assert.throws(()=>rpcTransport(''));
+  const good=http.createServer((req,res)=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{const j=JSON.parse(b);res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({jsonrpc:'2.0',id:j.id,result:'0x2105'}));});});
+  await new Promise(r=>good.listen(0,'127.0.0.1',r));const pub=createPublicClient({transport:rpcTransport(['http://127.0.0.1:1',`http://127.0.0.1:${good.address().port}`],{timeout:2000,retryCount:0})});
+  assert.equal(await pub.getChainId(),8453,'first URL dead -> fallback answered');good.close();
+  let n=0;const C=createReadCache({ttlMs:1000});await C('k',async()=>++n);await C('k',async()=>++n);assert.equal(n,1);});
+test('logs drop PII fields; backpressure sheds with 503; metrics',async()=>{const lines=[];const O=createObs({out:s=>lines.push(s),maxInflight:1});
+  O.log('erase',{part:'oauth',wallet:'0xabc',ip:'1.2.3.4',token:'kpa_x',count:2});const o=JSON.parse(lines[0]);assert.equal(o.part,'oauth');assert.equal(o.count,2);for(const k of ['wallet','ip','token'])assert.ok(!(k in o));
+  let release;const srv=http.createServer(O.wrap(async(req,res)=>{await new Promise(r=>release=r);res.end('ok');}));await new Promise(r=>srv.listen(0,'127.0.0.1',r));const B=`http://127.0.0.1:${srv.address().port}/v1/x`;
+  const p1=fetch(B);await new Promise(r=>setTimeout(r,100));const r2=await fetch(B);assert.equal(r2.status,503);release();await p1;srv.close();
+  assert.match(O.metrics(),/kipurse_shed_total 1/);assert.match(O.metrics(),/kipurse_http_requests_total\{route="\/v1",code="2xx"\} 1/);});

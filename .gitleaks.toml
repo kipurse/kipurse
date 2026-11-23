@@ -1,0 +1,21 @@
+# Gitleaks config: default rules + reviewed false positives only. Allowlist entries are VALUES or narrow value shapes, never whole
+# files or directories, so a real secret added to any file is still found.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed false positives"
+regexTarget = "match"
+regexes = [
+  # Public USDC token contract addresses (Base mainnet / Base Sepolia) are not secrets.
+  '''(?i)0x833589fcd6edb6e08f4c7c32d4f71b54bda02913''', '''(?i)0x036cbd53842c5426634e7929541ec2318f3dcf7e''',
+  # Synthetic test values (UUID-like owner token, idempotency keys, a purchase-key vector).
+  '''0b7f3c2e-aaaa-4bbb-8ccc-123456789abc''', '''sub-secret-9f8e7d6c5b4a''', '''idem-12345678''', '''siri-1234-5678''', '''ask-[xy]-mwp6lqwe''',
+  '''0xe48bf0013e10cffa31b02b9fd12fd75dcec27382ecae9021abca59f6c1bb2c5a''',
+  # The public client-telemetry key that ships inside the Coinbase wallet SDK (vendored, minified browser bundles).
+  '''amplitudeApiKey:"c66737ad47ec354ced777935b0af822e"''',
+  # Purchase keys are keccak hashes of order data, not credentials (recorded fork-test replies).
+  '''(?:onchainPurchaseKey|purchaseKey|purchase_key)"?\s*[:=]\s*"?(?:0x)?[0-9a-f]{64}''',
+  # A contract-artifact lookup in the V5.5 deploy plan (file name + contract name), not a key.
+  '''^KipurseKeySeatV2\.sol','KipurseKeySeatV2'$''',
+]

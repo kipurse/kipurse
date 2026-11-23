@@ -1,0 +1,7 @@
+{
+ "note": "t1197u (handbook §6#92): the Kipurse V5.3 contract suite on Base mainnet (deployed by the owner 2026-11-18 16:01 CT, blocks 59244463 / 59244596). New wallets open on it; wallets registered before stay on V5.2.",
+ "factory": "0x34d9Bdc9E10815fB6913AF5BC0DAad7E53dbD57D",
+ "adapter": "0xb150030be35903AdEE466d7733Bf0841B667033C",
+ "trust": "0xDa1dCc6677f352bA551fEb8ca0f39d46B41535c3",
+ "vaultImpl": "0x0Bf04254cF9A16C83c10159a79E2420528608cDa"
+}

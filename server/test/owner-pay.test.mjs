@@ -1,0 +1,45 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {toHex,getAddress,keccak256} from 'viem';import * as P256 from 'ox/P256';
+import {createOwnerPay,phonePayWrapper} from '../src/v5/owner-pay.mjs';
+const W=getAddress('0x'+'11'.repeat(20)),KNOWN=getAddress('0x'+'22'.repeat(20)),NEW=getAddress('0x'+'33'.repeat(20));
+function setup({enabled=true,cap}={}){const privateKey=P256.randomPrivateKey();const pk=P256.getPublicKey({privateKey});
+  const active={x:toHex(pk.x,{size:32}),y:toHex(pk.y,{size:32}),fingerprint:'FP',version:'v2',approver:'0x'+'44'.repeat(20),maxSingle:'5000000',maxDaily:'50000000'};const pf={canPay:true};const pays=[];
+  const ten={wallet:W,chainId:8453,token:'0x'+'55'.repeat(20),pub:{readContract:async({args})=>keccak256(args[0])},phone:{payCapable:async()=>cap??{ok:true,active,index:3}},
+    engine:{preflight:async(r,o)=>({...pf,agentId:o.agentId}),approvalRequest:async(r,o)=>({ok:true,digest:keccak256(toHex(JSON.stringify(r))),onchainPurchaseKey:keccak256(toHex(o.intentId)),deadline:9999999999n,fee:'10'}),
+      pay:async a=>{pays.push(a);return {state:'paid',txHash:'0x'+'ab'.repeat(32),fee:'10',networkFee:'5'};}},knownPayees:async()=>[{address:KNOWN,name:'K'}]};
+  const store={};const OP=createOwnerPay({enabled,store,resolveTenant:async req=>req.headers.authorization==='ok'?ten:null});
+  const sign=d=>{const s=P256.sign({payload:d,privateKey});return {r:toHex(s.r,{size:32}),s:toHex(s.s,{size:32})};};
+  return {OP,ten,store,pays,sign,pf};}
+const call=async(OP,path,{method='POST',body={},auth='ok'}={})=>{let code,out;const res={writeHead:c=>{code=c;},end:s=>{out=JSON.parse(s);}};
+  await OP.handle({method,headers:{authorization:auth}},res,new URL('http://x'+path),{readBody:async()=>body,ip:'1'});return [code,out];};
+test('flag off: every owner-pay route is 404',async()=>{const {OP}=setup({enabled:false});assert.equal((await call(OP,'/owner/pay/challenge'))[0],404);assert.equal((await call(OP,'/owner/pay/history',{method:'GET'}))[0],404);});
+test('needs a phone session of the tenant',async()=>{const {OP}=setup();assert.equal((await call(OP,'/owner/pay/challenge',{auth:'no'}))[0],401);});
+test('challenge -> phone signature -> submit; ledger row with fees; single use',async()=>{const {OP,store,pays,sign}=setup();
+  const [c,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'1500000'}});assert.equal(c,200);assert.equal(o.amount,'1500000');assert.equal(o.chainId,8453);assert.equal(o.newPayee,false);
+  const [c2,o2]=await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(o.digest)}});assert.equal(c2,200);assert.equal(o2.state,'paid');assert.equal(o2.fee,'10');assert.equal(o2.networkFee,'5');
+  assert.equal(pays.length,1);assert.equal(pays[0].ownerApproval.deadline,'9999999999');assert.ok(pays[0].ownerApproval.signature.startsWith('0x'));
+  assert.equal((await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(o.digest)}}))[0],400);
+  const [,h]=await call(OP,'/owner/pay/history',{method:'GET'});assert.equal(h.payments.length,1);assert.equal(h.payments[0].payee,KNOWN);
+  OP.forget(W);assert.deepEqual(store.ownerPay,{});});
+test('new address needs the extra confirmation',async()=>{const {OP}=setup();
+  assert.equal((await call(OP,'/owner/pay/challenge',{body:{payee:NEW,amount:'1'}}))[1].error,'new_payee_needs_confirm');
+  const [c,o]=await call(OP,'/owner/pay/challenge',{body:{payee:NEW,amount:'1',confirmNewPayee:true}});assert.equal(c,200);assert.equal(o.newPayee,true);});
+test('wrong key / tampered digest rejected, nothing paid',async()=>{const {OP,pays,sign}=setup();
+  const [,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'1'}});const [c]=await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(keccak256('0x01'))}});assert.equal(c,403);assert.equal(pays.length,0);});
+test('V1 phone or phone removed on chain -> refused',async()=>{for(const code of ['phone_needs_upgrade','phone_not_owner']){const {OP}=setup({cap:{ok:false,code}});
+  assert.equal((await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'1'}}))[1].error,code);}});
+test('bad input',async()=>{const {OP}=setup();for(const b of [{payee:'x',amount:'1'},{payee:KNOWN,amount:'0'},{payee:KNOWN,amount:'1.5'},{payee:W,amount:'1'}])assert.equal((await call(OP,'/owner/pay/challenge',{body:b}))[0],400);});
+test('wrapper encodes kind 4',()=>{const w=phonePayWrapper(3,{purchaseKey:'0x'+'aa'.repeat(32),payee:KNOWN,amount:1n,deadline:2n},1n,2n);assert.match(w,/^0x/);});
+test('above the frozen phone ceiling: pays through the live wallet caps (no phone approval on chain), Face ID still required',async()=>{const {OP,pays,sign}=setup();
+  const [c,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'100000000'}});assert.equal(c,200);assert.equal(o.viaCaps,true);
+  assert.equal((await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(keccak256('0x01'))}}))[0],403);assert.equal(pays.length,0);
+  const [,o2]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'100000000'}});const [c2]=await call(OP,'/owner/pay/submit',{body:{id:o2.id,...sign(o2.digest)}});
+  assert.equal(c2,200);assert.equal(pays.length,1);assert.equal(pays[0].ownerApproval,undefined);});
+test('above the phone ceiling and the wallet caps refuse it -> clear error before Face ID, nothing paid',async()=>{const {OP,pays,pf}=setup();pf.canPay=false;pf.reasons=['over_stranger_cap'];
+  const [c,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'100000000'}});assert.equal(c,409);assert.equal(o.error,'needs_trusted_payee');assert.equal(pays.length,0);});
+test('within the phone ceiling: unchanged on-chain phone approval path',async()=>{const {OP,pays,sign}=setup();
+  const [,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'5000000'}});assert.equal(o.viaCaps,false);await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(o.digest)}});assert.ok(pays[0].ownerApproval.signature);});
+test('V3 phone (no ceiling): every amount uses the on-chain phone approval; the adapter live caps decide',async()=>{const {OP,ten,pays,sign}=setup();const a=(await ten.phone.payCapable()).active;a.version='v3';a.maxSingle=((1n<<160n)-1n).toString();
+  const [,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'900000000000'}});assert.equal(o.viaCaps,false);await call(OP,'/owner/pay/submit',{body:{id:o.id,...sign(o.digest)}});assert.ok(pays[0].ownerApproval.signature);});
+test('over the wallet limits: refused with a clear hint BEFORE Face ID (no challenge digest, nothing paid)',async()=>{for(const [r,w] of [['over_daily_cap_incl_fees','限额'],['insufficient_balance','余额'],['wallet_paused','暂停']]){const {OP,pays,pf}=setup();pf.canPay=false;pf.reasons=[r];
+  const [c,o]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'1000000'}});assert.equal(c,409);assert.equal(o.error,'over_wallet_limits');assert.ok(o.detail.includes(w));assert.equal(o.digest,undefined);assert.equal(pays.length,0);}});
+test('stranger tier caps alone do not block an owner-approved payment',async()=>{const {OP,pf}=setup();pf.canPay=false;pf.reasons=['over_stranger_cap'];const [c]=await call(OP,'/owner/pay/challenge',{body:{payee:KNOWN,amount:'1000000'}});assert.equal(c,200);});

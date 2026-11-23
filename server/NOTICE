@@ -1,0 +1,34 @@
+Kipurse
+Copyright 2026 Kipurse contributors.
+
+This product is licensed per component; see LICENSING.md.
+
+This product includes or vendors third-party software and data:
+
+Smart-contract dependencies (fetched by contracts/install-deps.sh at pinned commits, not stored in this repository unless noted):
+- Coinbase spend-permissions (SpendPermissionManager), https://github.com/coinbase/spend-permissions — MIT
+- Coinbase smart-wallet, https://github.com/coinbase/smart-wallet — MIT
+- Coinbase magicspend, https://github.com/coinbase/magicspend — MIT
+- base-org webauthn-sol (and FreshCryptoLib), https://github.com/base-org/webauthn-sol — MIT
+- OpenZeppelin Contracts, https://github.com/OpenZeppelin/openzeppelin-contracts — MIT
+  (contracts/shim/oz4 contains two OpenZeppelin 4.x files, MIT, vendored)
+- Solady, https://github.com/Vectorized/solady — MIT
+- eth-infinitism account-abstraction, https://github.com/eth-infinitism/account-abstraction — GPL-3.0 (test/build dependency only)
+- forge-std, https://github.com/foundry-rs/forge-std — MIT OR Apache-2.0
+
+Gateway data (server/src/v5/data/):
+- ofac-sdn-eth.json: Ethereum addresses from the U.S. Treasury OFAC SDN list (public domain), extracted via
+  https://github.com/0xB10C/ofac-sanctioned-digital-currency-addresses (MIT).
+- scam-blacklist.json: addresses from ScamSniffer scam-database, https://github.com/scamsniffer/scam-database (GPL-3.0),
+  and MyEtherWallet ethereum-lists darklist, https://github.com/MyEtherWallet/ethereum-lists (MIT).
+  The GPL-3.0 ScamSniffer data is used only in the AGPL-3.0 gateway (server/).
+- apple-app-attest-root.pem: Apple App Attestation Root CA certificate (public, from Apple).
+
+Gateway browser bundles (server/kit/static, server/owner-sign/static, server/kit/rescue) include minified builds of
+npm packages listed in server/package-lock.json (for example @base-org/account, viem, ox, @noble/*), under their own
+licenses (MIT or Apache-2.0).
+
+Trademarks: the agent images in ios/App/Resources/Assets.xcassets (agent-claude, agent-grok, agent-muse, agent-siri)
+and the names Claude, Grok, Siri, Coinbase, Base and Apple are trademarks of their respective owners. They are
+used only nominatively, to identify those products; no endorsement is implied. They are not covered by this project's
+licenses.

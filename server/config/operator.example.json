@@ -1,0 +1,36 @@
+{
+ "$schema": "./operator.schema.json",
+ "operator": {
+  "legalName": "Example Operator LLC",
+  "displayName": "Example Wallet",
+  "website": "https://wallet.example",
+  "supportEmail": "support@wallet.example",
+  "reviewEmail": "review@wallet.example"
+ },
+ "endpoints": {
+  "publicUrl": "https://pay.wallet.example",
+  "mcpUrl": "https://mcp.wallet.example",
+  "rescueUrl": "https://rescue.wallet.example"
+ },
+ "cdp": {
+  "entityId": "",
+  "projectId": "",
+  "apiKeyFile": "/etc/example-wallet/cdp_api_key.json",
+  "onrampAppName": "Example Wallet"
+ },
+ "apple": {
+  "teamId": "",
+  "bundleIdPrefix": "org.example.wallet",
+  "apnsKeyId": "",
+  "apnsKeyFile": "/etc/example-wallet/AuthKey_APNS.p8"
+ },
+ "fees": {
+  "recipientLabel": "Example Wallet fee account (on chain)",
+  "recipient": "",
+  "opsAddress": ""
+ },
+ "cardIssuer": {
+  "provider": "mock",
+  "accountRef": ""
+ }
+}

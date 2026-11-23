@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createDisputes} from '../src/v5/disputes.mjs';import {caseState,overdue,refundRequest,evidence,RESPONSE_WINDOW_SEC} from '../src/v5/dispute-window.mjs';
+const mem=()=>{let d=null;return {readJson:(f,x)=>d??x,writeJson:(f,v)=>{d=JSON.parse(JSON.stringify(v));}};};
+test('t968: case moves awaiting -> overdue -> partial -> refunded',()=>{let t=1000;const D=createDisputes({store:mem(),file:'x',now:()=>t});
+  const c=D.open({purchase:{purchaseKey:'k',payee:'0xAA',amount:'100',txHash:'0x1'},reason:'not_received'});
+  assert.equal(caseState(c,t),'awaiting_merchant');assert.equal(overdue(D.list(),t+RESPONSE_WINDOW_SEC+1).length,1);
+  D.matchRefunds([{from:'0xaa',amount:'40',txHash:'0xr1',at:t+1}]);assert.equal(caseState(D.get(c.id),t),'partially_refunded');
+  D.matchRefunds([{from:'0xaa',amount:'60',txHash:'0xr2',at:t+2}]);assert.equal(caseState(D.get(c.id),t),'refunded');});
+test('t968: refund request + evidence carry reference and no personal contact data',()=>{const D=createDisputes({store:mem(),file:'x',now:()=>5});
+  const c=D.open({purchase:{purchaseKey:'k2',payee:'0xBB',amount:'7'}});const r=refundRequest(c,{wallet:'0xW'});
+  assert.match(r.text.en,new RegExp(c.reference));assert.equal(r.respondBy,5+RESPONSE_WINDOW_SEC);
+  const e=JSON.stringify(evidence(c));assert.ok(!/@|phone|email/i.test(e));});
