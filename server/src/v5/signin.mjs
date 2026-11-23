@@ -6,7 +6,7 @@
 //   new       - this Base Account has no Kipurse wallet (new-user onboarding; the app must create a fresh phone key).
 // A Base Account maps to at most one wallet (registry byOwner + deterministic factory address), so sign-in can never create a 2nd wallet.
 // Privacy: no addresses, signatures or messages are logged; per-request state lives in the KV with a short TTL.
-import {langOf,X} from './i18n.mjs';import {randomBytes,createHash,randomInt,timingSafeEqual} from 'node:crypto';import {getAddress,isAddress,parseAbi} from 'viem';import {parseSiweMessage} from 'viem/siwe';import {kvKey} from './store.mjs';import {p256VerifyDigest,approverHint} from './phone-signer.mjs';import {publicError} from './onboard.mjs';
+import {langOf,X} from './i18n.mjs';import {randomBytes,createHash,randomInt,timingSafeEqual} from 'node:crypto';import {getAddress,isAddress,parseAbi,toHex} from 'viem';import {parseSiweMessage} from 'viem/siwe';import {kvKey} from './store.mjs';import {p256VerifyDigest,approverHint,fingerprint} from './phone-signer.mjs';import {publicError} from './onboard.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SIGNIN_JS_V=Date.now().toString(36);
 export const signinSri=b=>'sha384-'+createHash('sha384').update(b).digest('base64');
@@ -15,15 +15,22 @@ const HEX32=/^0x[0-9a-fA-F]{1,64}$/,ID=/^[0-9a-f]{32}$/;
 /** t1265: what the app's phone key (Secure Enclave P-256) signs to prove it holds the key it sent to /signin/start. Domain-separated text, SHA-256. */
 export const signinKeyDigest=id=>'0x'+createHash('sha256').update(`Kipurse sign-in key v1\nid:${id}`).digest('hex');
 export const SIWE_STATEMENT='Sign in to Kipurse. This only proves this account is yours. It costs nothing and sends no transaction.';
+/** t1275: the SIWE statement names the phone key that started the sign-in (same fingerprint format as everywhere: phone-signer fingerprint of the
+    32-byte x, y). The owner's signature then covers exactly which iPhone may read the wallet; the read grant is written only for that key.
+    ONE formula: the iOS app rebuilds this text itself (KipurseCore SigninSiwe.statement) and refuses any other (fixture t1275-signin-siwe.json.txt). */
+export const signinKeyFp=(x,y)=>fingerprint(toHex(BigInt(String(x)),{size:32}),toHex(BigInt(String(y)),{size:32}));
+export const signinStatement=fp=>`Sign in to Kipurse and allow the iPhone with key ${fp} to read this wallet. Free: no transaction.`;
+export const signinStatementFor=(x,y)=>x&&y?signinStatement(signinKeyFp(x,y)):SIWE_STATEMENT;
 /** EIP-4361 message. domain = host of the page origin (what the Base Account popup shows). */
-export function siweMessage({domain,uri,address,chainId,nonce,issuedAt}){
-  return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${SIWE_STATEMENT}\n\nURI: ${uri}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;}
+export function siweMessage({domain,uri,address,chainId,nonce,issuedAt,statement=SIWE_STATEMENT}){
+  return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${statement}\n\nURI: ${uri}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;}
 /** Minimal EIP-4361 parser for the fields we check. */
 export function parseSiwe(m){const t=String(m??'').replace(/\r\n?/g,'\n');let v={};try{v=parseSiweMessage(t)??{};}catch{v={};}
   const L=t.split('\n');const f=k=>{const l=L.find(x=>x.trim().startsWith(k+':'));return l?l.slice(l.indexOf(':')+1).trim():null;};
   const h=/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?(\S+) wants you to sign in with your Ethereum account:\s*$/.exec(L[0]??'');
   const ver=String(v.version??f('Version')??'').trim().replace(/^["']|["']$/g,'');
-  return {domain:v.domain??h?.[1]??null,address:String(v.address??L[1]??'').trim(),uri:v.uri??f('URI'),version:ver,chainId:Number(v.chainId??f('Chain ID')),nonce:v.nonce??f('Nonce'),
+  const st=v.statement??(L[2]===''&&L[3]&&L[4]===''&&!/^[A-Za-z ]{1,20}:/.test(L[3])?L[3]:null);   // t1275
+  return {domain:v.domain??h?.[1]??null,address:String(v.address??L[1]??'').trim(),statement:st,uri:v.uri??f('URI'),version:ver,chainId:Number(v.chainId??f('Chain ID')),nonce:v.nonce??f('Nonce'),
     issuedAt:v.issuedAt instanceof Date?v.issuedAt.toISOString():(v.issuedAt??f('Issued At')),expirationTime:v.expirationTime instanceof Date?v.expirationTime.toISOString():(v.expirationTime??f('Expiration Time')),
     notBefore:v.notBefore instanceof Date?v.notBefore.toISOString():(v.notBefore??f('Not Before'))};}
 /** Shape of a field for diagnostics only (no PII): length + char classes. */
@@ -39,7 +46,8 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
      with POST /signin/prove {id, poll, r, s}. Without the proof the sign-in still answers reconnect / bind / new, but leaves no grant and opens
      no setup, so a phisher cannot attach THEIR key to a victim's sign-in. */
   const keyOk=(x,y,id,r,s)=>{try{return HEX32.test(String(r??''))&&HEX32.test(String(s??''))&&p256VerifyDigest({x:String(x),y:String(y)},signinKeyDigest(id),String(r),String(s));}catch{return false;}};
-  const writeGrant=(wallet,o,owner)=>kv.put(kvKey('readgrant',wallet,'phone'),{x:o.x,y:o.y,owner,exp:now()+grantTtlMs},grantTtlMs);
+  // t1275: the grant goes ONLY to the key the owner's signed SIWE statement names (o.fp set by verify from the checked statement)
+  const writeGrant=(wallet,o,owner)=>{if(!o.x||!o.y||!o.fp||o.fp!==signinKeyFp(o.x,o.y))return false;kv.put(kvKey('readgrant',wallet,'phone'),{x:o.x,y:o.y,owner,exp:now()+grantTtlMs},grantTtlMs);return true;};
   function start({x,y,setup,id:cid,r,s}={}){const hasKey=HEX32.test(String(x??''))&&HEX32.test(String(y??''));
     const wantSetup=!!(hasKey&&setup&&typeof setup==='object'&&onboard);
     const own=hasKey&&ID.test(String(cid??''))&&!kv.get(K(String(cid)));
@@ -47,8 +55,9 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
     const proven=own&&keyOk(x,y,id,r,s);
     const lim=wantSetup?{single:String(setup.single),daily:String(setup.daily),term:String(setup.term),days:String(setup.days??90)}:null;
     // t796 H2: the poll secret goes ONLY to the starter (never in the page URL); the pairing code is shown in the app AND on the page
-    const put=onb=>{kv.put(K(id),{pollH:createHash('sha256').update(poll).digest('hex'),pair,x:hasKey?String(x):null,y:hasKey?String(y):null,nonce,state:'start',onb,proven,wantSetup,lim},ttlMs);
-      return {id,url:`${base()}/signin?id=${id}`,nonce,setup:!!onb,poll,pair,proven,...(hasKey&&!proven?{prove:{digest:signinKeyDigest(id)}}:{})};};
+    const statement=signinStatementFor(hasKey&&x,hasKey&&y);   // t1275
+    const put=onb=>{kv.put(K(id),{pollH:createHash('sha256').update(poll).digest('hex'),pair,x:hasKey?String(x):null,y:hasKey?String(y):null,nonce,state:'start',onb,proven,wantSetup,lim,statement},ttlMs);
+      return {id,url:`${base()}/signin?id=${id}`,nonce,setup:!!onb,poll,pair,proven,statement,...(hasKey&&!proven?{prove:{digest:signinKeyDigest(id)}}:{})};};
     if(!(wantSetup&&proven))return put(null);
     return onboard.start({x:String(x),y:String(y),single:setup.single,daily:setup.daily,term:setup.term,days:setup.days,owner:null}).then(r0=>put(r0.id));}
   /** t1265: proof of the phone key after start (poll secret = the starter). Opens the pending setup / writes the bind grant if sign-in already finished. */
@@ -61,7 +70,7 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
   /** Two-step fallback (wallets without the signInWithEthereum capability): the server writes the message for the connected account. */
   function message(id,address){const o=ID.test(id)&&kv.get(K(id));if(!o||o.state!=='start')throw Object.assign(Error('unknown or expired'),{code:'unknown'});
     if(!isAddress(String(address)))throw Object.assign(Error('bad address'),{code:'bad_request'});
-    return {message:siweMessage({domain:host(),uri:base(),address:getAddress(address),chainId,nonce:o.nonce,issuedAt:new Date(now()).toISOString()})};}
+    return {message:siweMessage({domain:host(),uri:base(),address:getAddress(address),chainId,nonce:o.nonce,issuedAt:new Date(now()).toISOString(),statement:signinStatementFor(o.x,o.y)})};}
   async function resolve(owner,o){const rec=reg.byOwner(owner)[0];if(!rec)return {result:'new',wallet:null};
     let phone=false,hint={};try{hint=approverHint(await phoneOf(rec.wallet));}catch{hint={};}   // t1268: seat / approver for the app's on-chain WalletVerify
     if(o.x&&o.y){try{const a=await phoneOf(rec.wallet);
@@ -69,10 +78,12 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
     return {result:phone?'reconnect':'bind',wallet:getAddress(rec.wallet),path:rec.publicPath??'/t/'+String(rec.wallet).toLowerCase(),...hint};}
   async function verify(id,{address,message:m,signature,poll}){const o=ID.test(id)&&kv.get(K(id));if(!o)throw Object.assign(Error('unknown or expired'),{code:'unknown'});
     // t1265: a finished sign-in is re-read only with the starter's poll secret (the page URL / id alone never reveals the owner or the wallet)
-    if(o.state==='done'){if(!o.pollH||!pollOk(o,poll))throw Object.assign(Error('unknown or expired'),{code:'unknown'});return {ok:true,result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o)};}
+    if(o.state==='done'){if(!o.pollH||!pollOk(o,poll))throw Object.assign(Error('unknown or expired'),{code:'unknown'});return {ok:true,result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o)};}
     if(!isAddress(String(address))||typeof m!=='string'||m.length>2000||!/^0x[0-9a-fA-F]+$/.test(String(signature))||String(signature).length>20000)throw Object.assign(Error('bad request'),{code:'bad_request'});
     const p=parseSiwe(m),A=getAddress(address);const t=Date.parse(p.issuedAt??'');
-    const bad=p.domain!==host()?'domain':p.address.toLowerCase()!==A.toLowerCase()?'address':p.nonce!==o.nonce?'nonce':p.chainId!==chainId?'chain':(p.version!==''&&p.version!=='1'&&p.version!=='1.0')?'version':
+    // t1275: a sign-in started with a phone key must be signed over the statement naming exactly that key (never the generic text, never another key)
+    const wantSt=o.x&&o.y?signinStatement(signinKeyFp(o.x,o.y)):null;
+    const bad=p.domain!==host()?'domain':(wantSt&&p.statement!==wantSt)?'statement':p.address.toLowerCase()!==A.toLowerCase()?'address':p.nonce!==o.nonce?'nonce':p.chainId!==chainId?'chain':(p.version!==''&&p.version!=='1'&&p.version!=='1.0')?'version':
       (p.issuedAt&&!(t>now()-maxAgeMs&&t<now()+120e3))?'time':(p.expirationTime&&Date.parse(p.expirationTime)<now())?'expired':(p.notBefore&&Date.parse(p.notBefore)>now()+120e3)?'not_yet':null;
     if(bad){const L=String(m).split(/\r?\n/);const keys=L.map(l=>(/^([A-Za-z][A-Za-z ]{0,20}):/.exec(l)||[])[1]).filter(Boolean);
       const diag={field:bad,version:shape(p.version),domainOk:p.domain===host(),lines:L.length,crlf:/\r/.test(m),keys:keys.join('|'),hex:/^0x[0-9a-f]+$/i.test(String(m).trim()),line0:shape(L[0]?.replace(/0x[0-9a-fA-F]{40}/g,'ADDR'))};
@@ -80,18 +91,20 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
       throw Object.assign(Error('message mismatch: '+bad+' ['+diag.version+'|'+diag.keys.slice(0,80)+']'),{code:'bad_message'});}
     let ok=false;try{ok=await pub.verifyMessage({address:A,message:m,signature});}catch{ok=false;}
     if(!ok){obs?.log?.('signin',{result:'bad_signature'});throw Object.assign(Error('signature not valid for this account'),{code:'bad_signature'});}
-    const r=await resolve(A,o);let setup=null;
+    const r=await resolve(A,o);let setup=null;o.fp=wantSt?signinKeyFp(o.x,o.y):null;   // t1275: the key the owner's signature names
     if(r.result==='new'&&o.onb&&o.proven&&onboard&&onboard.bindOwner(o.onb,A))setup={id:o.onb,free:onboard.sponsorable(o.onb)};
     // t849: verified owner on a phone that isn't the approver -> read-only grant for THIS phone key (30 days, one per wallet, replaced next sign-in)
     // t1265: only once the starter proved it holds that key (else prove() writes it later)
     if(r.result==='bind'&&o.x&&o.y&&r.wallet&&o.proven)writeGrant(r.wallet,o,A);
     else if(r.result==='reconnect'&&r.wallet)kv.del?.(kvKey('readgrant',r.wallet,'phone'));
     /* t1268 (§6#133, 0A #2): no Face ID at sign-in -> an unproven "bind" stays provable for the read-grant lifetime; the app proves with the Face ID of the first action that needs it (turning on Face ID approvals) */
-    kv.put(K(id),{...o,state:'done',owner:A,...r},r.result==='bind'&&!o.proven&&o.x&&o.y?grantTtlMs:ttlMs);obs?.log?.('signin',{result:r.result,setup:!!setup});return {ok:true,owner:A,...r,setup};}
+    kv.put(K(id),{...o,state:'done',owner:A,...r,siweMessage:m,siweSignature:String(signature)},r.result==='bind'&&!o.proven&&o.x&&o.y?grantTtlMs:ttlMs);obs?.log?.('signin',{result:r.result,setup:!!setup});return {ok:true,owner:A,...r,setup};}
+  /** t1275: the owner's own SIWE message + signature, so the app checks the owner itself (domain, chain, nonce, its own key in the statement, ERC-6492 on chain) */
+  const proofOf=o=>o.siweMessage&&o.siweSignature?{siweMessage:o.siweMessage,siweSignature:o.siweSignature}:{};
   const hintOf=o=>({...(o.approver?{approver:o.approver}:{}),...(o.seat?{seat:o.seat}:{})});
   const pollOk=(o,poll)=>{if(!o?.pollH)return true;const a=Buffer.from(o.pollH,'hex'),b=createHash('sha256').update(String(poll??'')).digest();return a.length===b.length&&timingSafeEqual(a,b);};
   function status(id,poll){const o=ID.test(id)&&kv.get(K(id));if(!o||!pollOk(o,poll))return {state:'expired'};if(o.state!=='done')return {state:o.state};const s=o.result==='new'&&o.onb&&onboard?onboard.status(o.onb):null;
-    return {state:'done',result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),setup:s?{state:s.state,wallet:s.wallet}:null};}
+    return {state:'done',result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o),setup:s?{state:s.state,wallet:s.wallet}:null};}
   function page(id,o,nonce,lang){const t=X(lang);return `<!doctype html><html lang=${lang}><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t('用 Coinbase 登录 Kipurse','Sign in to Kipurse with Coinbase')}</title>
 <style>body{margin:0;background:#F2F2F7;color:#111;font:17px/1.45 -apple-system,"PingFang SC",sans-serif}.w{max-width:480px;margin:0 auto;padding:28px 18px 40px}.c{background:#fff;border-radius:16px;padding:14px 16px;margin:12px 0}.t{font-size:24px;font-weight:700;margin:10px 0}.m{color:#666;font-size:14px}button{display:block;width:100%;border:0;border-radius:14px;padding:15px;font-size:18px;font-weight:600;margin-top:10px;background:#0052FF;color:#fff}</style>
 <div class=w><div class=t>${t('用 Coinbase 登录','Sign in with Coinbase')}</div>
@@ -101,7 +114,7 @@ ${o.onb?`<div class=c><b>${t('① 登录：签一个名，不花钱','① Sign i
 <div class=c id=setupcard><b>${t('② 新用户：同一页里再点一次「开通」','② New here: tap “Open wallet” once more on this page')}</b><div class=m>${t(`创建你的启付钱包，并设好 AI 默认上限（每笔 ${esc(o.lim?.single??'')} · 每天 ${esc(o.lim?.daily??'')} · 总额 ${esc(o.lim?.term??'')} USDC · ${esc(o.lim?.days??'')} 天，可以随时在 App 里自己改）。首次开通的网络手续费以 USDC 从钱包余额中扣除，Kipurse 不另收费；扣费前会先告诉你。老用户只需第 ① 步。`,`Creates your Kipurse wallet with default AI limits (${esc(o.lim?.single??'')} per payment · ${esc(o.lim?.daily??'')} per day · ${esc(o.lim?.term??'')} USDC total · ${esc(o.lim?.days??'')} days; change them in the app any time). The first-setup network fee is paid in USDC from your wallet balance; Kipurse adds no charge, and you are told before anything is deducted. Returning users only do step ①.`)}</div></div>`
 :`<div class=c><b>${t('只签一个名，不花钱','One signature, no charge')}</b><div class=m>${t('不发生任何交易，不花钱。只用来确认这个账户是你的。','No transaction, no fee. It only proves the account is yours.')}</div></div>`}
 <button id=go>${t('用 Coinbase 登录','Sign in with Coinbase')}</button><p class=m id=st></p></div>
-<script type="application/json" id=kp-data>${JSON.stringify({id,nonce:o.nonce,chainId}).replace(/</g,'\\u003c')}</script><script nonce="${nonce}" src="/signin.js?v=${SIGNIN_JS_V}" integrity="${sri()}"></script></html>`;}
+<script type="application/json" id=kp-data>${JSON.stringify({id,nonce:o.nonce,chainId,statement:signinStatementFor(o.x,o.y)}).replace(/</g,'\\u003c')}</script><script nonce="${nonce}" src="/signin.js?v=${SIGNIN_JS_V}" integrity="${sri()}"></script></html>`;}
   async function handle(req,res,u,{readBody}){const p=u.pathname;
     const json=(c,o)=>{res.writeHead(c,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(o));};
     try{if(p==='/signin.js'&&req.method==='GET'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end(script());return true;}

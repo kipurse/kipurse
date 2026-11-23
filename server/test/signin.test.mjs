@@ -1,6 +1,6 @@
 // Sign in with Coinbase: free SIWE signature -> reconnect / bind / new. Offline (EOA signatures verified with viem).
 import test from 'node:test';import assert from 'node:assert/strict';import {verifyMessage} from 'viem';import {privateKeyToAccount,generatePrivateKey} from 'viem/accounts';
-import {createSignin,parseSiwe} from '../src/v5/signin.mjs';
+import {createSignin,parseSiwe,signinStatementFor} from '../src/v5/signin.mjs';
 const mkKv=()=>{const m=new Map();return {put:(k,v)=>m.set(k,v),get:k=>m.get(k),take:k=>{const v=m.get(k);m.delete(k);return v;}};};
 const W='0x00000000000000000000000000000000000000A1';
 function setup({owner,phone,onChain=true}){const logs=[];const reg={byOwner:o=>owner&&o.toLowerCase()===owner.toLowerCase()?[{wallet:W,publicPath:'/t/'+W.toLowerCase()}]:[]};
@@ -33,11 +33,14 @@ test('Base Account SIWE variants (CRLF, scheme in domain line, no statement, Exp
     `https://pay.kipurse.com wants you to sign in with your Ethereum account:\n${a.address}\n\nURI: https://pay.kipurse.com\nVersion: ${v}\nChain ID: 8453\nNonce: ${st.nonce}\nIssued At: ${now}\nExpiration Time: ${exp}\nRequest ID: x1\nResources:\n- https://pay.kipurse.com/signin`,
     `pay.kipurse.com wants you to sign in with your Ethereum account:\r\n${a.address}\r\n\r\nSign in.\r\n\r\nURI: https://pay.kipurse.com\r\nVersion: ${v}\r\nChain ID: 8453\r\nNonce: ${st.nonce}\r\nIssued At: ${now}`];};
   {const st=S.start({});const m=mk(st,'1')[0].replace(/Version: 1\n/,'');const r=await S.verify(st.id,{address:a.address,message:m,signature:await a.signMessage({message:m})});assert.equal(r.result,'bind','no Version line');}
-  for(const i of [0,1]){const st=S.start({x:PH.x,y:PH.y});const m=mk(st,'1')[i];const r=await S.verify(st.id,{address:a.address,message:m,signature:await a.signMessage({message:m})});assert.equal(r.result,'reconnect','variant '+i);}
+  // t1275: a sign-in started with a phone key must carry the statement naming that key (no statement / another text -> refused)
+  const KS=signinStatementFor(PH.x,PH.y),withSt=(m,i)=>i===0?m.replace(/(0x[0-9a-fA-F]{40}\n\n)/,'$1'+KS+'\n\n'):m.replace('Sign in.',KS);
+  for(const i of [0,1]){const st=S.start({x:PH.x,y:PH.y});const m0=mk(st,'1')[i];await assert.rejects(S.verify(st.id,{address:a.address,message:m0,signature:await a.signMessage({message:m0})}),e=>e.code==='bad_message'&&/statement/.test(e.message),'keyed, no key statement '+i);}
+  for(const i of [0,1]){const st=S.start({x:PH.x,y:PH.y});const m=withSt(mk(st,'1')[i],i);const r=await S.verify(st.id,{address:a.address,message:m,signature:await a.signMessage({message:m})});assert.equal(r.result,'reconnect','variant '+i);}
   const st=S.start({});const m=mk(st,'2')[0];await assert.rejects(S.verify(st.id,{address:a.address,message:m,signature:await a.signMessage({message:m})}),e=>e.code==='bad_message'&&/version/.test(e.message));});
 test('Coinbase shape: no Version, no Issued At (fields: URI, Chain ID, Nonce) -> accepted; nonce single-use + TTL bound to id',async()=>{
   const a=privateKeyToAccount(generatePrivateKey());const {S}=setup({owner:a.address,phone:PH});const st=S.start({x:PH.x,y:PH.y});
-  const m=`pay.kipurse.com wants you to sign in with your Ethereum account:\n${a.address}\n\nURI: https://pay.kipurse.com\nChain ID: 8453\nNonce: ${st.nonce}`;
+  const m=`pay.kipurse.com wants you to sign in with your Ethereum account:\n${a.address}\n\n${signinStatementFor(PH.x,PH.y)}\n\nURI: https://pay.kipurse.com\nChain ID: 8453\nNonce: ${st.nonce}`;   // t1275: keyed -> key statement
   const r=await S.verify(st.id,{address:a.address,message:m,signature:await a.signMessage({message:m})});assert.equal(r.result,'reconnect');
   const st2=S.start({});const m2=m.replace(st.nonce,st2.nonce)+'\nIssued At: 2020-01-01T00:00:00Z';
   await assert.rejects(S.verify(st2.id,{address:a.address,message:m2,signature:await a.signMessage({message:m2})}),e=>/time/.test(e.message));

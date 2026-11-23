@@ -52,6 +52,37 @@ public enum ChainRPC {
     }
     return nil
   }
+  /// t1275: same rule as `agreed` for any JSON result (eth_getLogs arrays): the first two nodes that answer must give the same
+  /// `canon` form (nil from `canon` = not comparable = can't confirm). Returns the first node's raw result, nil = can't confirm.
+  public static func agreedAny(_ method: String, _ params: [Any], nodes: [URL] = nodes, canon: (Any) -> String?) async -> Any? {
+    var first: (raw: Any, key: String)?
+    for n in nodes {
+      guard let v = try? await anyTransport(n, method, params) else { continue }
+      guard let k = canon(v) else { return nil }
+      if let f = first { return f.key == k ? f.raw : nil }
+      first = (v, k)
+    }
+    return nil
+  }
+  /// t1275: eth_getLogs results reduced to what the phone reads (block, log index, topics, data), order-free, lowercased.
+  public static func logsCanon(_ v: Any) -> String? {
+    guard let arr = v as? [Any] else { return nil }
+    var rows = [String]()
+    for x in arr { guard let l = x as? [String: Any] else { return nil }
+      let t = (l["topics"] as? [String] ?? []).map { $0.lowercased() }.joined(separator: ",")
+      rows.append([l["blockNumber"] as? String ?? "", l["logIndex"] as? String ?? "", t, (l["data"] as? String ?? "").lowercased()].joined(separator: "|").lowercased()) }
+    return rows.sorted().joined(separator: "\n")
+  }
+  /// t1275: the newest block BOTH of the first two answering nodes have (the lower of their two heads). nil = can't confirm.
+  public static func agreedHead(nodes: [URL] = nodes) async -> Int64? {
+    var first: Int64?
+    for n in nodes {
+      guard let h = try? await transport(n, "eth_blockNumber", []), h.hasPrefix("0x"), let v = Int64(String(h.dropFirst(2)), radix: 16), v > 0 else { continue }
+      if let f = first { return min(f, v) }
+      first = v
+    }
+    return nil
+  }
   public static func ethCall(_ to: String, _ data: String, agreed two: Bool = false) async -> String? {
     let p: [Any] = [["to": to, "data": data], "latest"]
     return two ? await agreed("eth_call", p) : try? await call("eth_call", p)

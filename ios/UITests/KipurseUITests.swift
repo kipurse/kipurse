@@ -14,9 +14,14 @@ final class KipurseUITests: XCTestCase {
   /// tab("AI 智能体") = AI 生活 → 管理, tab("设置") = 钱包 → gear.
   let tabIcons = ["AI 生活": "sparkles", "钱包": "creditcard.fill", "设置": "gearshape.fill"]   // t879: 设置 is the third tab
   func tab(_ name: String) -> XCUIElement {
-    if name == "AI 智能体" { let l = app.buttons.matching(identifier: "sparkles").firstMatch; if l.waitForExistence(timeout: 8) { l.tap() }; return app.buttons["life.manage"] }
-    return app.buttons.matching(identifier: tabIcons[name]!).firstMatch }
-  func tabCount() -> Int { tabIcons.values.filter { app.buttons.matching(identifier: $0).count > 0 }.count }
+    if name == "AI 智能体" { let l = tabButton("AI 生活"); if l.waitForExistence(timeout: 8) { l.tap() }; return app.buttons["life.manage"] }
+    return tabButton(name) }
+  /// The tab-bar button: some simulator boots put the SF Symbol name on the button, others only on its image child,
+  /// so match the button by its icon id OR by its own label (zh / en) — the same tab either way.
+  let tabLabelsEN = ["AI 生活": "AI Life", "钱包": "Wallet", "设置": "Settings"]
+  func tabButton(_ name: String) -> XCUIElement {
+    app.tabBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label IN %@", tabIcons[name]!, [name, tabLabelsEN[name]!])).firstMatch }
+  func tabCount() -> Int { tabIcons.keys.filter { app.tabBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label IN %@", tabIcons[$0]!, [$0, tabLabelsEN[$0]!])).count > 0 }.count }
   func back() { app.buttons["BackButton"].firstMatch.tap() }
   func reveal(_ e: XCUIElement) { var n = 0; while !e.isHittable && n < 8 { app.swipeUp(); n += 1 } }
   func tapPreset(_ label: String, _ index: Int) { let e = app.buttons.matching(NSPredicate(format: "label == %@", label)).element(boundBy: index); reveal(e); e.tap() }
@@ -51,13 +56,15 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5) || app.staticTexts["设置"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["BackButton"].exists, "t879: a tab, not a pushed page")
     shot("settings-tab-zh"); tab("钱包").tap()
     XCTAssertFalse(app.buttons["记录"].exists); XCTAssertFalse(app.buttons["待批准"].exists)
-    XCTAssertTrue(["1项", "1item"].contains((tab("AI 生活").value as? String)?.replacingOccurrences(of: " ", with: "") ?? ""), "§6#110: badge on AI 生活")  // badge = 1 pending approval (VoiceOver word is the system's language)
-    XCTAssertFalse(["1项", "1item"].contains((tab("钱包").value as? String)?.replacingOccurrences(of: " ", with: "") ?? ""), "§6#110: no badge on 钱包")
+    XCTAssertTrue(["2项", "2items"].contains((tab("AI 生活").value as? String)?.replacingOccurrences(of: " ", with: "") ?? ""), "§6#110: badge on AI 生活: \(String(describing: tab("AI 生活").value))")  // t1245 U9: badge = every card under 待你批准 — demo "main" has the Example Shop trust request + the Claude 8 USDC one-time request (VoiceOver word is the system's language)
+    XCTAssertFalse(((tab("钱包").value as? String) ?? "").range(of: "[0-9]", options: .regularExpression) != nil, "§6#110: no badge on 钱包")
     XCTAssertTrue(app.descendants(matching: .any)["balance.unit"].exists); XCTAssertFalse(app.staticTexts["主网"].exists)
     XCTAssertTrue(app.descendants(matching: .any)["balance.amount"].label.contains("14.10"), "t665: 2 decimals")
     XCTAssertFalse(app.descendants(matching: .any)["caps.spent"].exists, "t927/§6#110: home = balance, 充值/提现, 入金/支付/提现 records (待你批准 lives on AI 生活)")
     XCTAssertFalse(app.descendants(matching: .any)["life.pending.title"].exists, "§6#110: no 待你批准 on 钱包")
     shot("main-home")
+    tab("AI 生活").tap(); XCTAssertTrue(app.descendants(matching: .any)["life.pending.title"].waitForExistence(timeout: 5))   // the badge number = the cards shown here
+    XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "8 USDC")).firstMatch.exists, "one-time request card"); shot("life-pending")
   }
   func testApprovalOpensPhoneApproveSheet() {
     launch("main", tab: "life")   // §6#110: 待你批准 lives on AI 生活
@@ -536,7 +543,7 @@ final class KipurseUITests: XCTestCase {
   func testUnnamedPayeeAndDemoNotePlacement() {
     launch("main", tab: "life")
     let u = app.staticTexts["未命名收款方"]; XCTAssertTrue(u.waitForExistence(timeout: 8), "friendly title")
-    XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Muse · 0x")).firstMatch.exists, "short address on the second line")
+    XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "0x")).firstMatch.exists, "short address on the grey line under the title")   // t1245 U1: line 2 = which AI + category, line 3 = address / time
     app.terminate(); launch("main", tab: "agents")
     let siri = app.buttons["agent.siri.connect"].exists ? app.buttons["agent.siri.connect"] : app.descendants(matching: .any)["agent.siri.on"].firstMatch
     XCTAssertTrue(siri.waitForExistence(timeout: 8)); let sf = siri.frame
@@ -1153,7 +1160,7 @@ final class KipurseUITests: XCTestCase {
   /// §6#110: the usage guide holds 手机丢了怎么办 and 安全小贴士 (still exactly four steps).
   func testUsageGuideHasLostPhoneAndTips() {
     for lang in ["zh", "en"] {
-      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang]; app.launch()
+      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang, "-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)", "-AppleLocale", lang == "zh" ? "zh_CN" : "en_US"]; app.launch()   // phone language = App language (the system back button follows the phone), as the other language tests
       let g = app.buttons["settings.usageGuide"]; XCTAssertTrue(g.waitForExistence(timeout: 10)); for _ in 0..<6 where !g.isHittable { app.swipeUp() }; g.tap()
       XCTAssertTrue(app.descendants(matching: .any)["guide.step4"].firstMatch.waitForExistence(timeout: 5)); XCTAssertFalse(app.descendants(matching: .any)["guide.step5"].exists, "0B: four steps")
       let lost = app.buttons["guide.lostPhone"]; reveal(lost); XCTAssertTrue(lost.exists, lang); shot("usage-guide-\(lang)")

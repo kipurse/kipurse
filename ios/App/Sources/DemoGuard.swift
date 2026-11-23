@@ -18,3 +18,30 @@ final class DemoNetworkBlock: URLProtocol {
   override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
   override func stopLoading() {}
 }
+
+/// t1275 (#6): test / demo launch flags (-demo, -kp…, -wipeSelfTest, -openURL) exist only in Debug builds (UI tests). A Release build
+/// strips them first thing at launch, so even code that reads CommandLine.arguments outside #if DEBUG never sees them. App Review's
+/// demo is the kipurse://review-demo link (AppModel.handle -> startDemo), which never uses a launch flag.
+enum LaunchFlags {
+  static func isTestFlag(_ a: String) -> Bool { a == "-demo" || a.hasPrefix("-kp") || a == "-wipeSelfTest" || a == "-openURL" }
+  static func releaseStrip() {
+    #if !DEBUG
+    CommandLine.arguments = CommandLine.arguments.enumerated().filter { $0.offset == 0 || !isTestFlag($0.element) }.map(\.element)
+    #endif
+  }
+  static func has(_ f: String) -> Bool {
+    #if DEBUG
+    return CommandLine.arguments.contains(f)
+    #else
+    return false
+    #endif
+  }
+  /// Any demo / UI-test flag on this launch (Debug only).
+  static var anyTest: Bool {
+    #if DEBUG
+    return CommandLine.arguments.contains { $0 == "-demo" || $0 == "-wipeSelfTest" || $0.hasPrefix("-kp") }
+    #else
+    return false
+    #endif
+  }
+}

@@ -391,6 +391,7 @@ struct MainLimitsView: View {
     defer { ctx.invalidate() }
     do { let (c, j) = try await MainnetSession.signedEveryday(single: a, daily: b, term: t, context: ctx)
       if c == 200 {
+        SignedLimitsStore.save(AISpendLimits.Saved(single: a, daily: b, term: t), wallet: PhoneTrust.mainnetWallet)   // t1275: the exact numbers this phone key just signed = the only trust ceiling the phone accepts
         await m.refresh()
         if AISpendLimits.saved(m.state?.raw) != nil {
           evMsg = T("已保存，马上生效", "Saved, effective now")
@@ -1031,11 +1032,12 @@ enum OnboardAPI {
       if case .array(let a)? = r["removes"] { removes = a.count }
       if let sfp = r["fingerprint"]?.string, sfp != fingerprint { fpMismatch = sfp; throw NSError(domain: "kipurse", code: 3, userInfo: [NSLocalizedDescriptionKey: T("安全检查没通过：服务器发来的内容和这台 iPhone 的不一样。已停止，没有扣钱。", "Safety check failed: the server's data doesn't match this iPhone. Stopped; nothing charged.")]) }
       // t621 #1: the phone decodes the exact batch first and commits to it (#vh); the signing page refuses anything else.
-      let (url, verifiedW) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit)
+      let (url, verifiedW, verifiedO) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit)
       phase = .signing
       m.openOwnerPage(url) { [weak self] mm in
         guard let j = try? await OnboardAPI.post("onboard/confirm", ["id": id]), j["ok"]?.bool == true else { return false }
-        if let w = j["wallet"]?.string, w.count == 42, verifiedW == nil || verifiedW!.lowercased() == w.lowercased() { Operator.setWallet(w, owner: j["owner"]?.string, path: "/t/" + w.lowercased()) }
+        // t1275: only the wallet this phone checked itself, with the owner this phone holds (never the server's "owner" field)
+        if let w = j["wallet"]?.string, w.count == 42, let vw = verifiedW, vw.lowercased() == w.lowercased() { Operator.setWallet(w, owner: verifiedO, path: "/t/" + w.lowercased()) }
         mm.webSheet = nil; Haptics.success(); self?.phase = .done(siri: j["siri"]?.bool ?? false); return true
       }
     } catch { err = error.localizedDescription; phase = .form }
@@ -1044,14 +1046,15 @@ enum OnboardAPI {
 
 extension OnboardFlow {
   static func stop(_ msg: String) -> NSError { NSError(domain: "kipurse", code: 4, userInfo: [NSLocalizedDescriptionKey: msg]) }
-  /// Returns the signing-page URL with the commitment, and the wallet the phone itself checked (nil for the simulator mock).
-  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "") async throws -> (URL, String?) {
+  /// Returns the signing-page URL with the commitment, the wallet the phone itself checked (nil for the simulator mock), and the owner the
+  /// phone itself holds (t1275: the SIWE-verified sign-in owner, or the stored owner of the known wallet; never a server field).
+  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "") async throws -> (URL, String?, String?) {
     #if DEBUG
-    if UserDefaults.standard.string(forKey: "kpOnboardServer") != nil { return (u, nil) }   // UI tests: local simulator mock, no real batch
+    if UserDefaults.standard.string(forKey: "kpOnboardServer") != nil { return (u, nil, nil) }   // UI tests: local simulator mock, no real batch
     #endif
     let choice = RequestVerify.Choice(single: String(AnswerRules.parseUSDC(single) ?? 0), daily: String(AnswerRules.parseUSDC(daily) ?? 0), term: String(AnswerRules.parseUSDC(term) ?? 0), days: Int(days))
     let bad = { (p: [String]) in stop(T("手机检查发现开通内容和你选的不一致，已停止，没有扣钱：", "This iPhone found a mismatch in the setup. Stopped; nothing charged: ") + p.joined(separator: "; ")) }
-    var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil
+    var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil, heldOwner: String?
     if OnboardAPI.isNew {
       guard let o = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey), CoinbaseIdentity.isAddress(o) else { throw stop(T("请先用 Coinbase 登录。", "Please sign in with Coinbase first.")) }
       var body: [String: Any] = ["id": id, "owner": o, "features": [String]()]   // t1008u: no dues slot (no new dues)
@@ -1059,10 +1062,10 @@ extension OnboardFlow {
       let p = try await OnboardAPI.post("onboard/new/prepare", body)
       guard let c = BatchVerify.calls(p["calls"]), let w = p["wallet"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
       if let po = p["owner"]?.string, po.lowercased() != o.lowercased() { throw bad(["owner"]) }
-      owner = o; wallet = w; calls = c; chain = BatchVerify.chainId(p["chainId"]) ?? 8453; newWallet = !(p["existing"]?.bool ?? false); vault = p["vault"]?.string
+      owner = o; wallet = w; calls = c; chain = BatchVerify.chainId(p["chainId"]) ?? 8453; newWallet = !(p["existing"]?.bool ?? false); vault = p["vault"]?.string; heldOwner = o
     } else {
       guard let c = BatchVerify.calls(r["calls"]), let o = Operator.ownerAccount ?? r["owner"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
-      owner = o; wallet = Operator.wallet; calls = c; chain = BatchVerify.chainId(r["chainId"]) ?? 8453; newWallet = false
+      owner = o; wallet = Operator.wallet; calls = c; chain = BatchVerify.chainId(r["chainId"]) ?? 8453; newWallet = false; heldOwner = Operator.ownerAccount
     }
     // t1197u (§6#92): new wallets open on V5.3, older ones stay V5.2. The suite is the one whose vault (computed on this phone) is the
     // server's vault; the chain must agree (adapter.vaultAddress), and every step is then checked against THAT suite only.
@@ -1074,7 +1077,7 @@ extension OnboardFlow {
     guard rep.ok else { throw bad(rep.problems) }
     if vault != nil { KipurseSuite.remember(suite, wallet: wallet) }
     guard let cu = BatchVerify.committedURL(u, chainId: chain, from: owner, calls: calls) else { throw bad(["commit"]) }
-    return (cu, wallet)
+    return (cu, wallet, heldOwner)
   }
 }
 

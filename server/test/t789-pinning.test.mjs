@@ -10,7 +10,7 @@ test('sign-in page carries integrity = sha384(signin.js), same value pinned in t
   const want='sha384-'+createHash('sha384').update(JS).digest('base64');assert.equal(signinSri(JS),want);
   assert.equal(res.c,200);assert.ok(res.b.includes(`integrity="${want}"`),'SRI on the script tag');
   assert.equal((res.b.match(/<script/g)??[]).length,2,'only kp-data + the pinned bundle');
-  assert.equal(want,'sha384-QNbm/X1nJaabK6dmly8sf65qfUHAkLgaCJHUfplx99ISQq9mkeXjtHosMwPAoJQ9','= SigninCheck.scriptSRI in the iOS app; change both together');});
+  assert.equal(want,'sha384-biPOCKk7AzhJHa2QhEZ1IoYywDyBEOWXTRaX3Cz+97x45gEMKKk3uRgiXIDKbjf1','= SigninCheck.scriptSRI in the iOS app; change both together');});
 test('emergency page: "withdraw all" goes to the pinned /v3 sign host, never the server page',async()=>{
   const W='0x00000000000000000000000000000000000000A1',O='0x00000000000000000000000000000000000000B2';
   const EM=createOwnerEmergency({wallet:W,owner:O,verifyOwner:async()=>false,pause:async()=>({}),cancelHolds:async()=>({})});

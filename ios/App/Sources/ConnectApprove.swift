@@ -217,6 +217,7 @@ struct ApproveConnectSheet: View {
       }
       if approve {
         AIConnect.pendingAmounts = nil
+        if savedLimits == nil, i.modeFirst, let g = i.proposal { SignedLimitsStore.save(g, wallet: PhoneTrust.mainnetWallet) }   // t1275 (#2): exactly the amounts this Face ID signed (firstDigest), this device only
         m.applyEveryday(j["everyday"])   // t1157u: saved limits from the reply, even if the session step below fails
         if let c = j["siriCredential"] { SiriCredential.save(c) }   // t1158u: Siri's pay-only credential (only in the signed Siri approval reply)
         if let ctx { _ = try? await MainnetSession.signIn(context: ctx) }   // same confirmation, no second prompt

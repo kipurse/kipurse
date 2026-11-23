@@ -7,7 +7,7 @@ import KipurseCore
 /// safety pauses. Works only once the owner adds the APNs key on the server; the in-app cards are always the fallback.
 final class PushAppDelegate: NSObject, UIApplicationDelegate {
   func application(_ app: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-    if !CommandLine.arguments.contains("-demo") { app.registerForRemoteNotifications(); Task { await PushBridge.ensurePermission() } }   // t1208u §6#94: ask on launch if a session / wallet exists and iOS has not decided
+    if !LaunchFlags.has("-demo") { app.registerForRemoteNotifications(); Task { await PushBridge.ensurePermission() } }   // t1208u §6#94: ask on launch if a session / wallet exists and iOS has not decided
     #if DEBUG
     // t1220u §6#96 (tests only): post the SAME notification the server sends for an AI payment request (kind=mandate, KP_MANDATE),
     // so a UI test can tap it like the owner did. Never in Release.
@@ -36,7 +36,7 @@ enum PushBridge {
   /// but never shown. Ask once (system prompt only, no UI change) when a mainnet session or bound wallet exists; after a grant register
   /// with APNs and upload the token. Called on launch and right after a new phone session is saved.
   static func ensurePermission() async {
-    let demo = DemoGuard.active || CommandLine.arguments.contains("-demo") || CommandLine.arguments.contains("-wipeSelfTest") || CommandLine.arguments.contains(where: { $0.hasPrefix("-kp") })   // demo + UI-test launches never see the system prompt
+    let demo = DemoGuard.active || CommandLine.arguments.contains("-demo") || CommandLine.arguments.contains("-wipeSelfTest") || CommandLine.arguments.contains(where: { $0.hasPrefix("-kp") })   // demo + UI-test launches never see the system prompt (t1275: a Release build strips these flags at launch, LaunchFlags.releaseStrip)   // demo + UI-test launches never see the system prompt
     if demo { return }
     let c = UNUserNotificationCenter.current()
     var st = status(await c.notificationSettings().authorizationStatus)

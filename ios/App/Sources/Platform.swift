@@ -271,21 +271,29 @@ enum LocalWipe {
   }
 }
 
-/// Auth / session errors with their real domain + code, appended to Documents/kp-auth.log (read with devicectl). No secrets logged.
+/// Auth / session errors with their real domain + code, appended to Documents/kp-auth.log (read with devicectl / Files). No secrets logged.
+/// t1275 (#4): capped (over 256 KB it rotates to kp-auth.old.log, so at most ~512 KB on the phone); the system log copy (NSLog) is Debug only.
+/// The file stays in Documents because the owner reads it through Files / Finder and the app has no other way to show it.
 enum AuthLog {
   static var url: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("kp-auth.log") }
+  static var oldURL: URL { url.deletingLastPathComponent().appendingPathComponent("kp-auth.old.log") }
+  static let maxBytes = 256 * 1024
+  private static let lock = NSLock()
   static func record(_ phase: String, _ e: Error) {
     let n = e as NSError; var line = "\(ISO8601DateFormatter().string(from: Date())) \(phase) domain=\(n.domain) code=\(n.code) desc=\(n.localizedDescription)"
     if let u = n.userInfo[NSUnderlyingErrorKey] as? NSError { line += " under=\(u.domain)/\(u.code)" }
-    NSLog("[kp-auth] %@", line)
-    let d = Data((line + "\n").utf8)
-    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: url) }
+    append(line)
   }
   /// t1256 (§6#125): one step of a Face ID / signing flow (no secrets: only step names, counts and error codes).
-  static func note(_ phase: String, _ msg: String) {
-    let line = "\(ISO8601DateFormatter().string(from: Date())) \(phase) \(msg)"
+  static func note(_ phase: String, _ msg: String) { append("\(ISO8601DateFormatter().string(from: Date())) \(phase) \(msg)") }
+  private static func append(_ line: String) {
+    #if DEBUG
     NSLog("[kp-auth] %@", line)
-    let d = Data((line + "\n").utf8)
+    #endif
+    let d = Data((line + "\n").utf8), fm = FileManager.default
+    lock.lock(); defer { lock.unlock() }
+    if let sz = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, sz + d.count > maxBytes {   // t1275: rotate, keep one old file
+      try? fm.removeItem(at: oldURL); try? fm.moveItem(at: url, to: oldURL) }
     if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: url) }
   }
   static func isUserCancel(_ e: Error) -> Bool {

@@ -104,7 +104,7 @@ public enum SafetyCaps {
     public var data: String?, revoked: Bool, block: Int64, li: Int64
   }
   public static var store: UserDefaults = .standard
-  static func key(_ a: String) -> String { "kp.safetycaps.memo.v1." + a.lowercased() }
+  static func key(_ a: String) -> String { "kp.safetycaps.memo.v2." + a.lowercased() }   // t1275: v2 = built only from two-node-agreed reads (v1 single-node memos are not reused)
   public static func memo(_ a: String) -> Memo? { store.data(forKey: key(a)).flatMap { try? JSONDecoder().decode(Memo.self, from: $0) } }
   static func save(_ m: Memo, _ a: String) { if let d = try? JSONEncoder().encode(m) { store.set(d, forKey: key(a)) } }
   public static let maxCalls = 30
@@ -119,7 +119,7 @@ public enum SafetyCaps {
   static func events(_ account: String, from: Int64, to: Int64) async -> (ok: Bool, best: (data: String, revoked: Bool, block: Int64, li: Int64)?) {
     let params: [Any] = [["address": manager, "fromBlock": "0x" + String(from, radix: 16), "toBlock": "0x" + String(to, radix: 16),
                           "topics": [[eventTopic, revokedTopic]]]]
-    guard let raw = try? await ChainRPC.callAny("eth_getLogs", params, nodes: nodes) else { return (false, nil) }
+    guard let raw = await ChainRPC.agreedAny("eth_getLogs", params, nodes: nodes, canon: ChainRPC.logsCanon) else { return (false, nil) }   // t1275: two nodes must agree
     let arr = (raw as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
     var best: (data: String, revoked: Bool, block: Int64, li: Int64)?
     for l in arr {
@@ -137,8 +137,7 @@ public enum SafetyCaps {
 
   static func scan(account: String) async -> Read {
     guard FeatureSwitch.chainRead.on else { return Read(caps: .unreadable) }
-    guard let latestHex = try? await ChainRPC.call("eth_blockNumber", [], nodes: nodes),
-          let latest = Int64(String(latestHex.dropFirst(2)), radix: 16) else { return fromMemo(memo(account), account) ?? Read(caps: .unreadable) }
+    guard let latest = await ChainRPC.agreedHead(nodes: nodes) else { return fromMemo(memo(account), account) ?? Read(caps: .unreadable) }   // t1275: a block both nodes have
     var m = memo(account) ?? Memo(newest: latest, oldest: latest + 1, data: nil, revoked: false, block: 0, li: 0)
     var calls = 0
     let chunk: Int64 = 50_000

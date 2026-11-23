@@ -11,7 +11,7 @@ import CryptoKit
 /// already compromised could answer the phone's check and the browser differently; the page only ever asks for a free SIWE
 /// signature, and every money step still goes through the pinned sign host + the phone's own batch checks.
 public enum SigninCheck {
-  public static let scriptSRI = "sha384-QNbm/X1nJaabK6dmly8sf65qfUHAkLgaCJHUfplx99ISQq9mkeXjtHosMwPAoJQ9"
+  public static let scriptSRI = "sha384-biPOCKk7AzhJHa2QhEZ1IoYywDyBEOWXTRaX3Cz+97x45gEMKKk3uRgiXIDKbjf1"
   public static func sri(_ d: Data) -> String { "sha384-" + Data(SHA384.hash(data: d)).base64EncodedString() }
   /// nil = the page looks exactly like the published sign-in page; otherwise a short reason (never shown raw to users).
   public static func htmlProblem(_ html: String) -> String? {

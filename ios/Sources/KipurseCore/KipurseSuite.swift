@@ -51,6 +51,8 @@ public struct KipurseSuite: Equatable, Sendable {
 
   /// Existing wallet without a remembered suite: switch to V5.3 only when the server's vault is this wallet's V5.3 vault and it has
   /// code on chain (read by the phone itself). Never switches a wallet that is already remembered.
+  /// t1275: a vault's code counts only when two public nodes agree (same helper as WalletVerify / MoveFollow).
+  static let agreedCode: (String) async -> String? = { a in await ChainRPC.agreed("eth_getCode", [a, "latest"]) }
   @discardableResult public static func detect(wallet: String?, serverVault: String?, code: ((String) async -> String?)? = nil) async -> KipurseSuite {
     guard let w = wallet, Hex.decode(w)?.count == 20 else { return active }
     // t1214 (§6#102): the owner's own V5.2 -> V5.4 switch (and its rollback), both signed by his Base Account. Only these two moves, and only
@@ -59,16 +61,16 @@ public struct KipurseSuite: Equatable, Sendable {
     // t1250 (§6#119): the owner's new V5.5 wallet (or a wallet opened on V5.5): the server's vault is exactly this wallet's V5.5 vault (computed here)
     // and that vault has code on chain. Never moves a wallet already remembered on another suite (a V5.5 wallet is always a NEW address).
     if stored(wallet: w) == nil, let v = sv, v == v55.vault(wallet: w) {
-      let c = await (code ?? { a in try? await ChainRPC.call("eth_getCode", [a, "latest"]) })(v)
+      let c = await (code ?? agreedCode)(v)
       if let c, c.count > 2 { remember(.v55, wallet: w); return .v55 } }
     let cur = stored(wallet: w) ?? (forVault(sv, wallet: w) == .v53 ? nil : .v52)
     if cur == .v52 || cur == nil, let v = sv, v == v54.vault(wallet: w) {
-      let c = await (code ?? { a in try? await ChainRPC.call("eth_getCode", [a, "latest"]) })(v)
+      let c = await (code ?? agreedCode)(v)
       if let c, c.count > 2 { remember(.v54, wallet: w); return .v54 } }
     if cur == .v54, let v = sv, v == v52.vault(wallet: w) { remember(.v52, wallet: w); return .v52 }
     if let s = stored(wallet: w) { return s }
     guard let v = serverVault?.lowercased(), forVault(v, wallet: w) == .v53 else { return .v52 }
-    let c = await (code ?? { a in try? await ChainRPC.call("eth_getCode", [a, "latest"]) })(v)
+    let c = await (code ?? agreedCode)(v)
     guard let c, c.count > 2 else { return .v52 }
     remember(.v53, wallet: w); return .v53 }
 }

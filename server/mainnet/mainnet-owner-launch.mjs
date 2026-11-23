@@ -18,9 +18,9 @@ const {createOwnerSignSurface}=await import(G+'src/v5/owner-sign-surface.mjs');c
 const {buildMigrationPlanV5}=await import(G+'src/v5/plan.mjs');const {opsToday}=await import(G+'src/v5/userop.mjs');const {createV5Mcp}=await import(G+'src/v5/mcp.mjs');const {resolveAgent}=await import(G+'src/v4/agents.mjs');
 const {StreamableHTTPServerTransport}=await import('@modelcontextprotocol/sdk/server/streamableHttp.js');const httpMod=await import('node:http');const {createOAuth,reserveOAuthAgent,replaceSiriAgent}=await import(G+'kit/oauth.mjs');const AGL=await import(G+'src/v5/agent-list.mjs');const {createPublicTrustApproval}=await import(G+'src/v5/trust-approve-public.mjs');const {createPhoneEnrollment,WALLET_ABI,p256VerifyDigest}=await import(G+'src/v5/phone-signer.mjs');const {createPhoneSession}=await import(G+'src/v5/phone-session.mjs');const {createPublicLimits}=await import(G+'src/v5/limits-public.mjs');
 const {createRegistry,createIndex,resolveTenant,sha256,followMoved}=await import(G+'src/v5/tenancy.mjs');const {createOnboarding,onboardFee}=await import(G+'src/v5/onboard.mjs');
-const {createNewWalletOnboarding}=await import(G+'src/v5/onboard-new.mjs');const {NO_CEILING}=await import(G+'src/v5/phone-signer.mjs');const {createTenantCache,createMcpPool,createAgentRouter,readRaw}=await import(G+'src/v5/router.mjs');
+const {createNewWalletOnboarding}=await import(G+'src/v5/onboard-new.mjs');const {NO_CEILING}=await import(G+'src/v5/phone-signer.mjs');const {createTenantCache,createMcpPool,createAgentRouter,readRaw,readCapped}=await import(G+'src/v5/router.mjs');
 const {createAnomalyGuard,guardEngine,pauseMsOf}=await import(G+'src/v5/anomaly.mjs');const {createPush,apnsConfigFromEnv}=await import(G+'src/v5/push.mjs');const {pushTokenList,registerPushToken}=await import(G+'src/v5/push-tokens.mjs');const {createOwnerWithdraw}=await import(G+'src/v5/owner-withdraw.mjs');const {createExecutorKeyring}=await import(G+'src/v5/executor-keys.mjs');const {plainStore,tenantStore,loadDataKey}=await import(G+'src/v5/at-rest.mjs');const {createRateLimiter,kvKey}=await import(G+'src/v5/store.mjs');
-const rawBody=req=>readRaw(req);
+const rawBody=req=>readRaw(req);const MCP_MAX_BODY=65536;   // t1275: = router cap (src/v5/router.mjs)
 const {operatorConstants}=await import(G+'src/v5/operator-constants.mjs');
 // t1270: no built-in operator values in the open-source build: set "operatorConstants" {feeTo, paymasters, ownerPaymasters}
 // in mainnet-trustflow.config.json (docs/ARCHITECTURE_LAYERS.md). Missing feeTo -> the launcher refuses to start.
@@ -208,7 +208,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
     commitSpend:(amounts)=>{const prior=everyKV.get(everyKey);const r=EVD.set({single:amounts.single,daily:amounts.daily,term:amounts.total});if(!r.ok)return r;const view=consentSpend(EVD.get());
       return {ok:true,limits:{perPayment:view.perPayment,perDay:view.perDay,termTotal:view.termTotal,at:view.at??null},undo(){if(prior===undefined)EVD.forget();else everyKV.set(everyKey,prior);}};},
     onConnected:name=>{if(name==='Siri'){S.siriAgent={since:new Date().toISOString()};save();}},
-    ownerSession:()=>null,
+    ownerSession:()=>null,ownerAuth:req=>PS.check(req),   // t1275: /oauth/owner-decide deny needs the phone session (or a Base Account decline signature)
     // Face ID approval by the ENROLLED phone key (KipursePhoneApprover), re-checked on chain at every decision. Base Account stays as the alternative.
     phoneApprover:{active:()=>PH.active(),verify:(a,d,r,s)=>p256VerifyDigest(a,d,r,s),
       onChain:overrides.phoneOnChain??(async a=>!!await pub.readContract({address:R.wallet,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.approver]}))},
@@ -314,7 +314,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
   const {createUserDataEraser,mainnetEraseParts,createTombstones,applyTombstone,kvUserParts}=await import(G+'src/v5/user-data.mjs');
   const TOMB=TOMB_G;   // t1265: shared, HMAC-keyed
   const ERASE=createUserDataEraser({kv:KV,tomb:TOMB,onErased:(w,t)=>{S.erasedAt=t;save();},enabled:(overrides.userErase??process.env.KIPURSE_USER_ERASE)==='1'||overrides.userErase===true,resolveTenant:async req=>PS.check(req)?{wallet:R.wallet,phone:PH}:null,
-    parts:[{name:'tenant-index',forget:()=>{unindex();return {ok:true};}},...kvUserParts(KV),{name:'safety',forget:()=>SAFE.forget(R.wallet)},{name:'executor-key',forget:()=>KR.forget(R.wallet)},{name:'withdraw',forget:()=>WD.forget()},...mainnetEraseParts({S,save,ownerPay:OPAY,phone:PH,ledgerCache:LED,limits:{forget:()=>{try{EVD.forget();}catch{}return LIM.forget();}},trustOwner:()=>O(),getDb:()=>E.ledger.db,agents,kv:KV}),
+    parts:[{name:'tenant-index',forget:()=>{unindex();return {ok:true};}},...kvUserParts(KV),{name:'safety',forget:()=>SAFE.forget(R.wallet)},{name:'executor-key',forget:()=>KR.forget(R.wallet)},{name:'withdraw',forget:()=>WD.forget()},...mainnetEraseParts({S,save,ownerPay:OPAY,phone:PH,ledgerCache:LED,limits:{forget:()=>{try{EVD.forget();}catch{}return LIM.forget();}},trustOwner:()=>O(),getDb:()=>E.ledger.db,agents,kv:KV,siri:SC/* t1275 */}),
       /* t1265: what the parts above could not reach - the wallets this owner moved away from (each fully erased + tombstoned), the owner-keyed
          V5.5 move record, the at-rest migration backups, the registry record (marked erased), and deleted KV values folded out of the WAL */
       {name:'moved-from-wallets',forget:async()=>{for(const r of UD.movedFromChain(REG,R.wallet,followMoved))await eraseRetired(r);}},
@@ -423,7 +423,7 @@ cfg.isPaused=()=>!!SAFE.paused(R.wallet);cfg.blacklistFile=join(DATA,'scam-black
           const {hashToken}=await import(G+'src/v4/agents.mjs');const rf=AGL.mcpRefusal({tok,tokenAgentHit:t=>{const h=hashToken(t);return (agents??[]).find(x=>x.tokenSha256===h)??null;},accessStatus:t=>OA.accessStatus(t)});
           OBS.log('mcp_refused',{reason:rf.reason,kind:rf.agentId??'none',status:401});}
         if(!a)return j(401,{error:'invalid_token',error_description:'connect with OAuth (see WWW-Authenticate) or send your Kipurse agent token as Authorization: Bearer <token>'},{'www-authenticate':OA.challenge()+(tok?', error="invalid_token"':''),'access-control-expose-headers':'WWW-Authenticate, Mcp-Session-Id'});
-        let body;if(req.method==='POST'){let b='';for await(const c of req){b+=c;if(b.length>1e6)return j(413,{error:'too_large'});}body=b?JSON.parse(b):undefined;}
+        let body;if(req.method==='POST'){const b=await readCapped(req,MCP_MAX_BODY);if(b===null)return j(413,{error:'too_large'});body=b?JSON.parse(b):undefined;}   // t1275: same 64 KB cap as the router, also for a streamed body with no content-length
         OBS.log('mcp',{kind:a.id});const server=MCP.acquire(a.id);const t=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});res.on('close',()=>{try{t.close();}catch{}MCP.release(a.id,server);});
         await server.connect(t);return await t.handleRequest(req,res,body);}
       if(u.pathname==='/everyday'&&req.method==='GET'){if(!PS.check(req))return j(401,{error:'phone_session_required'});return j(200,{...EVD.get(),why:EVERYDAY_WHY});}

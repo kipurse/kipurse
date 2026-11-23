@@ -117,11 +117,13 @@ export function scrubLedgerDb(db){if(!db)return;const has=t=>{try{return !!db.pr
     ex('layered_pay',`UPDATE layered_pay SET status_url=NULL, merchant_status=NULL`);
     db.exec('COMMIT');}catch(e){try{db.exec('ROLLBACK');}catch{}throw e;}
   try{db.exec('VACUUM');}catch{}try{db.exec('PRAGMA wal_checkpoint(TRUNCATE)');}catch{}}
-export function mainnetEraseParts({S,save,ownerPay,phone,ledgerCache,limits,trustOwner,getDb,agents,kv}){
+export function mainnetEraseParts({S,save,ownerPay,phone,ledgerCache,limits,trustOwner,getDb,agents,kv,siri}){
   const clear=o=>{if(o&&typeof o==='object')for(const k of Object.keys(o))delete o[k];};
   return [
     // first: cut every agent credential (bearer tokens + OAuth) before anything else, so a later failure can't leave an agent able to pay
     {name:'agent-credentials',forget:()=>revokeAllAgents(S,save,agents,kv)},
+    // t1275: Siri too - the ksc_ credential (else the same phone key re-enrolled makes the old token live again), the stored Siri request bodies, the connect record
+    {name:'siri',forget:()=>{try{siri?.revoke?.('erase');}catch{}delete S.siriCred;delete S.siriPending;delete S.siriAgent;save();}},
     {name:'owner-pay',forget:w=>ownerPay.forget(w)},
     {name:'phone-sessions',forget:()=>{S.phoneSession??={};S.phoneSession.sessions={};save();}},
     {name:'phone-enrollment',forget:()=>phone.forget()},

@@ -2,7 +2,7 @@
 // MULTI-USER ROUTER (open core). Every public request is pinned to exactly ONE wallet before any handler runs, and a credential
 // that belongs to another wallet is refused (resolveTenant). Global, wallet-less endpoints: wallet discovery (/phone/find) and new-user
 // setup (/onboard/new). Operator code only passes parameters (rate limits, cache size); it cannot change these rules.
-import {randomBytes} from 'node:crypto';import {resolveTenant,sha256,followMoved} from './tenancy.mjs';import {kvKey} from './store.mjs';import {approverHint} from './phone-signer.mjs';import {createSanctions} from './sanctions.mjs';
+import {randomBytes} from 'node:crypto';import {resolveTenant,sha256,followMoved} from './tenancy.mjs';import {kvKey,rlHash} from './store.mjs';import {approverHint} from './phone-signer.mjs';import {createSanctions} from './sanctions.mjs';
 export const FIND_MSG=n=>'Kipurse find wallet v1\nnonce:'+n;
 const HEX=/^(0x)?[0-9a-fA-F]{1,64}$/,NONCE=/^[0-9a-f]{48}$/;
 /** t796 M2: write limits per client (salted IP hash) + global caps; every counter lives in the KV with a TTL = its window. */
@@ -18,9 +18,11 @@ export const WRITE_LIMITS=[
   {name:'any-write',re:/./,per:120,global:20000,windowMs:60e3}];
 /** t796: IPv6 clients are bucketed by /64 (one subscriber); IPv4 by address. The global cap is the backstop against address rotation. */
 export const ipBucket=ip=>{const s=String(ip).toLowerCase().replace(/^::ffff:/,'');if(!s.includes(':'))return s;const [h,t='']=s.split('::');const hg=h?h.split(':'):[],tg=t?t.split(':'):[];const g=[...hg,...Array(Math.max(0,8-hg.length-tg.length)).fill('0'),...tg];return g.slice(0,4).map(x=>x.replace(/^0+(?=.)/,'')).join(':')+'::/64';};
-const ipKey=ip=>sha256('kp-rl:'+ipBucket(ip)).slice(0,24);   // t1265: also the per-IP request limiter key (raw IPs never become KV keys)
+export const ipKey=ip=>rlHash('kp-rl',ipBucket(ip));/* t1275: salted HMAC, see store.mjs rlHash */   // t1265: also the per-IP request limiter key (raw IPs never become KV keys)
 export function writeLimited(kv,path,ip){for(const L of WRITE_LIMITS){if(!L.re.test(path))continue;const n=kv.incr(kvKey('rl',null,'w:'+L.name+':'+ipKey(ip)),L.windowMs),g=kv.incr(kvKey('rl',null,'w*:'+L.name),L.windowMs);if(n>L.per||g>L.global)return L.name;}return null;}
 const bodyOrEmpty=async r=>{let raw;try{raw=await readRaw(r);}catch(e){if(e?.status===413)throw e;return {};}try{return JSON.parse(raw||'{}');}catch{return {};}};
+/** t1275: read a body counting BYTES (a streamed body with no content-length gets the same cap); null when over max. */
+export const readCapped=async(req,max=65536)=>{const bs=[];let n=0;for await(const c of req){const b=Buffer.isBuffer(c)?c:Buffer.from(String(c));n+=b.length;if(n>max)return null;bs.push(b);}return Buffer.concat(bs).toString('utf8');};
 export const readRaw=async(req,max=65536)=>{if(req.__raw!==undefined)return req.__raw;let b='';for await(const c of req){b+=c;if(b.length>max)throw Object.assign(Error('too_large'),{status:413});}req.__raw=b;return b;};
 /** Bounded LRU of per-wallet runtimes. load(rec) builds one; close() is called on eviction. Concurrent first loads share one promise. */
 export function createTenantCache({reg,load,max=500}){const T=new Map();

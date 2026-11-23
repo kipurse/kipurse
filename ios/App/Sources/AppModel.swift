@@ -68,6 +68,7 @@ final class AppModel: ObservableObject {
     seenApprovals = []; UserDefaults.standard.removeObject(forKey: "seenApprovals")
     AllowanceStore.shared.resetWalletScoped()   // approvals, overall limits, agents, push hints (kp.pendingPushHints), held Face ID
     AIConnect.pendingAmounts = nil
+    SignedLimitsStore.clear()   // t1275 (#2): the limits signed on this phone belong to the wallet we are leaving
     UserDefaults.standard.removeObject(forKey: "kp.pendingPushHints")
   }
   /// Any HTTP answer from the Kipurse server = up; a network failure = down. Never shows the raw system error.
@@ -128,7 +129,7 @@ final class AppModel: ObservableObject {
     NotificationCenter.default.addObserver(forName: AssistantHooks.decision, object: nil, queue: .main) { [weak self] n in MainActor.assumeIsolated { self?.assistantDecision(n) } }
     NotificationCenter.default.addObserver(forName: AssistantHooks.siriUsed, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { Task { await self?.refresh() } } }   // t1161u (§6#78)
     Awareness.registerCategories(); NotificationRouter.shared.model = self; UNUserNotificationCenter.current().delegate = NotificationRouter.shared
-    if CommandLine.arguments.contains("-kpKeyDiag") { AppModel.keyDiag(); exit(0) }   // read-only: public fingerprints only, then quit (no wipe)
+    if LaunchFlags.has("-kpKeyDiag") { AppModel.keyDiag(); exit(0) }   // t1275 (#6): Debug only   // read-only: public fingerprints only, then quit (no wipe)
     // Fresh-install cleanup runs only on the very first launch of this install (UserDefaults is removed with the app) and never deletes
     // the phone signer key: a locked device or a background launch can hide keychain items, which used to look like "fresh install".
     #if DEBUG
@@ -141,10 +142,10 @@ final class AppModel: ObservableObject {
     if let i = CommandLine.arguments.firstIndex(of: "-kpUnboundWallet"), i + 1 < CommandLine.arguments.count { Unbound.remember(wallet: CommandLine.arguments[i + 1], path: nil); phoneUnbound = true }   // t789 live UI test: a real wallet's emergency page   // reinstall / new phone: bind card
     #endif
     CoinbaseIdentity.migrate(launchedBefore: UserDefaults.standard.bool(forKey: "kp.launchedBefore"), wallet: Operator.wallet)   // app updates keep a working wallet
-    needsIdentity = !CoinbaseIdentity.verified() && !AppModel.assistantDemo && !CommandLine.arguments.contains("-demo")
+    needsIdentity = !CoinbaseIdentity.verified() && !AppModel.assistantDemo && !LaunchFlags.has("-demo")   // t1275 (#6): -demo is Debug only
     if !UserDefaults.standard.bool(forKey: "kp.launchedBefore"), SessionVault.load() == nil, MainnetSession.load() == nil, !PhoneKey.isPresent(), !CommandLine.arguments.contains("-wipeSelfTest"), !AppModel.assistantDemo { Task { await LocalWipe.all(keepPhoneKey: true); UserDefaults.standard.set(true, forKey: "kp.launchedBefore") } } else { UserDefaults.standard.set(true, forKey: "kp.launchedBefore") }   // not logged in = fresh-install state: clear any leftovers (tmp PDF, caches)
-    if isMain, !CommandLine.arguments.contains("-demo") { Task { await checkServer() } }   // t821
-    if !CommandLine.arguments.contains("-demo"), !needsIdentity, SessionVault.load() != nil || isMain { Task { await resume() } }   // new install: nothing is resolved before Sign in with Coinbase   // open without Face ID: reuse a live session if there is one
+    if isMain, !LaunchFlags.has("-demo") { Task { await checkServer() } }   // t821
+    if !LaunchFlags.has("-demo"), !needsIdentity, SessionVault.load() != nil || isMain { Task { await resume() } }   // new install: nothing is resolved before Sign in with Coinbase   // open without Face ID: reuse a live session if there is one
     #if DEBUG
     if CommandLine.arguments.contains("-wipeSelfTest") { Task { let r = await AppModel.wipeSelfTest(); wipeReport = r } }
     if let i = CommandLine.arguments.firstIndex(of: "-demo"), i + 1 < CommandLine.arguments.count {

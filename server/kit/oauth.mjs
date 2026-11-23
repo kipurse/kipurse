@@ -63,10 +63,10 @@ export const firstConnectDigest=f=>'0x'+createHash('sha256').update(firstConnect
 const atomicDec=v=>{const b=BigInt(v);const whole=b/1000000n,frac=b%1000000n;if(frac===0n)return whole.toString();return `${whole}.${frac.toString().padStart(6,'0').replace(/0+$/,'')}`;};
 const atomic3=b=>{const ok=v=>/^[1-9]\d*$/.test(String(v??''));if(!ok(b?.single)||!ok(b?.daily)||!ok(b?.total))return null;const s=BigInt(b.single),d=BigInt(b.daily),t=BigInt(b.total);if(s>d||d>t)return null;return {single:s.toString(),daily:d.toString(),total:t.toString()};};
 /** phoneApprover (mainnet): {active:()=>{approver,x,y,fingerprint}|null, onChain:async a=>bool (still an owner of the wallet), verify:(a,digestHex,r,s)=>bool} */
-export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,commitSpend=null,everydayView=null,approveExtras=null,onConnected=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null,log=null,onForget=null,maxClients=Number(process.env.KIPURSE_OAUTH_MAX_CLIENTS??200),clientIdleMs=30*86400e3,maxPending=200}){
+export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,commitSpend=null,everydayView=null,approveExtras=null,onConnected=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null,log=null,onForget=null,maxClients=Number(process.env.KIPURSE_OAUTH_MAX_CLIENTS??200),clientIdleMs=30*86400e3,maxPending=200,maxFirstPending=5,ownerAuth=null}){
   S.oauth??={clients:{},pending:{},codes:{},tokens:{}};let O=S.oauth;
   const RES=()=>base()+'/mcp';
-  const hits=new Map(),authHits=new Map();// ip -> [count, windowStart]
+  const hits=new Map(),authHits=new Map(),firstHits=new Map();/* t1275: firstHits = /oauth/first per IP key */// ip -> [count, windowStart]
   // t1265: the maps are pruned (stale windows dropped) so a flood of addresses cannot grow them without bound
   function bump(m,ip,max){const n=Date.now();if(m.size>5000)for(const [k,v] of m)if(n-v[1]>60000)m.delete(k);const h=m.get(ip)??[0,n];if(n-h[1]>60000){h[0]=0;h[1]=n;}h[0]++;m.set(ip,h);return h[0]>max;}
   function limited(ip,max=40){return bump(hits,ip,max);}
@@ -85,15 +85,19 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   const MAIN=network==='main';
   function ownerMessage(reqId){const p=O.pending[reqId];if(!p)return null;const c=O.clients[p.client_id];let h='';try{h=new URL(p.redirect_uri).host;}catch{}
     return `Kipurse: allow "${c?.name??'AI'}" to connect to my Kipurse wallet ${wallet??''} on Base (chain 8453).\nIt may only use the permissions I already set; new payees still need my signature.\nReturns to: ${h}\nRequest: ${reqId}\nExpires: ${new Date(p.exp*1000).toISOString()}`;}
+  const declineMessage=reqId=>{const m=ownerMessage(reqId);return m&&('Kipurse: DECLINE this connection request.\n'+m);};   // t1275
+  const denyLink=p=>{const u=new URL(p.redirect_uri);if(p.state!=null)u.searchParams.set('state',p.state);u.searchParams.set('iss',base());u.searchParams.set('error','access_denied');return u.toString();};   // t1275: no state change
   const challenge=()=>`Bearer resource_metadata="${base()}/.well-known/oauth-protected-resource", scope="wallet"`;
 
+  /* t1265 cap, shared by register and (t1275) /oauth/first: at maxClients drop the oldest never-used client older than 10 min; false = full */
+  function clientRoom(){if(Object.keys(O.clients).length<maxClients)return true;const busy=liveClients(),n=Date.now();
+    const old=Object.entries(O.clients).filter(([id,c])=>!busy.has(id)&&!c.used&&n-Number(c.created??0)>600e3).sort((x,y)=>Number(x[1].created??0)-Number(y[1].created??0))[0];
+    if(!old)return false;drop('clients',old[0]);return true;}
   function register(body){const uris=body.redirect_uris;
     if(!Array.isArray(uris)||!uris.length||uris.length>10||!uris.every(validRedirect))return [400,{error:'invalid_redirect_uri',error_description:'redirect_uris must be https or loopback http, no fragments'}];
     /* t1265: at most maxClients registrations per wallet. At the cap the oldest client that has never been used (no token, code or request)
        and is older than 10 minutes makes room; only when every slot is in use is the registration refused (so a burst cannot lock DCR). */
-    if(gc())save();if(Object.keys(O.clients).length>=maxClients){const busy=liveClients(),n=Date.now();
-      const old=Object.entries(O.clients).filter(([id,c])=>!busy.has(id)&&!c.used&&n-Number(c.created??0)>600e3).sort((x,y)=>Number(x[1].created??0)-Number(y[1].created??0))[0];
-      if(!old)return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];drop('clients',old[0]);}
+    if(gc())save();if(!clientRoom())return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];
     let name=cleanClientName(body.client_name);if(isGrokBotRegistration(uris)&&!/grok bot/i.test(name))name='Grok Bot';else if(isGeminiSparkRegistration(uris))name='Gemini Spark';else if(uris.some(x=>{try{const h=new URL(x).hostname;return h==='muse.ai'||h.endsWith('.muse.ai');}catch{return false;}})&&!/muse/i.test(name))name='Muse';const id='kpc_'+rnd(16);
     O.clients[id]={name,redirect_uris:uris,created:Date.now()};save();
     return [201,{client_id:id,client_id_issued_at:Math.floor(Date.now()/1000),client_name:name,redirect_uris:uris,token_endpoint_auth_method:'none',grant_types:['authorization_code','refresh_token'],response_types:['code']}];}
@@ -200,6 +204,12 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
     const live=currentSpend();if(live.mode==='enforced'&&live.authorized===true)return [409,{error:'already_confirmed'}];
     const q=atomic3(body);if(!q)return [400,{error:'limits_required'}];
     const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];
+    /* t1275: unauthenticated, so the same caps as the normal path: open requests (maxPending) and clients (maxClients); and at most
+       maxFirstPending open first-connect requests per wallet - the oldest one (and its unused client) makes room, so a flood cannot lock the owner out */
+    if(Object.values(O.pending).filter(x=>x.status==='pending').length>=maxPending)return [429,{error:'too_many',error_description:'too many open connection requests; try again in a few minutes'}];
+    const fp=Object.entries(O.pending).filter(([,x])=>x.status==='pending'&&x.challenge==='first').sort((x,y)=>x[1].exp-y[1].exp);
+    for(const [k,x] of fp.slice(0,Math.max(0,fp.length-maxFirstPending+1))){drop('pending',k);if(O.clients[x.client_id]&&!O.clients[x.client_id].used&&!liveClients().has(x.client_id))drop('clients',x.client_id);}
+    if(!clientRoom())return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];
     const id=rnd(18),clientId='kpc_'+rnd(16),redirect='https://kipurse.com/connect/'+encodeURIComponent(agent);
     O.clients[clientId]={name:agent,redirect_uris:[redirect],created:Date.now()};
     O.pending[id]={client_id:clientId,redirect_uri:redirect,challenge:'first',state:null,exp:Date.now()/1000+REQ_TTL,status:'pending',origin:'phone',proposal:{...q,nonce:rnd(18)}};save();
@@ -282,11 +292,18 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
     if(MAIN&&p==='/oauth/consent.js'&&req.method==='GET'&&consentScript){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(consentScript());return true;}
     if(MAIN&&verifyOwner&&p==='/oauth/owner-decide'&&req.method==='POST'){const b=await readBody(req);const id=String(b.req||'');const pd=O.pending[id];
       if(!pd||pd.status!=='pending'||pd.exp<Date.now()/1000){json(400,{error:'expired',error_description:'请求已过期或已处理，请回到 AI 重新连接'});return true;}
-      if(b.approve!==true){json(200,{redirect:decide(id,false)});return true;}
+      /* t1275: a deny changes state only with owner proof - the phone session (ownerAuth) or a Base Account signature over declineMessage. Without
+         it the browser still gets the access_denied return link (the consent page's Decline keeps working) but the request stays open until it expires,
+         so whoever holds a request id can no longer cancel the owner's connection. */
+      if(b.approve!==true){let own=false;try{own=!!ownerAuth?.(req);}catch{own=false;}
+        if(!own&&b.signature){try{own=!!await verifyOwner(declineMessage(id),String(b.signature));}catch{own=false;}if(!own){json(403,{error:'not_owner',error_description:'确认不是钱包主人的 Base Account'});return true;}}
+        if(own){json(200,{redirect:decide(id,false)});return true;}
+        json(200,{redirect:denyLink(pd),soft:true});return true;}
       let ok=false;try{ok=await verifyOwner(ownerMessage(id),String(b.signature||''));}catch{ok=false;}
       if(!ok){json(403,{error:'not_owner',error_description:'确认不是钱包主人的 Base Account'});return true;}
       try{json(200,{redirect:decide(id,true)});}catch(e){if(spendError(e)){json(403,{error:e.code,error_description:e.message});return true;}throw e;}return true;}
-    if(MAIN&&phoneApprover&&p==='/oauth/first'&&req.method==='POST'){const [c,b]=beginFirst(await readBody(req));json(c,b);return true;}
+    if(MAIN&&phoneApprover&&p==='/oauth/first'&&req.method==='POST'){if(bump(firstHits,ip,Number(process.env.KIPURSE_OAUTH_FIRST_PER_MIN??10))){json(429,{error:'slow_down'},{'retry-after':'60'});return true;}   // t1275
+const [c,b]=beginFirst(await readBody(req));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-prepare'&&req.method==='POST'){const [c,b]=phonePrepare(await readBody(req));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-decide'&&req.method==='POST'){const [c,b]=await phoneDecide(await readBody(req));json(c,b);return true;}
     if(p==='/oauth/status'){const r=O.pending[u.searchParams.get('req')||''];

@@ -39,6 +39,18 @@ extension PhoneKey {
   /// t1268: this sign-in still owes the server proof that this phone holds the key it sent (needed only for the read grant of a "bind").
   private struct KeyProof { let id: String; let poll: String; let digest: String; let x: [UInt8]; let y: [UInt8] }
   private var owedProof: KeyProof? = nil
+  /// t1275: what this phone sent / got at /signin/start: its key (the SIWE statement must name it) and the nonce (the signed message must carry it).
+  private var expectXY: ([UInt8], [UInt8])? = nil, expectNonce: String? = nil
+  @Published var keyFp: String? = nil   // t1275: shown next to the pairing code; the Coinbase popup's text names the same key
+  /// t1275: the owner the server names is used only after this phone checked the owner's own SIWE message + signature (SigninSiwe).
+  private func verifiedOwner(_ r: CoinbaseIdentity.Result) async -> String? {
+    #if DEBUG
+    if Unbound.isMockSignin { return r.owner }   // UI tests: the page's answer without network or signing
+    #endif
+    let p = await SigninSiwe.check(owner: r.owner, message: r.siweMessage, signature: r.siweSignature, x: expectXY?.0, y: expectXY?.1, nonce: expectNonce)
+    if let p { AuthLog.note("signin-siwe", p); return nil }
+    return r.owner
+  }
   /// t1268: the phone key signs SigninKeyProof.digest(id) with ONE Face ID (the given context, else one now). Only the key whose public
   /// part was sent may sign; nil = no proof (the server then leaves no grant / setup, sign-in itself still works).
   private static func keyProof(id: String, x: [UInt8], y: [UInt8], context: LAContext?) async -> ([UInt8], [UInt8], LAContext?)? {
@@ -50,7 +62,7 @@ extension PhoneKey {
     catch { AuthLog.record("signin-keyproof", error); if context == nil { c.invalidate() }; return nil }
   }
   func start(_ m: AppModel) async {
-    phase = .opening; owedProof = nil
+    phase = .opening; owedProof = nil; expectXY = nil; expectNonce = nil; keyFp = nil
     #if DEBUG   // UI tests: the page's answer without network or signing
     if let i = CommandLine.arguments.firstIndex(of: "-kpSigninMock"), i + 1 < CommandLine.arguments.count {
       let o = CommandLine.arguments[i + 1], w = o == "new" ? "null" : "\"0x2000000000000000000000000000000000000002\""
@@ -74,6 +86,7 @@ extension PhoneKey {
     do {
       let r = try await SigninAPI.post("signin/start", body)
       guard let id = r["id"] as? String, let poll = r["poll"] as? String, let u = (r["url"] as? String).flatMap(URL.init(string:)), u.host == Mainnet.base.host else { phase = .failed(T("服务器回应不对。", "Unexpected server reply.")); return }
+      expectXY = sentXY; expectNonce = r["nonce"] as? String; keyFp = sentXY.map { PhoneTrust.fingerprint(x: $0.0, y: $0.1) }   // t1275
       if let (x, y) = sentXY, (r["proven"] as? Bool) != true, let d = (r["prove"] as? [String: Any])?["digest"] as? String { owedProof = KeyProof(id: id, poll: poll, digest: d, x: x, y: y) }
       // t789: the sign-in page stays on pay.kipurse.com (SIWE domain); the phone checks the page + its pinned bundle before showing it
       do { try await SigninCheck.verify(page: u) } catch SigninCheck.Failure.unreachable { phase = .failed(SigninCheck.offlineText); return } catch { phase = .failed(SigninCheck.stopText); return }
@@ -98,9 +111,10 @@ extension PhoneKey {
   }
   static let notConfirmed = T("没能在链上确认这个钱包属于你，已停止。你的钱没有任何变化，请稍后再试。", "Couldn't confirm on chain that this wallet is yours. Stopped; your money is unchanged. Please try again later.")
   private func opened(_ m: AppModel, _ r: CoinbaseIdentity.Result, wallet w: String) async {
-    UserDefaults.standard.set(r.owner, forKey: CoinbaseIdentity.ownerKey)
-    guard await Self.chainConfirms(wallet: w, owner: r.owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
-    Operator.setWallet(w, owner: r.owner, path: "/t/" + w.lowercased())
+    guard let owner = await verifiedOwner(r) else { phase = .failed(SigninSiwe.refusedText); return }   // t1275: adopt nothing unverified
+    guard await Self.chainConfirms(wallet: w, owner: owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
+    UserDefaults.standard.set(owner, forKey: CoinbaseIdentity.ownerKey)
+    Operator.setWallet(w, owner: owner, path: "/t/" + w.lowercased())
     FirstUse.reset(); Haptics.success(); phase = .reconnecting
     m.identityVerified(); m.mainNeedsSignIn = false; await m.enterWalletWithoutFaceID()
     if m.state == nil { phase = .idle }
@@ -112,21 +126,23 @@ extension PhoneKey {
     return "/t/" + w.lowercased()
   }
   private func finish(_ m: AppModel, _ r: CoinbaseIdentity.Result) async {
-    UserDefaults.standard.set(r.owner, forKey: CoinbaseIdentity.ownerKey)
+    guard let owner = await verifiedOwner(r) else { owedProof = nil; phase = .failed(SigninSiwe.refusedText); return }   // t1275: adopt nothing unverified
     switch r.outcome {
     case .reconnect:   // same person, same phone: reuse the key and the wallet. No re-binding, no fee.
-      guard await Self.chainConfirms(wallet: r.wallet, owner: r.owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
+      guard await Self.chainConfirms(wallet: r.wallet, owner: owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
       owedProof = nil   // the active approver needs no read grant
-      Operator.setWallet(r.wallet, owner: r.owner, path: Self.path(r))
+      UserDefaults.standard.set(owner, forKey: CoinbaseIdentity.ownerKey)
+      Operator.setWallet(r.wallet, owner: owner, path: Self.path(r))
       m.identityVerified(); phase = .reconnecting
       await m.enterWalletWithoutFaceID()   // t1027 / 0A.2: land in wallet with no Face ID
       if m.state == nil { phase = .idle }
     case .bind:   // t849 + t1001u LOCKED: a returning user lands straight in the wallet home (read-only grant for this phone key).
       // Never a Face ID / phone-key setup step first: with 0 balance its network fee can't be paid (dead loop). Face ID approvals
       // are offered later, only when there is a balance and an action needs them (设置 → Face ID 批准, or the approval that needs it).
-      guard await Self.chainConfirms(wallet: r.wallet, owner: r.owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
+      guard await Self.chainConfirms(wallet: r.wallet, owner: owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
+      UserDefaults.standard.set(owner, forKey: CoinbaseIdentity.ownerKey)
       Unbound.remember(wallet: r.wallet, path: Self.path(r))
-      Operator.setWallet(r.wallet, owner: r.owner, path: Self.path(r))
+      Operator.setWallet(r.wallet, owner: owner, path: Self.path(r))
       m.identityVerified(); phase = .reconnecting
       if let p = owedProof { OwedSigninProof.save(id: p.id, poll: p.poll, digest: p.digest, x: p.x, y: p.y) }; owedProof = nil   // t1268 §6#133 (0A #2): no Face ID at sign-in; proved by the first action that needs Face ID
       #if DEBUG
@@ -136,7 +152,7 @@ extension PhoneKey {
       if m.state == nil { phase = .failed(T("钱包暂时没打开，你的钱没有任何变化。请点「老用户登录」再试一次。", "Your wallet didn't open this time. Your money is unchanged. Tap Sign in to try again.")) }
     case .new:      // no wallet yet: the stale key is never used; onboarding (wallet creation) creates a fresh one
       owedProof = nil
-      PhoneKey.retire(); Operator.setWallet(nil); UserDefaults.standard.set(r.owner, forKey: CoinbaseIdentity.ownerKey)
+      PhoneKey.retire(); Operator.setWallet(nil); UserDefaults.standard.set(owner, forKey: CoinbaseIdentity.ownerKey)
       Haptics.success(); phase = .next(r.outcome)
     }
   }
@@ -223,7 +239,8 @@ struct CoinbaseSignInView: View {
     }
     actions.padding(.top, 24)
     if f.phase == .waiting { Text(T("在弹出的页面里登录 Coinbase 并确认，完成后会自动回来。", "Sign in to Coinbase on the page that opens. You'll come back here automatically.")).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center) }
-    if f.phase == .waiting, let p = f.pair { VStack(spacing: 4) { Text(T("配对码", "Pairing code")).font(.caption).foregroundStyle(.secondary); Text(p).font(.system(size: 34, weight: .bold, design: .monospaced)).accessibilityIdentifier("cb.pair"); Text(T("网页上必须显示同样的号码。不一样就别继续。", "The web page must show the same number. If it doesn't, stop.")).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center) } }
+    if f.phase == .waiting, let p = f.pair { VStack(spacing: 4) { Text(T("配对码", "Pairing code")).font(.caption).foregroundStyle(.secondary); Text(p).font(.system(size: 34, weight: .bold, design: .monospaced)).accessibilityIdentifier("cb.pair"); Text(T("网页上必须显示同样的号码。不一样就别继续。", "The web page must show the same number. If it doesn't, stop.")).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+      if let fp = f.keyFp { Text(T("Coinbase 弹窗里写的 iPhone 密钥必须是 \(fp)。", "The iPhone key in the Coinbase popup must be \(fp).")).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).accessibilityIdentifier("cb.keyfp") } } }   // t1275
     Spacer(minLength: 28)
     footer
   }

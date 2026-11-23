@@ -10,6 +10,7 @@ struct KipurseApp: App {
   @Environment(\.scenePhase) private var phase
   /// t653u: dark "indigo night" is the default look; light look is an opt-in in Settings.
   init() {
+    LaunchFlags.releaseStrip()   // t1275 (#6): Release ignores every -demo / -kp… launch flag (first thing, before any model reads them)
     #if KP_ASSISTANT
     AssistantModule.install()   // optional Siri / Spotlight module (App/Assistant)
     #endif
@@ -43,7 +44,7 @@ struct RootView: View {
   @State private var showWelcome: Bool = {
     let a = CommandLine.arguments
     if a.contains("-kpWelcome") { return true }
-    if a.contains("-demo") || a.contains(where: { $0.hasPrefix("-kp") }) { return false }
+    if LaunchFlags.anyTest { return false }   // t1275 (#6): -demo / -kp… only in Debug
     return !UserDefaults.standard.bool(forKey: WelcomeIntro.seenKey)
   }()
   @ObservedObject var allow = AllowanceStore.shared

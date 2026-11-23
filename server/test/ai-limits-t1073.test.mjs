@@ -29,7 +29,8 @@ test('Muse approval with chain caps 10/50/200 shows blanks and grants nothing',a
   noDefaults(page);assert.match(page,/<span class=n><\/span>/);
   const d=await t.call('/oauth/owner-decide',{req:id,approve:true,signature:'0xabc',perPayment:'10',perDay:'50',termTotal:'200',confirmed:true});
   assert.equal(d.code,403);assert.equal(d.out.error,'ai_limits_unconfirmed');assert.equal(t.agents.length,0);assert.equal(t.S.oauth.pending[id].status,'pending');
-  const deny=await t.call('/oauth/owner-decide',{req:id,approve:false});assert.equal(deny.code,200);assert.match(deny.out.redirect,/access_denied/);assert.equal(t.S.oauth.pending[id].status,'denied');assert.equal(t.agents.length,0);});
+  /* t1275: an unauthenticated Decline only hands back the access_denied link; the request stays open (owner proof needed to deny) */
+  const deny=await t.call('/oauth/owner-decide',{req:id,approve:false});assert.equal(deny.code,200);assert.match(deny.out.redirect,/access_denied/);assert.equal(t.S.oauth.pending[id].status,'pending');assert.equal(t.agents.length,0);});
 
 test('English approval is blank too, and a bad signature grants nothing',async()=>{
   const t=oauth({spend:()=>({authorized:false}),verify:async()=>false,lang:'en-US'});const {id,page}=await open(t);

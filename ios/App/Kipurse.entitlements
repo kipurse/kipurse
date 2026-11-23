@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- t1275 (#5): Release entitlements, kept by hand (Debug: App/KipurseDebug.entitlements adds only its own .app.$(KIPURSE_DEBUG_SUFFIX) group). .keys stays FIRST: it is the default group every existing item lives in. -->
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
@@ -14,7 +15,6 @@
 	<array>
 		<string>$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).keys</string>
 		<string>$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).app</string>
-		<string>$(AppIdentifierPrefix)$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)</string>
 	</array>
 </dict>
 </plist>

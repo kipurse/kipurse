@@ -4,7 +4,7 @@
 //     hash(tenant) (or a shard map), same load/save/update contract. No call site scans across tenants.
 //  2. KV (short-lived values + counters): challenges, rate-limit windows, revocation feed. Later: Redis (SET PX / GETDEL / INCR+PEXPIRE),
 //     same method names. Keys are "<scope>:<tenant|global>:<name>" so they shard by the tenant part.
-import fs from 'node:fs';import {DatabaseSync} from 'node:sqlite';import {randomBytes,createCipheriv,createDecipheriv,hkdfSync,createHash} from 'node:crypto';
+import fs from 'node:fs';import {DatabaseSync} from 'node:sqlite';import {randomBytes,createCipheriv,createDecipheriv,hkdfSync,createHash,createHmac} from 'node:crypto';
 export const tenantKey=w=>String(w).toLowerCase();
 export const kvKey=(scope,tenant,name)=>`${scope}:${tenant?tenantKey(tenant):'global'}:${name}`;
 /** File implementation: one JSON doc per tenant. `legacyFile` keeps the existing single-tenant runtime-state.json path. */
@@ -66,6 +66,11 @@ export function sealKV(kv,dataKey,{scopes=PERSONAL_KV_SCOPES}={}){if(!kv||!dataK
     take:key=>open(key,kv.take(key)),
     list:(p,l)=>kv.list(p,l).map(e=>({k:e.k,v:open(e.k,e.v)}))};}
 /** t1265: one-way, non-reversible client id for rate-limit keys (raw IPs never become KV keys). */
-export const ipHash=ip=>createHash('sha256').update('kp-rl-ip:'+String(ip??'')).digest('hex').slice(0,24);
+/* t1275: HMAC with a per-process random salt (a bare SHA-256 of an IPv4 is brute-forced back in seconds). Rate-limit windows are <=10 min and
+   live only in expiring KV keys, so a restart just starts fresh windows. Several workers sharing one KV (SCALING.md stage 2) set the same
+   KIPURSE_RL_SALT (>=32 chars) so they count one IP under one key. */
+const RL_SALT=String(process.env.KIPURSE_RL_SALT??'').length>=32?Buffer.from(String(process.env.KIPURSE_RL_SALT)):randomBytes(32);
+export const rlHash=(tag,v)=>createHmac('sha256',RL_SALT).update(String(tag)+':'+String(v??'')).digest('hex').slice(0,24);
+export const ipHash=ip=>rlHash('kp-rl-ip',ip);
 /** t1265: strip URLs (RPC / bundler URLs can carry API keys) from text that is logged or returned. */
 export const scrubUrls=s=>String(s??'').replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)\]]*/gi,'<url>').replace(/\b(api[-_]?key|apikey|token|secret)=[^&\s]+/gi,'$1=<redacted>');

@@ -10,6 +10,8 @@ public enum CoinbaseIdentity {
     public let setupState: String?; public let setupWallet: String?
     /// t1268: the wallet's key seat / phone approver as the server names it. A HINT for WalletVerify only (checked on chain, never trusted).
     public let approverHints: [String]
+    /// t1275: the owner's own SIWE message + signature (checked on the phone by SigninSiwe before anything is adopted).
+    public let siweMessage: String?; public let siweSignature: String?
     /// Parses GET /signin/status (state = done). Refuses anything malformed (bad address, reconnect/bind without a wallet, new WITH a wallet).
     public init?(_ j: JSONValue?) {
       guard let j, j["state"]?.string == "done", let o = j["result"]?.string.flatMap(Outcome.init(rawValue:)),
@@ -24,6 +26,7 @@ public enum CoinbaseIdentity {
       setupState = o == .new ? j["setup"]?["state"]?.string : nil
       setupWallet = o == .new ? j["setup"]?["wallet"]?.string.flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil } : nil
       approverHints = o == .new ? [] : [j["seat"]?.string, j["approver"]?.string].compactMap { $0 }.filter(CoinbaseIdentity.isAddress)
+      siweMessage = j["siweMessage"]?.string; siweSignature = j["siweSignature"]?.string   // t1275
     }
   }
   public static func isAddress(_ s: String) -> Bool { s.count == 42 && s.hasPrefix("0x") && s.dropFirst(2).allSatisfy(\.isHexDigit) }

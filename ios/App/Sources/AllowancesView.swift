@@ -186,7 +186,8 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
   /// The server then pays this request once. Returns the text to show.
   /// `userTapped`: the owner tapped the button on this full card (only then may the sign-in Face ID of the last 60 s be reused, t1243).
   /// t1266 (fix 10): required (no default); the held context is bound to (id, mode); once ask-prepare ran, EVERY refusal posts ask-cancel.
-  func approveAsk(_ a: ApprovalReq, mode: String, userTapped: Bool, ceiling: (single: Int64, daily: Int64)? = nil) async -> String? {
+  /// t1275 (#2): `ceiling` = SignedLimitsStore.ceiling (what the owner signed on THIS phone; nil = nothing signed here -> a trust is refused).
+  func approveAsk(_ a: ApprovalReq, mode: String, userTapped: Bool, ceiling: (single: Int64, daily: Int64)?) async -> String? {
     if DemoGuard.active { signInUnlock.clear(); DemoGuard.say(); approvals.removeAll { $0.id == a.id }; return nil }
     let mismatch = T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")
     let tag = a.id + "|" + mode
@@ -222,9 +223,9 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
       let gj = tj["signerGrant"] as? [String: Any], sgn = Self.s(tj["signer"]), mer = Self.s(tj["merchant"])
       if gj != nil, sgn.isEmpty || mer.isEmpty { return await refuse(mismatch) }
       // t1246 (§6#116 F8): also the phone's OWN ceiling (the AI limits shown in the app, else 5 / 20 USDC) — not only the server's numbers.
-      let ceil0 = ceiling ?? OwnerAsk.trustCeiling(saved: overallAtomic)
-      let own = OwnerAsk.trustCapProblems(om, ceiling: ceil0)
-      if !own.isEmpty { AuthLog.note("trust-caps", "refused single=\(om.single) daily=\(om.daily) ceiling=\(ceil0.single)/\(ceil0.daily) passedCeiling=\(ceiling != nil) overall=\(overallAtomic.map { "\($0.single)/\($0.daily)" } ?? "nil") inline=\(tj["kind"] as? Int ?? 0) why=\(own.joined(separator: "; "))") }   // t1257 §6#126
+      let own = OwnerAsk.trustCapProblems(om, localCeiling: ceiling)   // t1275 (#2): never the server's overall / everyday numbers alone
+      if !own.isEmpty { AuthLog.note("trust-caps", "refused single=\(om.single) daily=\(om.daily) ceiling=\(ceiling.map { "\($0.single)/\($0.daily)" } ?? "none-signed-here") overall=\(overallAtomic.map { "\($0.single)/\($0.daily)" } ?? "nil") inline=\(tj["kind"] as? Int ?? 0) why=\(own.joined(separator: "; "))") }   // t1257 §6#126
+      guard own.isEmpty || ceiling != nil else { return await refuse(T(SignedLimitsCopy.noneZH + "可以改选「只付这一次」。", SignedLimitsCopy.noneEN + " You can choose \u{201C}Pay just this once\u{201D} instead.")) }   // t1275 (#2)
       guard own.isEmpty else { return await refuse(T("这次信任的额度超过你在手机上设的 AI 花钱上限，已停止，没有付款。可以改选「只付这一次」。", "This trust is above the AI spending limits set on this phone, so it was stopped and nothing was paid. You can choose \u{201C}Pay just this once\u{201D} instead.")) }
       let issues = PhoneTrust.problems(om, maxSingle: Self.s(ph2["maxSingle"]), maxDaily: Self.s(ph2["maxDaily"])) + OwnerAsk.trustProblems(om, payee: ask.payee, single: Self.s(tj["single"]), signer: gj == nil ? nil : sgn, merchant: gj == nil ? nil : mer)
       guard issues.isEmpty, PhoneTrust.suiteProblems(om).isEmpty, let d = PhoneTrust.trustDigest(om), Hex.encode(d).lowercased() == Self.s(tj["digest"]).lowercased(), let h = PhoneTrust.walletHash(d) else { return await refuse(mismatch) }
@@ -237,6 +238,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
               Hex.encode(gd).lowercased() == Self.s(gj["digest"]).lowercased(), let gh2 = PhoneTrust.walletHash(gd) else { return await refuse(mismatch) }
         gh = gh2; grantName = mer; grantSigned = tj["merchantSigned"] as? Bool
       } else if gj != nil { return await refuse(mismatch) }
+      guard PhoneTrust.signerProblems(om, grantVerified: gh != nil).isEmpty else { return await refuse(mismatch) }   // t1275 (#1): same rule on every trust path
     }
     // ONE Face ID for every signature (the evaluated context is reused by the Secure Enclave key)
     // t1243 (§6#113): a sign-in just above (session had expired) already ran Face ID: reuse that SAME evaluated context once, only after the
@@ -369,12 +371,12 @@ struct AllowancesSheet: View {
                     Label(T(h.zh, h.en), systemImage: "hand.point.down.fill").font(.caption.weight(.semibold)).foregroundStyle(Brand.caution).accessibilityIdentifier("allow.ask.pushhint")
                   }
                   // t1245 (§6#115 U14/U15): brand buttons; the two lower choices share the width, same height as the main one.
-                  let cap = OwnerAsk.trustCeiling(saved: AgentLimitsCard.policy(m.state ?? WalletState(.object([:])), demo: m.demo != nil))
-                  let capLine = OwnerAsk.trustCapsLine(cap)
-                  Text(T(capLine.zh, capLine.en)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("allow.ask.caps")   // t1246 F8
+                  let cap = SignedLimitsStore.ceiling(m)   // t1275 (#2): only the limits signed on this phone (no copy here -> no line; a trust is refused)
+                  if let cap { let capLine = OwnerAsk.trustCapsLine(cap)
+                  Text(T(capLine.zh, capLine.en)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("allow.ask.caps") }   // t1246 F8
                   BigButton(T("认识并信任", "Trust this payee"), icon: "faceid", disabled: busy) { Task { busy = true; msg = await st.approveAsk(a, mode: "trust", userTapped: true, ceiling: cap); busy = false } }.accessibilityIdentifier("allow.ask.trust").padding(.top, 4)
                   HStack(spacing: KP.Space.s) {
-                    BigButton(T("只付这一次", "Pay just this once"), kind: .secondary, disabled: busy) { Task { busy = true; msg = await st.approveAsk(a, mode: "once", userTapped: true); busy = false } }.accessibilityIdentifier("allow.ask.once")
+                    BigButton(T("只付这一次", "Pay just this once"), kind: .secondary, disabled: busy) { Task { busy = true; msg = await st.approveAsk(a, mode: "once", userTapped: true, ceiling: nil); busy = false } }.accessibilityIdentifier("allow.ask.once")
                     BigButton(T("拒绝", "Decline"), kind: .danger) { Task { await st.reject(a) } }.accessibilityIdentifier("allow.pending.reject")
                   }
                 } else {
