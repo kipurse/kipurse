@@ -1,0 +1,56 @@
+# t1242 (handbook §6#112): Kipurse TEST SHOP - an ordinary ExampleShop-shaped USDC merchant at https://testshop.kipurse.com (via the pay tunnel).
+# Own system user; it cannot read Kipurse's data / keys (InaccessiblePaths) and Kipurse cannot read its keys (/etc/kipurse-testshop 0750 root:kipurse-testshop,
+# data.key 0400 kipurse-testshop; /var/lib/kipurse-testshop 0700). Public HTTP 127.0.0.1:8661 only; admin API = unix socket /run/kipurse-testshop/admin.sock (0600).
+[Unit]
+Description=Kipurse Test Shop (TEST merchant for layered merchant trust) 127.0.0.1:8661
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kipurse-testshop
+Group=kipurse-testshop
+WorkingDirectory=/opt/kipurse-testshop/app
+ExecStart=/usr/bin/node /opt/kipurse-testshop/app/bin/server.mjs
+Environment=NODE_ENV=production
+Environment=SHOP_ORIGIN=https://testshop.kipurse.com
+Environment=SHOP_HOST=127.0.0.1
+Environment=SHOP_PORT=8661
+Environment=SHOP_STATE_DIR=/var/lib/kipurse-testshop
+Environment=SHOP_DATA_KEY_FILE=/etc/kipurse-testshop/data.key
+Environment=SHOP_ADMIN_SOCKET=/run/kipurse-testshop/admin.sock
+# public Base RPCs, tried in order (mainnet.base.org refuses eth_getLogs, so it is only the fallback for plain reads)
+Environment=SHOP_RPC=https://base-rpc.publicnode.com,https://mainnet.base.org
+Environment=SHOP_BUNDLER_URL=https://public.pimlico.io/v2/8453/rpc
+# where swept USDC goes (set your own wallet); not changeable through any API
+# Environment=SHOP_SWEEP_TO=<your own wallet address>   (unset = sweeping off; the zero address is refused)
+# automatic sweep: checked hourly, runs at most once a day and only when the sweepable balance is above 0.30 USDC; 0 = manual only
+Environment=SHOP_AUTO_SWEEP=1
+Environment=SHOP_AUTO_SWEEP_MIN_ATOMIC=300000
+StateDirectory=kipurse-testshop
+StateDirectoryMode=0700
+RuntimeDirectory=kipurse-testshop
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/kipurse-testshop /run/kipurse-testshop
+ReadOnlyPaths=/etc/kipurse-testshop /opt/kipurse-testshop
+# InaccessiblePaths=<other services' directories on the same host>
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

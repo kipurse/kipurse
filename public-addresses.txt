@@ -1,0 +1,179 @@
+# Public address allowlist (scripts/check-addresses.mjs). Every 0x + 40-hex address in this repository must be listed here
+# or look obviously synthetic (0x1111…, 0x…0001, repeating patterns). Unknown addresses fail CI: an address could be a real
+# person's wallet. Add an address only with a reason; NEVER add a real user's wallet. Format: <address>  # <reason>
+
+## Tokens and public infrastructure (Base, Base Sepolia and other public testnets)
+0x3a91a31cb3dc49b4db9ce721f50a9d076c8d739b  # Chainalysis sanctions oracle (Base)
+0x71041dddad3595f9ced3dccfbe3d1f4b0a16bb70  # Chainlink ETH/USD on Base
+0x4adc67696ba383f43dd60a9e78f2c97fbbfc7cb1  # Chainlink ETH/USD on Base Sepolia
+0xc0de9762a5f06d7f98293b77d74230c750cba078  # Circle Paymaster (ledger label)
+0xc0de34489365d618bb2a51f349b634f011492e48  # Circle Paymaster v0.7 (Base Sepolia)
+0x6c973ebe80dcd8660841d4356bf15c32460271c9  # Circle Paymaster v0.7 (Base)
+0xc0dec557cc20caccfa15407b240d5b47cad05aa8  # Circle Paymaster v0.8 (Base)
+0x0578cfb241215b77442a541325d6a4e6dfe700ec  # Circle Paymaster v0.8 (test shop sweep)
+0x2faeb0760d4230ef2ac21496bb4f0b47d634fd4c  # Coinbase CDP ERC-20 paymaster
+0x0ba5ed0c6aa8c49038f819e587e2633c4a9f428a  # Coinbase Smart Wallet factory v1
+0xba5ed110efdba3d005bfc882d75358acbbb85842  # Coinbase Smart Wallet factory v1.1
+0x00000110dcdedc9581cb5ecb8467282f2926534d  # Coinbase Smart Wallet implementation
+0xf85210b21cc50302f477ba56686d2019dc9b67ad  # Coinbase SpendPermissionManager
+0x357458739f90461b99789350868cd7cf330dd7ee  # Coinbase Verifications attester
+0x2c7ee1e5f416dff40054c27a62f7b357c4e8619c  # Coinbase Verifications indexer
+0xba5ed099633d3b313e4d5f7bdc1305d3c28ba5ed  # CreateX deployer
+0x50c5725949a6f0c72e6c4a641f24049a917db0cb  # DAI on Base (stray-token detection)
+0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789  # ERC-4337 EntryPoint v0.6
+0x4337084d9e255ff0702461cf8895ce9e3b5ff108  # ERC-4337 EntryPoint v0.8
+0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31  # ETH/USD feed on Base (legacy entry)
+0xc0de905ea16e84e3c5f50f1144f8f3bbacc7a356  # L2 sequencer uptime feed (Base)
+0xe6cae83bde06e4c305530e199d7217f42808555b  # Simple7702Account implementation
+0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d  # USDC on Arbitrum Sepolia (faucet hint)
+0x5425890298aed601595a70ab815c96711a31bc65  # USDC on Avalanche Fuji (faucet hint)
+0x833589fcd6edb6e08f4c7c32d4f71b54bda02913  # USDC on Base
+0x036cbd53842c5426634e7929541ec2318f3dcf7e  # USDC on Base Sepolia
+0x1c7d4b196cb0c7b01d743fbc6116a902379c7238  # USDC on Ethereum Sepolia (faucet hint)
+0x5fd84259d66cd46123540766be93dfe6d43130d7  # USDC on OP Sepolia (faucet hint)
+0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582  # USDC on Polygon Amoy (faucet hint)
+0x31d0220469e10c4e71834a79b1f276d740d3768f  # USDC on Unichain Sepolia (faucet hint)
+0xfde4c96c8593536e31f229ea8f37b2ada2699bb2  # USDT on Base (stray-token detection)
+0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf  # cbBTC on Base (stray-token detection)
+0x833589fcd6edb6e08f4c7c32d4f71b54bda02912  # deliberately broken USDC address (checksum test input)
+0x4e59b44847b379578588920ca78fbf26c0b4956c  # deterministic deployment proxy (CREATE2)
+0x3304e22ddaa22bcdc5fca2269b418046ae7b566a  # large USDC holder used to fund local fork tests
+0x3d602d80600a3d3981f3363d3d373d3d3d363d73  # not an address: the first 20 bytes of the EIP-1167 clone creation code
+0x28da22dcc90c4d9f4caee6d0bfe11aec413ef609  # paymaster used for owner operations (ledger label)
+0x28c91ce8ee453afa81202bdb94a4d630d8e53ed1  # publicly leaked signer key address (refused by plan51)
+
+## Deployed Kipurse contracts and the official fee address (public protocol constants)
+0xf14ef5dc4723245866c22c749a0a84afceba0dd9  # Kipurse official fee address (dues slot / wallet-paid fees checked by the phone; operator value, see docs/ARCHITECTURE_LAYERS.md)
+0x79e052e601adb6762965b4af75e6896891eb10f5  # V5.1 order verifier (Base Sepolia)
+0x05320bed08309f66316f7d73e2d0be110400fbb2  # V5.2 adapter
+0x65d2ce04da7ace81e7c4ab08712509282745ec84  # V5.2 trust
+0x6ce7bc537379a6e10b88d1e98a5c3803a9812be9  # V5.2 vault factory
+0xc53ab278fe26b31f85b5ccc73eb5a7dd81e05038  # V5.2 vault implementation
+0x34d9bdc9e10815fb6913af5bc0daad7e53dbd57d  # V5.3 / V5.4 vault factory
+0xb150030be35903adee466d7733bf0841b667033c  # V5.3 adapter
+0xda1dcc6677f352ba551feb8ca0f39d46b41535c3  # V5.3 trust
+0x0bf04254cf9a16c83c10159a79e2420528608cda  # V5.3 vault implementation
+0x99d8dfec40023f53f6e451f9afff7efc223b7aaa  # V5.4 adapter
+0x22ef1633252653932076cb911b155f9d7f73a9e9  # V5.4 trust
+0x99d11afac77b4e8ea8af00c543eee36a74591bbc  # V5.4 vault implementation
+0x53f99af228a165a312ed4a7e47447a9137dbf03e  # V5.5 adapter
+0x54830fc7042dbe7a4eb03928acf22cf7b251780b  # V5.5 float implementation
+0xb8ce1ffcbf88dbd73c5c6f557b3d68cf0b92eb68  # V5.5 merchant registry V2
+0xdbb66b5e7a2773e0419093ea5cf6e70e68a747b4  # V5.5 trust
+0xc01c40bbe92d0e959c2730c5f62f2737baeec248  # V5.5 vault factory
+0xb0f92441a31cbcb7baa5659a08228de8de7d2bdf  # V5.5 vault implementation
+0x8f52d223df89e388dcb5d39c53f154b9f8f9a67a  # fee controller (shared)
+0x26c707ccbd569624cf31f5c574d4fdf7e3f23998  # merchant registry
+0xd1af1402f4ec42366e7233d274115a773d0553a6  # merchant registry (handover script default)
+0xbcbe3b3c463ff4c1c049c549f98ca93c9209f8dc  # order verifier (test vector)
+
+## Well-known public test accounts (anvil / hardhat default keys)
+0x70997970c51812dc3a010c7d01b50e0d17dc79c8  # anvil account #1
+0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc  # anvil account #2
+0x90f79bf6eb2c4f870365e785982e1f101e93b906  # anvil account #3
+0x15d34aaf54267db7d7c367839aaf71a00a2c6a65  # anvil account #4
+0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc  # anvil account #5
+
+## Constants inside vendored, minified browser bundles (viem chain table: multicall3, OP-stack bridges, portals, oracles)
+0x05f9613adb30026ffd634f38e5c4dfd30a197fa1  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x16fc5058f25648194471939df75cf27a2fdc48bc  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x1a0ad011913a150f69f6a19df447a0cfd9551054  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x3154cf16ccdb4c6d922629664174b904d80f2c35  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x3e2ea9b92b7e48a52296fd261dc26fd995284631  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x43edb88c4b80fdd2adff2412a7bebf9df42cb40e  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x49048044d57e1c92a77f79988d21fa8faf74e97e  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x49f53e41452c74589e85ca1677426ba426459e85  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x56315b90c40730925ec5485cf004d835058518a0  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x84457ca9d0163fbc4bbfe4dfbb20ba46e48df254  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x90e9c4f8a994a250f6aefd61cafb4f2e895d458f  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x99c9fc46f92e8a1c0dec1b1747d010903e884be1  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0x9e6204f750cd866b299594e2ac9ea824e2e5f95c  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xb0f15106fa1e473ddb39790f197275bc979aa37e  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xbeb5fc579115071764c7423a4f12edde41f106ed  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xca11bde05977b3631167028862be2a173976ca11  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xd6e6dbf4f7ea0ac412fd8b65ed297e64bb7a06e1  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xdfe97868233d1aa22e815a266982f2cf17685a27  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xe5965ab5962edc7477c8520243a95517cd252fa9  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xfbb0621e0b23b5478b630bd55a5f21f67730b0f1  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+0xfd0bf71f60660e2f608ed56e1659c450eb113120  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
+
+## Synthetic addresses in tests, fixtures, demos and examples (made up, derived from synthetic inputs, or created on a local fork; no real person)
+0x5e4c116dd45edc2dbed826be8b97a72499d03fc8  # Kipurse test wallet of the t1128 enrollment fixtures (also the sample in scripts/cbv-check.mjs)
+0x7ab3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5  # seen in ios/App/Sources/AppModel.swift
+0x896e3fa0b1c2d4e5f60718293a4b5c6d7e8fa83f  # seen in ios/App/Sources/AppModel.swift
+0x4f2a9c1e0b7d3e8a6f5c2d1b0a9e8f7c6d5b4a3e  # seen in ios/App/Sources/AppModel.swift, server/test/fork/agent-revoke-fork.e2e.mjs +1
+0x10e1a9983eb328525b5dbbcd7a94b113ecbea892  # seen in ios/Tests/Fixtures/t1128-enroll-fixtures.json
+0x1da2d5293bd418ab06d16890f17711302c7e74f6  # seen in ios/Tests/Fixtures/t1128-enroll-fixtures.json, ios/Tests/KipurseCoreTests/T1128EnrollFeeTests.swift +6
+0x5a17c3e9c3e9c3e9c3e9c3e9c3e9c3e9c3e9b04d  # seen in ios/Tests/KipurseCoreTests/AddressTrustTests.swift, ios/Tests/KipurseCoreTests/OnboardTests.swift +1
+0x452f678f6e588069d1aef38d3d519567aa1014a4  # seen in ios/Tests/KipurseCoreTests/BatchVectors.swift, ios/Tests/KipurseCoreTests/VaultCheckTests.swift +1
+0x03dc700add9a8d629e4cf211eac8916e6b12fb38  # seen in ios/Tests/KipurseCoreTests/BatchVectors.swift, server/test/vectors/batch-verify.json
+0xfc0e68572cdba016c1c90a45e1792f3fe0ee345b  # seen in ios/Tests/KipurseCoreTests/KipurseCoreTests.swift, server/test/t1120-withdraw-wallet-fee.test.mjs
+0x3444aa8ed2716e0f60483e02dec8edab7b2e94d3  # seen in ios/Tests/KipurseCoreTests/LifeLedgerTests.swift, server/sdk/examples/agent.ts +1
+0x515010c2e41f98cddd76b819ee69dc832c0939b6  # seen in ios/Tests/KipurseCoreTests/SignHostTests.swift, ios/Tests/KipurseCoreTests/T1036ShellBalanceTests.swift +16
+0x4242b022a8296cb18b0e0b1cb9879c518170a718  # seen in ios/Tests/KipurseCoreTests/T1036ShellBalanceTests.swift, ios/Tests/KipurseCoreTests/T1037ChainLedgerTests.swift +16
+0x527b741eb13732322eb7a9547029f8645970dce4  # seen in ios/Tests/KipurseCoreTests/T1139ResumeTests.swift
+0x5d0136641655ad46eff24b243c3555a714f4317b  # seen in ios/Tests/KipurseCoreTests/T1186VaultSeedTests.swift, ios/Tests/KipurseCoreTests/T1197SuiteTests.swift
+0xe635ab8852c3cb3b2125d3cb45018657ef73946b  # seen in ios/Tests/KipurseCoreTests/T1186VaultSeedTests.swift, ios/Tests/KipurseCoreTests/T1197SuiteTests.swift +2
+0x0ebd05a4a2226a59790600a54129f4b0e90fc817  # seen in ios/Tests/KipurseCoreTests/T1186VaultSeedTests.swift, ios/Tests/KipurseCoreTests/T1197SuiteTests.swift +3
+0x08fda35764ea7999e69f644688552ff91b277d42  # seen in ios/Tests/KipurseCoreTests/T1197SuiteTests.swift, ios/Tests/KipurseCoreTests/T1214V54Tests.swift +2
+0x12ac413cb96b5f40983869eba957a0228e6f6773  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift
+0x4b1597a46600fbd610f07229f6396881a2edf075  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift
+0xadb2f2c49f31d59bc46959818e5c445e1c01acb8  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift, ios/Tests/KipurseCoreTests/T1240OwnerAskSignerTests.swift +1
+0xef6b64eb64a7f28215b0b97d51a2008458bf0deb  # seen in ios/Tests/KipurseCoreTests/T1238CacheGuardTests.swift, ios/Tests/KipurseCoreTests/T1238MovedWalletTests.swift +11
+0x962034cf95b144e5ea4ae34b20dcef3fc077b924  # seen in ios/Tests/KipurseCoreTests/T1238MovedWalletTests.swift
+0x96e8f9fd545f409cd9c3a2dc73c3e51c2b28afc5  # seen in ios/Tests/KipurseCoreTests/T1238MovedWalletTests.swift
+0x4ce264e7b3683370879153388e345da28b6f0d6e  # seen in ios/Tests/KipurseCoreTests/T1241LayeredTrustTests.swift
+0xb2ea874d9a64326925032df4de2654cffc581203  # seen in ios/Tests/KipurseCoreTests/T1241LayeredTrustTests.swift
+0x466319b0bc5fab2b5f0fa85c498a606c379725f2  # seen in ios/Tests/KipurseCoreTests/T1253MoveFollowTests.swift
+0x4494ced7f076c523b3da8e013e6706ac4d9d3ae6  # seen in ios/Tests/KipurseCoreTests/T1253MoveFollowTests.swift, ios/Tests/KipurseCoreTests/T1257TrustFeeHeadroomTests.swift +5
+0xf9ba29c95f7218adf91ff0af18f877d92568bf53  # seen in ios/Tests/KipurseCoreTests/T821RescueTests.swift
+0x0933fa837680b9bac9e7eb74685de32ec36cb18a  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x0d24a71acd81e95012c5d9b9a8296b7eb9da90a7  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x189d1b501d5aa889509cf02198bd0a6f02503fad  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x1f79f51c29ca9b702b5b65f745e4f434caeb85e0  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x2f614c9aee3e89321d2ff543d6856d90cfda5c8e  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x56798b07927e557fc7e2afa3ea6d73bc0114ae2c  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x5e76a2a871faa0ad5bbc8508f8ce9b773ae0bcb8  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x67e1fb19bdca792eae7e83d5acfc3051e3172bcc  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x6822f579c36d16a53df3d1069ecbabf0c265f289  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x75d3c8f089a60cb900047a9258cadbdc7bc43105  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x8f2bdc9ee093136068a783427a428530ac2cd765  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xbf7dbfd9345b6aa03c443cf1addb3ed6d92f92e6  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xc0f47ee48d47e4b99107fcd09d9f22ab6b78d7f7  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xc9a46709a2f33ff5974a3af3756ba8e62815b104  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xcd814639dd819021504694d02b7635125b58135b  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xebc68bf57129ac7f4a286560d02be0601f06f045  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xf521ba2a75ceec9ff1e62cb3ca80af4d412f1e42  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0xf9e7d07421264aab38d580f47035d33361c7049a  # seen in ios/Tests/KipurseCoreTests/t1138-e2e-fixtures.json.txt
+0x1317d714b1d9fdb36a5eceaf64255b79c3de497f  # seen in ios/Tests/KipurseCoreTests/t1138-rescue-in.json.txt
+0x13fb64fe3fc3c2c0034882b429a094cf73d2d71f  # seen in ios/Tests/KipurseCoreTests/t1138-rescue-in.json.txt
+0xffc041497b0b137b42aa3b48a15af004be61bfad  # seen in ios/Tests/KipurseCoreTests/t1138-rescue-in.json.txt
+0x05626be25b743b02b81ca8af56001157105f929c  # seen in ios/Tests/KipurseCoreTests/t1139-resume-fixture.json.txt
+0xff1b542dd70d8f00da915d7bda221b6bc4babf62  # seen in ios/Tests/KipurseCoreTests/t1139-resume-fixture.json.txt
+0x044762a3e8d57a95e050dbf22e5281221299f7fb  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x12bb9d7e43461db4f59c03644d87db0d6a3cc255  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x13d90bf8fced52900f606030874bd28f09b71e59  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x1a6c6453ef0a158f1e8c5913b8f8023066bef79a  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x30fd67b244c9b3c3404469f6e459e0b53aa53291  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x62ed281f217f50316b4e20b8dbfd020effc6be8c  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x7071a00f4693105569d8791e57d76ed284dc2e72  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0x8be06ca4c48e592b177cd44e19595779c061e6f9  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0xdc29aaf76167ad90e7d4d28518fd6861d0d4ecee  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0xfc7d59ff56df53f87289f0d7cdae882dbc856abb  # seen in ios/Tests/KipurseCoreTests/t1238-seat-fixtures.json.txt
+0xc7d7c8b03e94576bc3c99a7e37827e07f7d9a4e8  # seen in server/scripts/batch-vectors.mjs, server/test/dues-slot.test.mjs +1
+0x6b91dcb27cf3d69b1d9a6fddeb06ed1af2ed0bf9  # seen in server/scripts/batch-vectors.mjs, server/test/paid-by-label-t910.test.mjs +2
+0x1b1bf0e5d1c6a2b74c3d9e8f07a1b2c3d4e5f606  # seen in server/scripts/monitor.mjs, server/test/cb-verified.test.mjs +1
+0xac3c14a42628eaa726dcf3560c97f4cb4f4bd521  # seen in server/sdk/examples/agent.ts, server/test/helpers/v5-fixture.mjs +1
+0x1111ab12cd34ef56001122334455667788990000  # seen in server/test/address-wording.test.mjs
+0x0330070fd38ec3bb94f58fa55d40368271e9e54a  # seen in server/test/escrow.test.mjs, server/test/sanctions.test.mjs
+0x9d3927128b74460e164a1b1dee445d490e7eca72  # seen in server/test/fork/limits-usdc-gas-fork.e2e.mjs, server/test/paid-by-label-t910.test.mjs +2
+0x101ce0cedd142f199c9ef61739ae59b6611a0fc0  # seen in server/test/guardrails.test.mjs, server/test/mandates.test.mjs +2
+0x68a0c5d60983c0b90973a7352284bb8839e1e435  # seen in server/test/helpers/v5-fixture.mjs
+0xc0ded1524f49244a3e59165ca305f484fbe362a6  # seen in server/test/helpers/v5-fixture.mjs
+0xc44cf075a58df30b7c63b114cdf6784376009e0b  # seen in server/test/helpers/v5-fixture.mjs, server/test/t1241-attestor.test.mjs
+0x10a0e1f1e3b2c4d5e6f708192a3b4c5d6e7f6e9f  # seen in server/test/onboard-new-quote.test.mjs
+0x9d46169cdc73021d2242ad45aa0be2eb210bad8b  # seen in server/test/phone-enroll-page-t905.test.mjs
+0xb7605ee94db64a097a436ab31a5075155121a45f  # seen in server/test/t1185-ops-per-day.test.mjs, server/test/v5-userop.test.mjs
+0x13ab618edbec2f1a22763adc2135251a28bf034e  # seen in server/test/t1213-signer-trust-v54.test.mjs
+0xe05a5ae6c938c2bd72da539d971e34e586c6cc03  # seen in server/test/t1213-signer-trust-v54.test.mjs
+0x2aa8da9fc5e86bf482d91ad496cbca9500e561c8  # seen in server/test/t1238-move-seat.test.mjs

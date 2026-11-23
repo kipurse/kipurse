@@ -1,0 +1,11 @@
+#!/bin/sh
+# Kipurse Test Shop admin (root only). Examples:
+#   kipurse-testshop-admin status
+#   kipurse-testshop-admin set mode=unsigned            (mode=signed|unsigned)
+#   kipurse-testshop-admin set swapAddress=true         (status shows another deposit address)
+#   kipurse-testshop-admin set neverConfirm=true        (status never says paid)
+#   kipurse-testshop-admin set badSignature=true        (orders signed by an UNpublished key)
+#   kipurse-testshop-admin set noSignature=true         (signed mode, but the signature is left out)
+#   kipurse-testshop-admin reset                        (signed, all switches off)
+#   kipurse-testshop-admin orders 20 | balances | sweep --dry-run | sweep
+exec /usr/bin/node /opt/kipurse-testshop/app/bin/admin.mjs "$@"

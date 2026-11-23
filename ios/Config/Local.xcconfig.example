@@ -1,0 +1,22 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+KIPURSE_TEAM_ID = ABCDE12345
+KIPURSE_BUNDLE_ID_PREFIX = com.yourname.kipurse
+KIPURSE_SERVER = https:/$()/kipurse.example.com
+
+KIPURSE_MAINNET_SERVER = https:/$()/your-gateway.example
+KIPURSE_MAINNET_WALLET =
+KIPURSE_OWNER_ACCOUNT =
+KIPURSE_OWNER_PAY = NO
+
+// Optional: an older signing host that stays accepted (bare host name, no scheme).
+KIPURSE_SIGN_LEGACY_HOST =
+// Legal pages: your operating entity (shown in Help / Privacy / Terms).
+KIPURSE_OPERATOR_NAME = Example Operator LLC
+KIPURSE_OPERATOR_ADDRESS_EN = City, State, Country
+KIPURSE_OPERATOR_ADDRESS_ZH = 国家某州某市
+KIPURSE_SUPPORT_EMAIL = support@example.com
+// Governing law, e.g. "the State of Delaware" / "美国特拉华州" (empty = generic wording)
+KIPURSE_GOVERNING_LAW_EN =
+KIPURSE_GOVERNING_LAW_ZH =
+// Debug build only: developer wallet for the contract-migration screen.
+KIPURSE_DEV_WALLET =

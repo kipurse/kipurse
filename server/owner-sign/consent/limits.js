@@ -1,0 +1,48 @@
+/* KPVH-GUARD v1 (t621 #1, 2026-10-27): every Base Account batch on Kipurse pages must be exactly what the Kipurse APP decoded and
+   checked first. The app puts a SHA-256 commitment of the batch in the URL fragment (#vh=..., never sent to any server). No commitment
+   or a different batch -> nothing is sent. #vw=<wallet> (deposit page only) allows exactly: USDC -> that wallet, or a stray-coin
+   return from that wallet back to the signer. */
+var kpVHCanon=p=>'kpbatch1|'+Number(p.chainId)+'|'+String(p.from).toLowerCase()+'|'+(p.calls||[]).map(c=>String(c.to).toLowerCase()+','+BigInt(c.value||0).toString()+','+String(c.data||'0x').toLowerCase()).join(';');
+var kpVHHash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(b=>b.toString(16).padStart(2,'0')).join('');
+var kpVHW=(p,vw)=>{const C=p.calls||[],w=String(vw).toLowerCase().replace(/^0x/,''),f=String(p.from).toLowerCase().replace(/^0x/,''),pd=a=>a.padStart(64,'0');
+  if(!/^[0-9a-f]{40}$/.test(w)||!/^[0-9a-f]{40}$/.test(f)||C.length!==1)return false;const c=C[0],to=String(c.to).toLowerCase().replace(/^0x/,''),d=String(c.data||'').toLowerCase().replace(/^0x/,''),v=BigInt(c.value||0);
+  if(to==='833589fcd6edb6e08f4c7c32d4f71b54bda02913'&&v===0n&&d.length===136&&d.startsWith('a9059cbb'+pd(w)))return true; // deposit: USDC.transfer(wallet, n)
+  if(to!==w||v!==0n||!d.startsWith('b61d27f6'))return false;const W=i=>d.slice(8+64*i,8+64*(i+1));
+  const tgt=W(0).slice(24),val=BigInt('0x'+W(1)),len=Number(BigInt('0x'+W(3)));if(W(2)!==pd('60'))return false;const inner=d.slice(8+64*4,8+64*4+len*2);
+  if(len===0)return tgt===f&&val>0n&&W(0).startsWith('0'.repeat(24)); // ETH back to the signer
+  return val===0n&&len===68&&inner.startsWith('a9059cbb'+pd(f));}; // token back to the signer
+var kpVH=async a=>{const p=a&&a.params&&a.params[0];const h=new URLSearchParams(String(location.hash||'').replace(/^#/,''));const vh=h.get('vh'),vw=h.get('vw');
+  if(p&&vh&&/^[0-9a-f]{64}$/i.test(vh)&&(await kpVHHash(kpVHCanon(p)))===vh.toLowerCase())return a;
+  if(p&&!vh&&vw&&kpVHW(p,vw))return a;
+  const en=document.documentElement.lang!=='zh';throw Error(vh?(en?'Stopped: this is not exactly what your Kipurse app checked. Nothing was sent.':'已停止：内容和启付 App 检查过的不一致，没有转出任何钱。'):(en?'Please start this from the Kipurse app. If you already did, update Kipurse in the App Store first. For your safety, a confirmation only works after the app has checked it. Nothing was sent.':'请从启付 App 里开始。如果你已经是从 App 里点的，请先到 App Store 更新启付。为了安全，只有启付 App 先检查过的内容才能确认。没有转出任何钱。'));};
+/* /KPVH-GUARD */
+/* KP-RELAY v1 (t1105): the owner's Base Account only relays. Exactly 3 calls from the owner: wallet -> owner F USDC (F <= 0.01),
+   USDC.approve(Pimlico ERC-20 paymaster, F), the cap change. Anything else -> nothing is sent. */
+var kpRelayOK=e=>{try{const lc=x=>String(x||"").toLowerCase(),C=e&&e.calls||[],pd=x=>x.padStart(64,"0"),W=lc(e.wallet).replace(/^0x/,""),O=lc(e.owner).replace(/^0x/,""),U="833589fcd6edb6e08f4c7c32d4f71b54bda02913",PM="6666666666667849c56f2850848ce1c4da65c68b";
+  if(C.length!==3||!/^[0-9a-f]{40}$/.test(W)||!/^[0-9a-f]{40}$/.test(O)||W===O||lc(e.from)!=="0x"+O||Number(e.chainId)!==8453||e.pm!=="https://pay.kipurse.com/owner/limits/paymaster")return!1;
+  const d0=lc(C[0].data).replace(/^0x/,""),d1=lc(C[1].data).replace(/^0x/,""),d2=lc(C[2].data);
+  if(lc(C[0].to)!=="0x"+W||BigInt(C[0].value||0)!==0n||d0.length!==456||!d0.startsWith("b61d27f6"+pd(U)+pd("0")+pd("60")+pd("44")+"a9059cbb"+pd(O))||d0.slice(400)!=="0".repeat(56))return!1;
+  const F=BigInt("0x"+d0.slice(336,400));if(F<=0n||F>10000n)return!1;
+  if(lc(C[1].to)!=="0x"+U||BigInt(C[1].value||0)!==0n||d1!=="095ea7b3"+pd(PM)+pd(F.toString(16)))return!1;
+  return lc(C[2].to)==="0x"+W&&BigInt(C[2].value||0)===0n&&d2.startsWith("0x34fcd5be")}catch(x){return!1}};
+/* /KP-RELAY */
+var KPEN=document.documentElement.lang!=="zh";// SPDX-License-Identifier: AGPL-3.0-only
+// Owner sends ONE Base Account batch that replaces the AI permission with the caps he chose. The server only builds it and checks the chain.
+import {createBaseAccountSDK} from '@base-org/account';
+const D=JSON.parse(document.getElementById('kp-data').textContent),st=document.getElementById('st'),go=document.getElementById('go');const say=(t,c)=>{st.textContent=t;st.style.color=c||'';};
+let P;const prov=()=>window.kpProvider??(P??=createBaseAccountSDK({appName:'Kipurse',appChainIds:[8453],preference:{telemetry:false}}).getProvider());
+const post=async(p,b)=>{const r=await fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok&&j.error)throw Error(j.detail??j.error);return j;};
+let busy=false;go.onclick=async()=>{if(busy)return;busy=true;go.disabled=true;try{
+  say((KPEN?'Preparing…':'正在准备…'));const pl=await post('/owner/limits/prepare',D.plan?{plan:D.plan}:{single:D.single,daily:D.daily,term:D.term,days:D.days});
+  // t1105: the tamper checks run BEFORE any wallet call. Relay = 3 calls from the owner's Base Account through Kipurse's ERC-20 paymaster.
+  // No sub-account, no send without the paymaster, never ETH.
+  const hx='0x'+Number(pl.chainId).toString(16);let req;
+  if(pl.feeFrom==='kipurse_wallet_relay'){if(!kpRelayOK(pl))throw Error(KPEN?'Stopped: this is not the safety-limit change your Kipurse app checked. Nothing was sent.':'已停止：内容不是启付 App 检查过的修改安全上限。没有转出任何钱。');
+    req=await kpVH({method:'wallet_sendCalls',params:[{version:'2.0.0',chainId:hx,from:pl.owner,atomicRequired:true,calls:pl.calls,capabilities:{paymasterService:{url:pl.pm}}}]});}
+  else{if(pl.feeFrom||!pl.pm)throw Error(KPEN?'Stopped: the network fee must be paid in USDC through Kipurse, and that isn’t available right now. Nothing was charged.':'已停止：手续费要通过启付用 USDC 付，现在不可用。没有扣钱。');
+    req=await kpVH({method:'wallet_sendCalls',params:[{version:'2.0.0',chainId:hx,from:pl.owner,atomicRequired:true,calls:pl.calls,capabilities:{paymasterService:{url:pl.pm}}}]});}
+  say((KPEN?'Opening Base Account…':'正在打开 Base Account…'));const [a]=await prov().request({method:'eth_requestAccounts'});if(a.toLowerCase()!==pl.owner.toLowerCase())throw Error((KPEN?'Please sign in with the wallet owner’s Base Account: ':'请用钱包主人的 Base Account 登录：')+pl.owner);
+  await prov().request(req);
+  window.kpPending?.({id:pl.id,submitted:'/owner/limits/submitted'});say((KPEN?'Submitted, waiting for Base to confirm… (about 10–60 s)':'已提交，等待 Base 确认…（约 10–60 秒）'));
+  for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,3000));const j=await post('/owner/limits/confirm',{id:pl.id});if(j.ok){go.style.display='none';window.kpDone?.(j);say((KPEN?'✅ New limits are active. Go back to Kipurse to see them.':'✅ 新上限已生效。回到 Kipurse 查看。'),'#080');busy=false;return;}}
+  window.kpFail?.();say((KPEN?'Not on chain yet. Wait a minute and tap again.':'还没看到链上结果，过一分钟再点一次。'));}catch(e){window.kpFail?.(e.message);say(e.message,'#c81e1e');}busy=false;go.disabled=false;};

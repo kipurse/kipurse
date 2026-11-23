@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "Scan the sign-in code or a receiving address.";
+"NSFaceIDUsageDescription" = "Confirm it's you before approving payments, withdrawals and limit changes.";
+"NSLocalNetworkUsageDescription" = "Connect to Kipurse running on your computer (home network).";

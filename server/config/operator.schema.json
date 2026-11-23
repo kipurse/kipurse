@@ -1,0 +1,24 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "operator.schema.json",
+ "title": "Kipurse operator config (kit/operator.mjs)",
+ "description": "Who runs this gateway: names, public endpoints, account ids and KEY FILE PATHS. Keep the file OUTSIDE the repository (kit/operator.mjs refuses a path inside it). Secrets are never inline: only absolute paths to key files. kit/operator.mjs validateOperator() is the authoritative check; this schema mirrors it.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["operator"],
+ "properties": {
+  "$schema": {"type": "string"},
+  "operator": {"type": "object", "additionalProperties": false, "required": ["displayName"],
+   "properties": {"legalName": {"type": "string"}, "displayName": {"type": "string", "minLength": 1}, "website": {"type": "string"}, "supportEmail": {"type": "string"}, "reviewEmail": {"type": "string"}}},
+  "endpoints": {"type": "object", "additionalProperties": false,
+   "properties": {"publicUrl": {"type": "string", "pattern": "^https?://"}, "mcpUrl": {"type": "string", "pattern": "^https?://"}, "rescueUrl": {"type": "string", "pattern": "^https?://"}}},
+  "cdp": {"type": "object", "additionalProperties": false,
+   "properties": {"entityId": {"type": "string"}, "projectId": {"type": "string"}, "apiKeyFile": {"type": "string", "description": "absolute path"}, "onrampAppName": {"type": "string"}}},
+  "apple": {"type": "object", "additionalProperties": false,
+   "properties": {"teamId": {"type": "string"}, "bundleIdPrefix": {"type": "string"}, "apnsKeyId": {"type": "string"}, "apnsKeyFile": {"type": "string", "description": "absolute path"}}},
+  "fees": {"type": "object", "additionalProperties": false,
+   "properties": {"recipientLabel": {"type": "string"}, "recipient": {"type": "string"}, "opsAddress": {"type": "string"}}},
+  "cardIssuer": {"type": "object", "additionalProperties": false,
+   "properties": {"provider": {"enum": ["mock", "rain", "stripe-issuing"]}, "accountRef": {"type": "string"}}}
+ }
+}

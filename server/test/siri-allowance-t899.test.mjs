@@ -1,0 +1,34 @@
+// t899: Siri works like the other AIs: owner-set per-payment + daily allowance; inside it (known payee) pays with no Face ID; over it -> ask_owner (Face ID push).
+import test from 'node:test';import assert from 'node:assert/strict';
+import {getAddress} from 'viem';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {engineFor} from './helpers/v5-fixture.mjs';
+import {BEGINNER_DEFAULTS,normalizeItem} from '../src/v5/mandates.mjs';
+import {createBuy} from '../src/v5/buy.mjs';
+import {createSiriAgent} from '../src/v5/siri.mjs';
+const P=i=>getAddress('0x'+String(i).padStart(4,'0')+'b'.repeat(32)+String(i).padStart(4,'0'));
+const mk=()=>{const e=engineFor({onAnomaly:()=>{},isPaused:()=>false,onMandateProposal:()=>{},ownerRulesDir:mkdtempSync(join(tmpdir(),'t899-'))},{bal:1000000000n},{openSingle:'500000000',openDaily:'900000000',single:'500000000',daily:'900000000',term:'900000000'});
+  const M=e.engine.mandates;const approveAll=()=>{for(const p of M.proposals())assert.equal(M.approve(p.id,()=>true).ok,true);};
+  M.propose({items:BEGINNER_DEFAULTS.filter(d=>d.on),by:'owner'});approveAll();
+  const siri=createSiriAgent(e.engine,{buyFactory:E=>createBuy(E,{sleep:async()=>{},waitMs:0})});return {...e,M,approveAll,siri};};
+const pay=(siri,amt,k,to=P(31))=>siri.handle('/siri/buy',{purpose:'daily',item:'Siri pay',merchant:'Cafe',to,amount:amt,idempotencyKey:'siri-t899-'+k},{authed:true}).then(([,j])=>j);
+test('agent_limits accepts an optional per-payment cap; old items unchanged',()=>{
+  const a=normalizeItem({kind:'agent_limits',agentId:'siri',single:'1',daily:'3',monthly:'30'});assert.equal(a.single,'1000000');
+  assert.equal('single' in normalizeItem({kind:'agent_limits',agentId:'codex',daily:'1',monthly:'10'}),false);
+  assert.throws(()=>normalizeItem({kind:'agent_limits',agentId:'siri',single:'5',daily:'3'}),/single <= daily/);});
+test('Siri: owner sets per-payment + daily; inside -> paid (no Face ID); over per-payment / daily -> ask_owner; editable',async()=>{const {M,approveAll,siri}=mk();
+  M.remember(P(31),'Cafe');
+  const p=M.propose({items:[{kind:'agent_limits',agentId:'siri',single:'1',daily:'2',monthly:'60'}],by:'owner'});assert.match(p.items[0].human.zh,/每笔最多 1/);approveAll();
+  assert.equal(M.agents().find(a=>a.agentId==='siri').single,'1');
+  const r1=await pay(siri,'0.8','a');assert.equal(r1.state,'paid',JSON.stringify(r1));
+  const r2=await pay(siri,'1.5','b');assert.equal(r2.decision,'ask_owner',JSON.stringify(r2));assert.equal(r2.nothingPaid,true);
+  const r3=await pay(siri,'0.9','c');assert.equal(r3.state,'paid');
+  const r4=await pay(siri,'0.9','d');assert.equal(r4.decision,'ask_owner','daily used up -> Face ID');
+  M.propose({items:[{kind:'agent_limits',agentId:'siri',single:'2',daily:'5',monthly:'60'}],by:'owner'});approveAll();
+  assert.equal(M.agents().find(a=>a.agentId==='siri').single,'2');
+  const r5=await pay(siri,'1.5','e');assert.equal(r5.state,'paid','raised allowance takes effect');});
+test('Siri stopped -> refuse; resume via owner-approved agent_limits',async()=>{const {M,approveAll,siri}=mk();M.remember(P(31),'Cafe');
+  M.agentStop('siri');const r=await pay(siri,'0.1','s1');assert.equal(r.reason,'AGENT_STOPPED');
+  M.propose({items:[{kind:'agent_limits',agentId:'siri',single:'1',daily:'2',monthly:'60',resume:true}],by:'owner'});approveAll();
+  const r2=await pay(siri,'0.1','s2');assert.equal(r2.state,'paid');});
+test('an AI cannot request a large per-payment cap for itself',()=>{const {M}=mk();
+  assert.throws(()=>M.propose({items:[{kind:'agent_limits',agentId:'siri',single:'30',daily:'40',monthly:'100'}],by:'agent:siri'}),/ai_request_too_large|AI limit/);});

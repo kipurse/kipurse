@@ -1,0 +1,14 @@
+{
+ "wallet": "0x13Fb64Fe3fC3c2C0034882b429A094cf73d2d71F",
+ "owner": "0x1317d714b1D9fdb36a5EcEAF64255b79c3dE497F",
+ "adapter": "0xb150030be35903AdEE466d7733Bf0841B667033C",
+ "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+ "b": {
+  "wallet": "48968363",
+  "vault": "154221",
+  "vaultReserved": "0",
+  "float": "0",
+  "vaultAddress": "0xffC041497B0b137b42aA3B48A15af004bE61bfad",
+  "floatAddress": null
+ }
+}

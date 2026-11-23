@@ -1,0 +1,11 @@
+# Changes to the leak guard, its allow/deny lists and CI need the maintainer's review.
+/scripts/guard*.mjs @kipurse
+/scripts/check-*.mjs @kipurse
+/scripts/guard.config.json @kipurse
+/public-addresses.txt @kipurse
+/private-denylist.sha256 @kipurse
+/spdx-baseline.txt @kipurse
+/.gitleaks.toml @kipurse
+/.github/ @kipurse
+/CLA.md @kipurse
+/LICENSING.md @kipurse

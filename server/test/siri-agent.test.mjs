@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createSiriAgent,siriArgs,SIRI_ID} from '../src/v5/siri.mjs';
+const fake=()=>{const calls=[];return {calls,f:()=>({buy:async(a,id)=>{calls.push([a,id]);return {decision:'can_pay',agent:id};},orderStatus:async(a,id)=>({id,k:a.purchaseKey}),allowances:id=>({id})})};};
+test('siri needs the phone session',async()=>{const {f}=fake();const S=createSiriAgent({},{buyFactory:f});assert.equal((await S.handle('/siri/buy',{item:'x'},{authed:false}))[0],401);});
+test('siri buys as agent "siri" through kipurse_buy (no owner powers)',async()=>{const {f,calls}=fake();let s=null;const S=createSiriAgent({},{buyFactory:f});
+  const [st,out]=await S.handle('/siri/buy',{purpose:'dev',item:'pools',url:'https://x.example/p',amount:0.005,agentId:'owner',withdrawalId:'w'},{authed:true,seen:i=>s=i});
+  assert.equal(st,200);assert.equal(out.agent,SIRI_ID);assert.equal(calls[0][1],'siri');assert.equal(s,'siri');assert.equal(calls[0][0].agentId,undefined);assert.equal(calls[0][0].withdrawalId,undefined);assert.equal(calls[0][0].amount,'0.005');});
+test('siri args drop non-https urls and unknown fields',()=>{const a=siriArgs({url:'http://x',item:'a',owner:true,method:'DELETE'});assert.deepEqual(a,{item:'a'});});
+test('siri status and allowances',async()=>{const {f}=fake();const S=createSiriAgent({},{buyFactory:f});assert.equal((await S.handle('/siri/status',{purchaseKey:'k'},{authed:true}))[1].id,'siri');assert.equal((await S.handle('/siri/allowances',{},{authed:true}))[1].id,'siri');assert.equal((await S.handle('/siri/buy',{},{authed:true}))[0],400);});

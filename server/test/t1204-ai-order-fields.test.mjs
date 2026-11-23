@@ -1,0 +1,43 @@
+// t1204 / handbook §6#93 (owner: "改，AI填内容，启付只管付钱"): the AI fills the merchant's documented order fields (incl. a listing token);
+// Kipurse forwards them, keeps no merchant credential, refuses with the exact missing fields, and never echoes AI secrets.
+// Recorded shape of a real merchant's PUBLIC docs (ExampleShop, 2026-11-18) served by an in-memory mock: never the real merchant.
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
+import {discoverMerchant,selectRoute,buildCreateOrder,orderToPayment,orderSecrets,DiscoveryError} from '../src/v5/discovery.mjs';
+const F=JSON.parse(fs.readFileSync(new URL('./fixtures/t1204-example-shop-shape.json',import.meta.url)));
+const USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',PAYEE='0xaC3c14a42628EAA726DCF3560c97F4cB4F4Bd521';
+const f=async u=>{const p=new URL(u).pathname;const b=p==='/openapi.json'?F.openapi:p==='/api/v1/agent/capabilities'?F.capabilities:null;return {ok:!!b,status:b?200:404,json:async()=>b,text:async()=>''};};
+const D=()=>discoverMerchant('https://merchant.mock',{fetch:f,usdc:USDC});
+const BID={listingId:'lst-1',ownerToken:'0b7f3c2e-aaaa-4bbb-8ccc-123456789abc',targetBid:1,board:'all'};
+const FIRST={destination:'https://game.example',category:'games',rulesVersion:'2026-11',userApproved:true,credentialsSavedSecurely:true,submissionSecret:'sub-secret-9f8e7d6c5b4a',
+  purchaseId:'7c1d2e3f-0000-4000-8000-000000000001',board:'today',targetBid:1,maxAmountCents:100};
+test('§6#93 discovery: both documented order APIs found (deposit order + publish-and-prepare payment request)',async()=>{const d=await D();
+  assert.deepEqual(d.routes.map(r=>r.create.path),['/api/v1/agent/usdc-orders','/api/v1/agent/first-bid']);assert.equal(d.create.path,'/api/v1/agent/usdc-orders');
+  assert.equal(d.routes[0].create.bodyAuth,'ownerToken');assert.equal(d.routes[1].create.responseField,'paymentRequest');assert.equal(d.routes[1].create.successStage,'payment_request_ready');
+  assert.equal(d.routes[1].tokenContract,USDC);assert.equal(d.routes[1].maxAmountAtomic,6000000n);});
+test('§6#93 AI-supplied fields pick the route; the AI token goes in the body; no owner config needed',async()=>{const d=await D();const s=selectRoute(d,BID);
+  assert.equal(s.ok,true);assert.equal(s.route.create.path,'/api/v1/agent/usdc-orders');
+  const rq=buildCreateOrder(s.route,BID,{purchaseId:'11111111-2222-4333-8444-555555555555'});const b=JSON.parse(rq.init.body);
+  assert.equal(b.ownerToken,BID.ownerToken);assert.equal(b.purchaseId,'11111111-2222-4333-8444-555555555555');assert.equal(rq.init.headers.authorization,undefined);
+  const s2=selectRoute(d,FIRST);assert.equal(s2.ok,true);assert.equal(s2.route.create.path,'/api/v1/agent/first-bid');});
+test('§6#93 missing fields -> refusal names exactly the missing order fields (+ the other route)',async()=>{const d=await D();const s=selectRoute(d,{targetBid:1,board:'all'});
+  assert.equal(s.ok,false);assert.deepEqual(s.missing,['listingId','ownerToken']);assert.equal(s.alternatives[0].path,'/api/v1/agent/first-bid');
+  assert.throws(()=>buildCreateOrder(d.routes[0],{targetBid:1,board:'all'},{purchaseId:'x-12345678'}),e=>e instanceof DiscoveryError&&e.code==='missing_order_fields'&&/listingId/.test(e.detail)&&/ownerToken/.test(e.detail));});
+test('§6#93 owner-configured credential stays an optional fallback (AI value wins)',async()=>{const d=await D();
+  assert.equal(selectRoute(d,{listingId:'l',targetBid:1,board:'all'},{fallbackCredential:true}).ok,true);
+  assert.equal(JSON.parse(buildCreateOrder(d.routes[0],{listingId:'l',targetBid:1,board:'all'},{credential:'cfg-tok-1',purchaseId:'p-12345678'}).init.body).ownerToken,'cfg-tok-1');
+  assert.equal(JSON.parse(buildCreateOrder(d.routes[0],BID,{credential:'cfg-tok-1',purchaseId:'p-12345678'}).init.body).ownerToken,BID.ownerToken);});
+test('§6#93 payment-request route: payee/amount/expiry only from the nested paymentRequest at the success stage, re-validated',async()=>{const d=(await D()).routes[1];const now=1_800_000_000;
+  const pr={chainId:8453,tokenContract:USDC,depositAddress:PAYEE,amountAtomic:'500000',amountUsdc:'0.5',expiresAt:new Date((now+900)*1000).toISOString()};
+  const ok=orderToPayment({stage:'payment_request_ready',purchaseId:FIRST.purchaseId,statusUrl:'/api/v1/agent/usdc-orders/'+FIRST.purchaseId,listing:{managementToken:'mgmt-secret'},paymentRequest:pr},d,{usdc:USDC,nowS:now});
+  assert.equal(ok.ok,true);assert.equal(ok.payment.to,PAYEE);assert.equal(ok.payment.amountAtomic,'500000');assert.equal(ok.statusUrl,'https://merchant.mock/api/v1/agent/usdc-orders/'+FIRST.purchaseId);
+  assert.ok(!JSON.stringify(ok).includes('mgmt-secret'));
+  assert.equal(orderToPayment({stage:'listing_published',paymentRequest:pr},d,{usdc:USDC,nowS:now}).code,'order_not_payable');
+  assert.equal(orderToPayment({stage:'payment_request_ready'},d,{usdc:USDC,nowS:now}).code,'bad_order_response');
+  assert.equal(orderToPayment({stage:'payment_request_ready',purchaseId:'p',paymentRequest:{...pr,amountAtomic:'7000000',amountUsdc:'7'}},d,{usdc:USDC,nowS:now}).code,'amount_above_merchant_cap');
+  assert.equal(orderToPayment({stage:'payment_request_ready',purchaseId:'p',paymentRequest:{...pr,tokenContract:PAYEE}},d,{usdc:USDC,nowS:now}).code,'unsupported_asset');
+  assert.equal(orderToPayment({stage:'payment_request_ready',purchaseId:'p',statusUrl:'https://evil.example/x',paymentRequest:pr},d,{usdc:USDC,nowS:now}).code,'cross_origin_status_url');});
+test('§6#93 secrets the AI passes are recognised for redaction (body credential + secret-named fields, never ids)',async()=>{const d=await D();
+  const s=orderSecrets(d.routes[0],{...BID,submissionSecret:'sub-secret-9f8e7d6c5b4a',idempotencyKey:'idem-12345678'});
+  assert.ok(s.includes(BID.ownerToken));assert.ok(s.includes('sub-secret-9f8e7d6c5b4a'));assert.ok(!s.includes('idem-12345678'));assert.ok(!s.includes('lst-1'));});
+test('§6#93 MCP wording: the AI fills order fields; no "owner config" credential promise',async()=>{const src=fs.readFileSync(new URL('../src/v5/mcp.mjs',import.meta.url),'utf8');
+  assert.ok(!/Merchant credentials come from the owner config/.test(src));assert.ok(/YOU fill orderParams/.test(src));assert.ok(/never stores, logs or shows them/.test(src));});

@@ -1,0 +1,8 @@
+# Kipurse owner kit — developer notes
+- `kit/server.mjs`: owner page + owner API (one-time link -> HttpOnly cookie + CSRF header + Origin check) + MCP Streamable HTTP at `/mcp/<agentToken>` (stateless; token stored as sha256 in `~/.kipurse-kit/state.json`, 0600). 127.0.0.1 only. TEST MODE (Base Sepolia, the V5 adapter from `KIPURSE_ADAPTER` / `config.json`). Mainnet: `--mainnet` + `KIPURSE_MAINNET=I_UNDERSTAND`, and new-wallet mainnet onboarding is still refused in this build.
+- Setup = ONE wallet_sendCalls from the owner's Base Account: [factory.createAccount(owners=[owner, SPM]), wallet.executeBatch(approve V5 permission + zero-reserve vault buffer 0.2 USDC)]. Testnet only; the buffer needs ≥0.2 USDC deposited to the counterfactual address first.
+- Agent tokens never reach the owner API; owner actions are MAC'd with the owner secret (separate file) server-side.
+- Deposit scanning covers USDC only (wrong-token flagging needs a token-agnostic scan; TODO).
+- e2e: `node kit/e2e-sepolia.mjs <keys.json>`; the owner signature is simulated by the testnet owner EOA sending the same calls.
+## Remote HTTPS hosting (designed, NOT deployed)
+Needed so Claude Desktop / phone agents work without a local server: a public HTTPS host (TLS, e.g. small VPS or managed container) running this server per tenant; executor session key in a KMS/HSM instead of a file; owner login via passkey (WebAuthn bound to the Base Account) instead of the one-time link; per-agent tokens revocable (already), rate limits, audit log export; no custody (keys stay in the owner's Base Account). Needs your OK before any public deploy.

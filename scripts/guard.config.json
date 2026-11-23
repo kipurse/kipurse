@@ -1,0 +1,16 @@
+{
+ "_comment": "Repository guard settings (scripts/guard.mjs). Keep every list short and specific: an entry here weakens a check.",
+ "skipDirs": [".git", "node_modules", ".build", ".swiftpm", "DerivedData", "contracts/lib", "contracts/out", "contracts/cache"],
+ "addressCheckExempt": [
+  "^server/src/v5/data/scam-blacklist\\.json$",
+  "^server/src/v5/data/ofac-sdn-eth\\.json$"
+ ],
+ "addressCheckExemptWhy": "third-party address lists (scam database, OFAC SDN) refreshed by scripts/update-blacklist.mjs and scripts/update-sanctions.mjs; the hashed denylist still covers them",
+ "spdxExtensions": [".swift", ".mjs", ".js", ".cjs", ".ts", ".sol", ".sh", ".py"],
+ "spdxExempt": [
+  "^server/kit/static/app\\.js$",
+  "^server/kit/rescue/rescue\\.js$",
+  "^server/owner-sign/static/[a-z0-9-]+\\.js$"
+ ],
+ "spdxExemptWhy": "generated, minified browser bundles (their sources carry the headers)"
+}
