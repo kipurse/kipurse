@@ -4,7 +4,9 @@
 // Payee and amount come ONLY from parsed protocol data (detector). The adapter enforces per-payment caps on the AMOUNT and
 // daily / term caps on amount + fees. Users bear all gas: networkFee = actual gas cost quoted here (no markup) <= owner max;
 // this engine mirrors the adapter's routing so agents get a precise "why not" before anything is sent.
-import {randomBytes} from 'node:crypto';import {guardFetch} from './ssrf.mjs';
+import {randomBytes} from 'node:crypto';import {guardFetch,readCapped} from './ssrf.mjs';import {scrubUrls} from './store.mjs';
+/* t1278 S6: an error text that reaches an answer or a stored record: URLs (RPC / bundler keys) and token=... removed, length bounded */
+const errText=(e,n=160)=>scrubUrls(e?.shortMessage??e?.message??e).slice(0,n);
 // t796 L3: every merchant request goes through the SSRF guard (public https hosts only, no redirects). Injected test fetch skips DNS.
 const mfetch=cfg=>guardFetch(cfg.fetch??globalThis.fetch,{allowLocal:!!cfg.allowHttpMerchantForTests,resolve:cfg.resolveHost??(cfg.fetch?async()=>[{address:'93.184.216.34'}]:undefined)});
 import {getAddress,hashDomain,recoverTypedDataAddress,encodeFunctionData} from 'viem';
@@ -22,6 +24,7 @@ const USDC_OF={8453:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',84532:'0x036CbD
 import {GasBook,inflightLock,liveUsdcPerEth,ETH_USD_FEEDS,SEQUENCER_FEEDS,sequencerCheck,secondUsdcPerEth,divergenceBps,MAX_FAILURES_PER_AGENT_PER_DAY} from './gas.mjs';
 import {trustTypedData,untrustTypedData,denySignerTypedData,approvalTypedData,newNonce} from './owner.mjs';
 import {makeScope,scopeCheck} from './limit-scope.mjs';import {createApprovalUse,approvalKey,isOwnerApproval} from './approval-use.mjs';
+import {costOf,costParts,incomingCost,missingOk} from './spend-cost.mjs';
 
 const j=x=>JSON.parse(JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v));
 const b64=o=>Buffer.from(JSON.stringify(o)).toString('base64');
@@ -50,9 +53,15 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   /* t1181u (§6#84): the engine's network + token; every off-chain limit record is pinned to it */
   const ENGINE_SCOPE=(()=>{try{return makeScope(cfg.chainId,cfg.token);}catch{return null;}})();
   const AU=createApprovalUse(ledger.db);/* t1181u: one owner approval = one x402 reservation (server side; contract fix on the branch) */
-  const MD=createMandates({db:ledger.db,wallet:p.account,scope:ENGINE_SCOPE,walletCaps:()=>({single:B('single'),daily:B('daily'),term:B('term')}),nameOf:a=>{try{return nameOf(a);}catch{return null;}},onProposal:v=>{try{cfg.onMandateProposal?.(v);}catch{}}});
+  const MD=createMandates({db:ledger.db,wallet:p.account,scope:ENGINE_SCOPE,costParams:()=>costParams(),walletCaps:()=>({single:B('single'),daily:B('daily'),term:B('term')}),nameOf:a=>{try{return nameOf(a);}catch{return null;}},onProposal:v=>{try{cfg.onMandateProposal?.(v);}catch{}}});
   const ASK=createOwnerAsks({db:ledger.db});/* t1170u §6#82: owner asks (new payee above an AI auto limit) */
   const OWNER_OK=Symbol('ownerApprovedAsk');/* set only by payApprovedByOwner (server code after the owner's Face ID); never reachable from AI JSON */
+  /* t1278 S2: a signed order the SERVER fetched / built itself (autoSignedOrder, signed54, V5.1 attestor, layered attestor). Only these may be
+     unbound (payer = 0); an order that came from the AI must name this wallet as payer, on every suite. Never reachable from AI JSON. */
+  const SERVER_ORDER=Symbol('serverFetchedOrder');/* t1279 R1 (§6#139): an already-normalized request is trusted ONLY under this in-process Symbol; a JSON key "__normalized" from an AI is ignored */const NORMALIZED=Symbol('normalizedRequest');const normReq=n=>({[NORMALIZED]:n});const serverReq=so=>({signedOrder:so,[SERVER_ORDER]:true});
+  /* t1278 S3/S4: the gate's decision for this payment (tier, order, allowance), handed by payGuarded / paidFetch / releaseHold to payNormalized
+     for the in-transaction re-check at claim time. Server code only (a Symbol key never survives JSON). */
+  const CTX=Symbol('guardCtx');
   const P=cfg.policy??decodePolicyV5(p.extraData);const B=k=>BigInt(P[k]??0);
   const c=client??v5Client({chainId:cfg.chainId,rpc:cfg.rpc,adapter:cfg.adapter,executorKey:cfg.executorKey,impersonate:cfg.impersonateExecutor,maxPriorityFeeWei:cfg.maxPriorityFeeWei,version:cfg.version});
   // OFAC sanctions screening: every payment (agent AND owner), trust entry and withdrawal destination. Oracle read only on Base mainnet.
@@ -78,7 +87,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const rd=async(fn,args,addr)=>c.read(fn,args,addr??(TRUST_FNS.has(fn)?await trustAddr():undefined));
   const execAddr=getAddress(P.executor);
   const agentsById=new Map((cfg.agents??[]).map(a=>[a.id,a]));
-  const agentReason=(agentId,amount)=>{if(!cfg.agents)return null;const a=agentsById.get(agentId);if(!a)return 'unknown_agent';return agentBudgetReason(a,ledger,amount,p);};
+  const agentReason=(agentId,amount,networkFee=0n)=>{if(!cfg.agents)return null;const a=agentsById.get(agentId);if(!a)return 'unknown_agent';let cost=amount;try{cost=costIn(amount,networkFee);}catch{}return agentBudgetReason(a,ledger,amount,p,undefined,cost);};/* t1281: budgets count amount + fee */
   const chainNow=async()=>Number((await c.pub.getBlock()).timestamp);
   const domain={name:cfg.orderDomain?.name??'AgentWalletPaymentOrder',version:cfg.orderDomain?.version??'5',chainId:cfg.chainId,verifyingContract:getAddress(cfg.adapter)};
   const ownerCtx={adapter:cfg.adapter,chainId:cfg.chainId,version:V51?'5.1':'5'};
@@ -86,7 +95,16 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   let verP=null;const verifierAddr=()=>verP??=cfg.orderVerifier?Promise.resolve(getAddress(cfg.orderVerifier)):c.read('orders',[]).then(getAddress);
   const orderUsedOnChain=async o=>V51?rd('used',[p.account,o.signer,o.orderId],await verifierAddr()):rd('orderUsed',[o.signer,o.orderId]);
   let feeCache=cfg.fee?{ppm:BigInt(cfg.fee.ppm),recipient:cfg.fee.recipient}:null;
-  const fee=async()=>feeCache??=(async()=>{const fc=await rd('fees');return {ppm:await rd('feePpm',[],fc),recipient:await rd('feeRecipient',[],fc).catch(()=>null),controller:fc};})();
+  /* t1281 (§6#141): the live protocol fee rate, kept for the synchronous limit sums (inside the claim's BEGIN IMMEDIATE). Before the first chain
+     read it is the owner-accepted maximum (Policy.maxFeePpm), i.e. never less than the real fee. */
+  let PPM=feeCache?BigInt(feeCache.ppm):null;
+  /* (a failed first read is not cached: the next call reads again; the limit sums meanwhile use the owner-accepted maximum) */
+  const fee=async()=>{const pr=(feeCache??=(async()=>{const fc=await rd('fees');return {ppm:await rd('feePpm',[],fc),recipient:await rd('feeRecipient',[],fc).catch(()=>null),controller:fc};})());let f;try{f=await pr;}catch(e){if(feeCache===pr)feeCache=null;throw e;}try{PPM=BigInt(f.ppm);}catch{}return f;};
+  const ppmNow=()=>PPM??B('maxFeePpm');
+  /** t1281: the ONE cost formula's parameters (src/v5/spend-cost.mjs): every off-chain sum counts amount + protocol fee + network fee */
+  const costParams=()=>({ppm:ppmNow(),maxNetworkFee:B('maxNetworkFee')});ledger.costParams=costParams;
+  const costIn=(amount,networkFee=0n)=>incomingCost(amount,{ppm:ppmNow(),networkFee});
+  const warmFee=async()=>{try{await fee();}catch{}};
   const GP=cfg.gasPricing??{};
   /** Network fee for this call: actual gas (estimate x current gas price, + x402 closing share) in USDC, at actual cost (no markup). */
   /** Base (OP stack) L1 data fee of this tx, from the GasPriceOracle predeploy. The unsigned-tx envelope (~110 bytes) is
@@ -140,7 +158,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     return gas.recordFailure({account:p.account,agentId,txHash:e.hash,gasUsed:e.gasUsed,gasPrice:e.gasPrice,usdcPerEth:lastUsdcPerEth});};
   const parsedCache=new Map();
   const estimate=async(functionName,args)=>{try{return await c.pub.estimateContractGas({address:cfg.adapter,abi:v5Abi,functionName,args,account:execAddr});}catch{return null;}};
-  const float=createFloat({cfg,rd,write,p,B,ledger,fee,chainNow:()=>chainNow(),txLock,estimate,keyFile:(cfg.float?.sessionKeyFile)??(ledgerFile?ledgerFile+'.float-session.json':null),
+  const float=createFloat({cfg,rd,write,p,B,ledger,fee,chainNow:()=>chainNow(),txLock,estimate,isPaused:()=>isPaused(),keyFile:(cfg.float?.sessionKeyFile)??(ledgerFile?ledgerFile+'.float-session.json':null),
     quote:async(n,gasUnits,fn,args)=>{const x=withRecovery(await networkFeeFor(n,gasUnits,dataOf({functionName:fn,args})));return {...x,applied:h=>settleGas(x,h)};}});
   const useRegistry=async()=>lc(P.registry??ZERO)!==lc(ZERO)&&!(await rd('registryOptOut',[p.account]));
   const reg=async(fn,args,dflt)=>{try{return await rd(fn,args,P.registry);}catch{return dflt;}}; // mirrors the adapter's try/catch: failing registry = not listed
@@ -198,7 +216,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     return {tier:'stranger',merchant:null,single:B('openSingle')};
   }
 
-  async function verifySigned(n){
+  async function verifySigned(n,{server=false}={}){
     if(n.mode!=='signed')return n;const o=n.signedOrder;let s='';
     if(V51!==(o.v===2))return {ok:false,code:'order_domain_mismatch',detail:V51?'this V5.1 wallet needs a kipurse.signed-order.v2 order (stable verifier domain)':'a V5 wallet pays kipurse.signed-order.v1 orders only'};
     if(V51){const ver=await verifierAddr();if(lc(o.verifier)!==lc(ver)||Number(o.chainId)!==cfg.chainId)return {ok:false,code:'order_domain_mismatch',detail:'order signed for another verifier / chain'};
@@ -209,12 +227,14 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(o.payer&&lc(o.payer)!==lc(ZERO)&&lc(o.payer)!==lc(p.account))return {ok:false,code:'order_for_other_payer',detail:'the merchant signed this order for another wallet'};
     /* t1240 §6#110 F5 (security review): on V5.4 a signed order must be bound to THIS wallet - an unbound one (payer 0) could be someone else's
        order from a merchant the owner trusts, planted for this wallet's AI to pay */
-    if(!V51&&typeof cfg.signerGrant==='function'&&lc(o.payer??ZERO)===lc(ZERO))return {ok:false,code:'order_payer_unbound',detail:'this wallet pays only signed orders bound to it (payer = this wallet)'};
+    /* t1278 S2: on EVERY suite, an AI-supplied order must be bound to this wallet; only server-fetched orders (explicit internal flag) skip this */
+    if(!server&&lc(o.payer??ZERO)===lc(ZERO))return {ok:false,code:'order_payer_unbound',detail:'this wallet pays only signed orders bound to it (payer = this wallet)'};
     if(lc(s)!==lc(o.claimedSigner))return {ok:false,code:'signature_invalid',detail:'recovered signer does not match the order signer'};
     return {...n,signedOrder:{...o,signer:getAddress(s)}};
   }
-  const resolveN=async input=>{if(input?.__normalized)return input.__normalized;if(input?.parsedId){const e=parsedCache.get(input.parsedId);if(!e)return {ok:false,code:'unknown_parsed_id',detail:'parse again (ids live 15 min, per process)'};return e.n;}
-    const n=detect(input?.request??input,{chains:[cfg.chainId]});if(!n.ok)return n;return verifySigned(n);};
+  const resolveN=async input=>{if(input&&Object.prototype.hasOwnProperty.call(input,NORMALIZED))return input[NORMALIZED];if(input&&typeof input==='object'&&'__normalized' in input)return {ok:false,code:'bad_request',detail:'unknown field __normalized'};if(input?.parsedId){const e=parsedCache.get(input.parsedId);if(!e)return {ok:false,code:'unknown_parsed_id',detail:'parse again (ids live 15 min, per process)'};return e.n;}
+    const srv=input?.[SERVER_ORDER]===true||input?.request?.[SERVER_ORDER]===true;
+    const n=detect(input?.request??input,{chains:[cfg.chainId]});if(!n.ok)return n;return verifySigned(n,{server:srv});};
   /** Canonical identity: same merchant requirement => same key for every agent (and the same on-chain purchaseKey). */
   /** Signed orders: keyed on (merchant, orderId) only, like adapter.signedPurchaseKey; the amount is never part of a key. */
   function identity(n,opts={},r){
@@ -225,7 +245,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const directory=n=>{const r=cfg.merchantRegistry??[];for(const m of r){if(n.signedOrder?.signer&&(m.signers??[]).map(lc).includes(lc(n.signedOrder.signer)))return m;if(n.payee&&(m.payTo??[]).map(lc).includes(lc(n.payee)))return m;}return null;};
 
   async function parse(request,{repeatKey,intentId,fallbackOrderId}={}){
-    let n=detect(request,{chains:[cfg.chainId]});if(!n.ok)return n;n=await verifySigned(n);if(n.ok===false)return n;
+    let n=detect(request,{chains:[cfg.chainId]});if(!n.ok)return n;n=await verifySigned(n,{server:request?.[SERVER_ORDER]===true});if(n.ok===false)return n;
     if(fallbackOrderId&&!n.merchantOrderId&&n.mode==='direct')n={...n,merchantOrderId:fallbackOrderId};
     const r=await route(n,await chainNow());
     const warnings=[...(n.warnings??[])];let id=null;try{id=identity(n,{repeatKey,intentId},r);}catch{warnings.push('purchase_ref_required: pass intentId or repeatKey');}const f=await fee();const fe=feeFor(n.amount,f);
@@ -314,7 +334,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(row&&BigInt(row.amount)!==amount&&['claimed','submitted','prepared','paid'].includes(row.state))R.push('price_changed');
     if(!R.length&&n.mode!=='x402_redirect'){const call=buildCall(n,id,s.cnow,ownerApproval,networkFee);
       try{await c.pub.simulateContract({address:cfg.adapter,abi:v5Abi,functionName:call.functionName,args:call.args,account:execAddr});simulation='ok';}
-      catch(e){simulation='revert: '+String(e.shortMessage??e.message).split('\n').find(l=>/reverted|reason/i.test(l))?.trim()?.slice(0,160);R.push('simulation_reverted');}}
+      catch(e){simulation='revert: '+scrubUrls(e?.shortMessage??e?.message).split('\n').find(l=>/reverted|reason/i.test(l))?.trim()?.slice(0,160);R.push('simulation_reverted');}}
     const uniq=[...new Set(R)];
     const needsOwnerApproval=n.mode!=='signed'&&!approved&&uniq.length>0&&uniq.every(isOwnerApprovable);
     return j({...(gasMode==='f2'?{gasMode,warning:F2_WARNING}:{}),canPay:uniq.length===0,reasons:uniq,needsOwnerApproval,tier:r.tier,merchant:directory(n)?.id??(r.merchant??null),
@@ -327,10 +347,10 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       next:n.mode==='x402_redirect'?{tool:'kipurse_paid_fetch',url:n.redirectUrl}:needsOwnerApproval?{tool:'kipurse_approval_request'}:undefined});
   }
 
-  async function payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal,allowSameAmount,verifiedDomain,withdrawalId,allowance,ownerAsk}){
+  async function payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal,allowSameAmount,verifiedDomain,withdrawalId,allowance,ownerAsk,ctx=null}){
     {const sx=await sanctioned(n.payee,n.signedOrder?.signer);if(sx)return sx;}
     // t621 #6: every AI payment (direct, signed order, x402 after the 402 quote) is checked against the everyday limits right before signing
-    if(agentId!=='owner'&&!withdrawalId&&!(ownerAsk===true&&ownerApproval)){/* t1170u: the owner's Face ID approval of this exact ask (server path only) is not an AI auto payment */let amt;try{amt=typeof n.amount==='bigint'?n.amount:(n.amount!==undefined&&n.amount!==null?BigInt(n.amount):undefined);}catch{amt=undefined;}
+    if(agentId!=='owner'&&!withdrawalId&&!(ownerAsk===true&&ownerApproval)){/* t1170u: the owner's Face ID approval of this exact ask (server path only) is not an AI auto payment */await warmFee();let amt;try{amt=typeof n.amount==='bigint'?n.amount:(n.amount!==undefined&&n.amount!==null?BigInt(n.amount):undefined);}catch{amt=undefined;}
       const ed=everydayGate(amt,{scope:{chainId:n.chainId,token:n.token}});if(ed)return capHit(ed);}
     if(n.mode==='signed'&&!n.signedOrder?.signer){n=await verifySigned(n);if(n.ok===false)return {state:'rejected',reason:n.code};}
     const nowS=await chainNow();
@@ -362,8 +382,9 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     // its real reason instead of reaching the bundler (which would reject it in simulation). The adapter stays the authority.
     // a purchase already started/paid is answered by the ledger (exactly-once), never by a cap error (Sepolia attestor e2e finding)
     const started=['claimed','submitted','prepared','paid'].includes(ledger.get(id.ledgerKey)?.state);
-    if(cfg.preflightGuard!==false&&!started){let pf=null;try{pf=await preflight({__normalized:n},{agentId,repeatKey,intentId,ownerApproval});}catch{}
-      const block=(pf?.reasons??[]).filter(x=>/^over_(stranger|verified|merchant|trusted|permission|single|daily|term)|^stranger_disabled$|^insufficient_balance$|^wallet_paused$|^authorization_not_started$|^fee_above_owner_accepted$|^order_domain_mismatch$|^signer_revoked$/.test(x));
+    /* t1278 S11: a preflight that throws (RPC / chain read failure) fails CLOSED: retry later, nothing sent; a reverting simulation blocks too */
+    if(cfg.preflightGuard!==false&&!started){let pf=null;try{pf=await preflight(normReq(n),{agentId,repeatKey,intentId,ownerApproval});}catch{return {state:'retry_later',reason:'preflight_failed',nothingPaid:true,retryAfterSec:Number(cfg.chainReadRetrySec??30),detail:'the pre-payment check could not run; nothing was sent. Retry later with the same idempotencyKey.'};}
+      const block=(pf?.reasons??[]).filter(x=>/^over_(stranger|verified|merchant|trusted|permission|single|daily|term)|^stranger_disabled$|^insufficient_balance$|^wallet_paused$|^authorization_not_started$|^fee_above_owner_accepted$|^order_domain_mismatch$|^signer_revoked$|^simulation_reverted$/.test(x));
       if(block.length)return {state:'rejected',reason:block[0],reasons:block,detail:'the adapter would refuse this payment; nothing was sent'};}
     const key=id.ledgerKey;const prev=ledger.get(key);
     if(prev&&BigInt(prev.amount)!==n.amount&&['claimed','submitted','prepared','paid'].includes(prev.state))return {state:'rejected',reason:'price_changed',purchaseKey:key,detail:`this purchase was already started/paid for ${prev.amount}; a changed amount is never paid again`};
@@ -386,7 +407,16 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     let termLimit=null;
     const ownerAskOk=ownerAsk===true&&!!ownerApproval;/* t1264: the owner's Face ID approval of one ask is not an AI auto payment: no AI total */
     if(agentId!=='owner'&&!withdrawalId&&!ownerAskOk){try{const ev=cfg.everydayGet?.()??null;if(ev?.authorized===true&&ev.term!=null)termLimit=BigInt(ev.term);}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}}
-    const claim=termLimit!=null?ledger.claimWithin(key,n,intentId,agentId,termLimit):ledger.claim(key,n,intentId,agentId);
+    /* t1278 S4: the AI checks (everyday 24h, per-AI caps, the allowance it uses, the unattended total) ran before this point and read only
+       finished records; they are run AGAIN inside the claim's BEGIN IMMEDIATE, counting every other claimed / in-flight / paid AI payment and
+       pending holds, and this payment's provisional order row + one-off allowance use are written in that same transaction. */
+    const guarded=agentId!=='owner'&&!withdrawalId&&!ownerAskOk;
+    /* t1281: the authoritative re-check counts this payment as amount + fee + the network fee quoted above */
+    const hooks=guarded?{check:()=>dupInTx(n,key)??recheckInTx({amount:n.amount,agentId,scope:{chainId:n.chainId,token:n.token},ctx,networkFee}),after:()=>claimOrderInTx(key,{agentId,n,ctx})}:{};
+    let claim;try{claim=termLimit!=null?ledger.claimWithin(key,n,intentId,agentId,termLimit,{...hooks,cost:costIn(n.amount,networkFee)}):ledger.claim(key,n,intentId,agentId,hooks);}
+    catch(e){if(e?.message!=='one_off_already_used')throw e;/* t1279 R9: the one-time allowance was used by a concurrent payment; the claim rolled back */
+      return {state:'rejected',reason:'MANDATE_ALREADY_USED',nothingPaid:true,detail:'another payment used this one-time allowance first; nothing was sent',fix:'Nothing was paid. Ask the owner again (kipurse_buy / kipurse_request_trust).',say_to_user:'没有付款：这次的一次性批准已经被另一笔付款用掉了。/ Not paid: this one-time approval was already used by another payment.'};}
+    if(claim.refused)return capHit({...claim.refused,nothingPaid:true,purchaseKey:undefined});
     if(!claim.won){const rw=claim.row;return {state:rw.state==='paid'||rw.state==='prepared'?'already_'+rw.state:'in_progress',purchaseKey:key,paidBy:rw.claimed_by,txHash:rw.tx_hash,result:rw.result?JSON.parse(rw.result):null};}
     ledger.setOrigin(key,withdrawalId!==undefined&&withdrawalId!==null?'withdrawal':agentId==='owner'?'owner':ownerAskOk?'owner_ask':'ai');/* t1264: only AI rows count against the AI total */
     if(termLimit!=null&&claim.admitted===false)return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:termLimit.toString(),fix:'Another payment already reserved the explicit AI total. Nothing was paid.',say_to_user:'没有付款：加上还没付完的，会超过你设的 AI 总额。/ Not paid: with payments already reserved, this would go over the total you set.'});
@@ -394,7 +424,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const release=txLock.try(p.account);
     if(!release){ledger.update(key,agentId,{state:'failed'});return {state:'retry_later',reason:'tx_in_flight',purchaseKey:key,retryAfterSec:5,detail:'one payment tx per wallet at a time; nothing was sent'};}
     try{
-      if(termLimit!=null){const adm=ledger.admitAmount(key,n.amount,termLimit);if(!adm.ok)return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:termLimit.toString(),fix:'Another payment already reserved the explicit AI total. Nothing was paid.',say_to_user:'没有付款：加上还没付完的，会超过你设的 AI 总额。/ Not paid: with payments already reserved, this would go over the total you set.'});}
+      if(termLimit!=null){const adm=ledger.admitAmount(key,costIn(n.amount,networkFee),termLimit);if(!adm.ok)return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:termLimit.toString(),fix:'Another payment already reserved the explicit AI total. Nothing was paid.',say_to_user:'没有付款：加上还没付完的，会超过你设的 AI 总额。/ Not paid: with payments already reserved, this would go over the total you set.'});}
       return await payLocked(n,{agentId,key,id,r,cnow,ownerApproval,networkFee,nfx,jt,withdrawalId});}finally{release();}
   }
   /* t1264: purchases this process is sending right now (the restart / status reconcile never touches them) */
@@ -409,7 +439,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     let usedOnChain;
     try{usedOnChain=!!(await usedNow(id.kind,id.purchaseKey,n.signedOrder));
       if(!usedOnChain&&typeof cfg.priorPurchaseUsed==='function'){const pr=await cfg.priorPurchaseUsed({kind:id.kind,purchaseKey:id.purchaseKey,signedOrder:n.signedOrder});usedOnChain=pr?.used===true;}}   // t1250 V5.5: paid on V5.4 by the previous wallet
-    catch(e){ledger.update(key,agentId,{state:'failed',result:{error:'chain_read_failed',detail:String(e?.shortMessage??e?.message??e).slice(0,160)}});
+    catch(e){ledger.update(key,agentId,{state:'failed',result:{error:'chain_read_failed',detail:errText(e)}});
       return {state:'retry_later',reason:'chain_read_failed',nothingPaid:true,purchaseKey:key,retryAfterSec:Number(cfg.chainReadRetrySec??30),
         detail:'could not read whether this purchase is already paid on chain; nothing was sent. Retry later with the same idempotencyKey.'};}
     if(usedOnChain){ledger.update(key,agentId,{state:'paid',result:{note:'purchase already used on chain'}});return {state:'already_paid_on_chain',purchaseKey:key};}
@@ -429,7 +459,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         const tx=await write(call.functionName,call.args,{label:call.functionName+':'+key,beforeSend:h=>{if(oaKey)AU.consume(oaKey,{purchaseKey:id.purchaseKey,txHash:h});ledger.update(key,agentId,{state:'submitted',tx_hash:h,result:pend()});}});
         const fe=feeFor(n.amount,await fee());settleGas(nfx,tx.hash);
         ledger.update(key,agentId,{state:'paid',result:{txHash:tx.hash,block:tx.blockNumber?.toString(),fee:fe.toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString(),gasUsed:tx.gasUsed?.toString()}});
-        try{if(jt)cfg.jointTrust.recordPaid({decision:jt,amount:n.amount,purchaseKey:key});if(withdrawalId!==undefined&&withdrawalId!==null)cfg.ownerGuard?.markWithdrawal(withdrawalId,{state:'paid',txHash:tx.hash});}catch{}
+        try{if(jt)cfg.jointTrust.recordPaid({decision:jt,amount:n.amount,purchaseKey:key,networkFee});if(withdrawalId!==undefined&&withdrawalId!==null)cfg.ownerGuard?.markWithdrawal(withdrawalId,{state:'paid',txHash:tx.hash});}catch{}
         return {state:'paid',purchaseKey:key,txHash:tx.hash,onchainPurchaseKey:id.purchaseKey,amount:n.amount.toString(),fee:fe.toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString(),total:(n.amount+fe+networkFee).toString(),receipt:buildReceipt({amount:n.amount,ppm:(await fee()).ppm,networkFee,payee:n.payee,txHash:tx.hash,status:'paid'})};
       }
       if(n.eip712?.name!==undefined||n.eip712?.version!==undefined){
@@ -466,11 +496,11 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
           detail:'the reservation was opened on chain but its confirmation came late; it is closed or reclaimed by the settle routine. Do not pay again.'};}
         return {state:'unknown',nothingPaid:false,purchaseKey:key,txHash:rw.tx_hash,retryAfterSec:Number(cfg.unknownRetrySec??60),
           detail:'sent; confirmation not seen yet — do not pay again; check status (same idempotencyKey or kipurse_get_purchase)'};}
-      ledger.update(key,agentId,{state:'failed',result:{error:String(e.shortMessage??e.message).slice(0,300),revertedTx:rw.tx_hash??null}});
+      ledger.update(key,agentId,{state:'failed',result:{error:errText(e,300),revertedTx:rw.tx_hash??null}});
       if(e?.code==='daily_ops_used_up'&&!rw.tx_hash)return {...opsCalm(e),purchaseKey:key};/* t1185u §6#85: nothing was sent; the same request can be retried after the reset */
       // a definitive on-chain revert left the purchase unused: let a later retry claim it again (its gas is booked above)
       if(booked)ledger.db.prepare(`UPDATE purchases SET tx_hash=NULL WHERE purchase_key=?`).run(key);
-      return {state:'failed',purchaseKey:key,error:String(e.shortMessage??e.message).slice(0,300),txHash:rw.tx_hash,
+      return {state:'failed',purchaseKey:key,error:errText(e,300),txHash:rw.tx_hash,
         ...(booked?{failedGasBooked:booked.debt.toString(),failuresToday:booked.failuresToday,note:'gas of the reverted tx is recovered on the next successful payment (within the owner cap)'}:{})};
     }
   }
@@ -551,8 +581,9 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     try{add(cfg.ownerGuard?.limits()?.withdrawalAddress,'withdrawal','own');}catch{}
     add(cfg.owner,'owner','own');return K;}
   function inboundTransfers(){try{return (cfg.ownerGuard?.deposits()??[]).map(d=>({from:d.from,amount:d.amount,usdc:d.status!=='wrong_token'}));}catch{return [];}}
-  const sumTier=(tiers,ms=86400000)=>{try{const q=`SELECT o.amount FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.tier IN (${tiers.map(()=>'?').join(',')}) AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid')`;
-    return ledger.db.prepare(q).all(...tiers,Date.now()-ms).reduce((a,x)=>a+BigInt(x.amount??0),0n);}catch{return 0n;}};
+  /* t1281 (§6#141): amount + protocol fee + network fee per payment (spend-cost.mjs), like the on-chain daily / term caps */
+  const sumTier=(tiers,ms=86400000)=>{try{const q=`SELECT o.amount,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.tier IN (${tiers.map(()=>'?').join(',')}) AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid')`;
+    const cp=costParams();return ledger.db.prepare(q).all(...tiers,Date.now()-ms).reduce((a,x)=>a+costOf(x,cp),0n);}catch(e){return missingOk(e);}};
   const trialSpent24h=()=>sumTier(['stranger']);
   const verifyPayee=async({address,source}={})=>{try{if(!/^0x[0-9a-fA-F]{40}$/.test(String(address??'')))return {ok:false,code:'bad_payee',detail:'address must be 0x + 40 hex characters'};
     if(source!==undefined&&!ALL_SOURCES.includes(source))source='other';
@@ -563,10 +594,11 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       :classifyPayee({address:a,tier,known:knownPayees(),inbound:inboundTransfers(),source});
     const pt=payeeTier(v,source);
     return {ok:true,...v,payee_tier:pt,payee_tier_text:pt?TIER_SAY[pt]:null,
-      say_to_user:v.verified?'已核实 / Verified':(pt==='stranger'?'未核实：新收款方，第一次要你在手机上用 Face ID 批准一次，之后记住 / Not verified: new payee, approve once on your phone with Face ID, then it is remembered':'未核实 / Not verified')};}catch(e){return {ok:false,code:'verify_failed',detail:String(e?.message).slice(0,200)};}};
+      say_to_user:v.verified?'已核实 / Verified':(pt==='stranger'?'未核实：新收款方，第一次要你在手机上用 Face ID 批准一次，之后记住 / Not verified: new payee, approve once on your phone with Face ID, then it is remembered':'未核实 / Not verified')};}catch(e){return {ok:false,code:'verify_failed',detail:errText(e,200)};}};
   /** effective tier: null when the payee is refused (lookalike / dust / blacklist / blocked). */
   function payeeTier(v,source){if(v.required_action!=='none')return null;if(v.verified)return v.match?.kind==='paid_before'?(v.match?.viaAi?'ai_upgraded':'verified'):'trust_list';return claimedTier(source);}
-  const recordOrder=(r,{agentId,payee,amount,tier,status,order,source})=>{try{if(!r?.purchaseKey)return;ledger.db.prepare(`INSERT OR IGNORE INTO purchase_order VALUES(?,?,?,?,?,?,?,?)`).run(String(r.purchaseKey),Date.now(),agentId??null,payee??null,amount!==undefined&&amount!==null?String(amount):null,tier??null,status??null,JSON.stringify({...(order??{}),...(source?{source}:{})}));}catch{}};
+  /* t1278 S4: completes this payment's provisional (__claim) row written at claim time; a finished row of an earlier call is never overwritten */
+  const recordOrder=(r,{agentId,payee,amount,tier,status,order,source})=>{try{if(!r?.purchaseKey)return;ledger.db.prepare(`INSERT INTO purchase_order VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(purchase_key) DO UPDATE SET agent_id=excluded.agent_id,payee=excluded.payee,amount=excluded.amount,tier=excluded.tier,address_status=excluded.address_status,order_json=excluded.order_json WHERE purchase_order.order_json LIKE '{"__claim":1%'`).run(String(r.purchaseKey),Date.now(),agentId??null,payee??null,amount!==undefined&&amount!==null?String(amount):null,tier??null,status??null,JSON.stringify({...(order??{}),...(source?{source}:{})}));}catch{}};
   const orderFor=key=>{try{const x=ledger.db.prepare(`SELECT * FROM purchase_order WHERE purchase_key=?`).get(String(key));if(!x)return null;const j=JSON.parse(x.order_json)??{};let nm=null;try{nm=x.payee?nameOf(x.payee):null;}catch{}return {...j,tier:x.tier,addressStatus:x.address_status,agent:x.agent_id,at:x.created_at,payee:x.payee??null,payeeName:nm};}catch{return null;}};
   /** For the app: order/source record by payment tx hash. */
   const orderForTx=tx=>{try{const rows=ledger.db.prepare(`SELECT purchase_key FROM purchases WHERE state='paid' AND (lower(tx_hash)=lower(?) OR result LIKE ?)`).all(String(tx),'%'+String(tx).toLowerCase().slice(2,66)+'%');for(const r of rows){const o=orderFor(r.purchase_key);if(o)return o;}}catch{}return null;};
@@ -577,20 +609,54 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     return {state:'rejected',reason:'wallet_paused_for_safety',anomaly:reason,nothingPaid:true,fix:'AI payments are paused for safety. Tell the user; only the owner can resume them in the Kipurse app with Face ID. Do not retry.',
       say_to_user:'为了安全，AI 付款已自动暂停（'+({too_many_new_payees:'1 小时内出现多个新收款方',repeated_cap_hits:'多次碰到限额',large_outflow:'24 小时内转出超过余额一半'}[reason]??reason)+'）。请在 Kipurse App 里用 Face ID 恢复。/ AI payments were paused for safety. Resume them in the Kipurse app with Face ID.'};};
   const isPaused=()=>{try{if(cfg.isPaused?.())return true;}catch{}return !!AN.localPause;};
-  const capHit=r=>{if(!r?.capHit&&!['over_unrecognized_cap','OVER_USER_BUDGET'].includes(r?.reason))return r;const t=Date.now();AN.capHits=AN.capHits.filter(x=>t-x<3600e3);AN.capHits.push(t);
+  const capHit=r=>{if(!r?.capHit&&!['over_unrecognized_cap','OVER_USER_BUDGET'].includes(r?.reason))return r;/* t1280: a suspected duplicate is NOT a cap hit (it must not pause the whole wallet); its owner card is one per payee + amount instead */const t=Date.now();AN.capHits=AN.capHits.filter(x=>t-x<3600e3);AN.capHits.push(t);
     if(AN.capHits.length>=TL.capHits1h){AN.capHits=[];const a=anomaly('repeated_cap_hits');return {...r,paused:a.anomaly,say_to_user:r.say_to_user+' '+a.say_to_user};}return r;};
   const outflow24h=()=>sumTier(['trust_list','verified','owner_direct','ai_verified','ai_upgraded','stranger','x402','mandate']);
   // RT-2: one ceiling for everything the AI pays WITHOUT the owner (allowances + AI-checked + trial), whatever purpose it claims
   const UNATTENDED=['mandate','ai_verified','ai_upgraded','stranger'];
-  function unattendedCheck(amount,extra){if(amount===undefined)return null;const d=sumTier(UNATTENDED),m=sumTier(UNATTENDED,30*86400e3);const lim=BigInt(TL.unattendedDaily),limM=BigInt(TL.unattendedMonthly);
-    if(d+amount<=lim&&m+amount<=limM)return null;const day=d+amount>lim;
-    return {state:'rejected',reason:day?'AI_UNATTENDED_DAILY_TOTAL':'AI_UNATTENDED_MONTHLY_TOTAL',nothingPaid:true,capHit:true,...extra,detail:day?`AI paid without asking today ${fmtU(d)} + ${fmtU(amount)} > ${fmtU(lim)} (all purposes together)`:`30 days ${fmtU(m)} + ${fmtU(amount)} > ${fmtU(limM)}`,
+  /* t1281: spent and this payment both count amount + fee (+ the quoted network fee at claim time) */
+  function unattendedCheck(amount,extra,networkFee=0n){if(amount===undefined)return null;const d=sumTier(UNATTENDED),m=sumTier(UNATTENDED,30*86400e3);const lim=BigInt(TL.unattendedDaily),limM=BigInt(TL.unattendedMonthly);const cost=costIn(amount,networkFee);
+    if(d+cost<=lim&&m+cost<=limM)return null;const day=d+cost>lim;
+    return {state:'rejected',reason:day?'AI_UNATTENDED_DAILY_TOTAL':'AI_UNATTENDED_MONTHLY_TOTAL',nothingPaid:true,capHit:true,...extra,detail:day?`AI paid without asking today ${fmtU(d)} + ${fmtU(cost)} > ${fmtU(lim)} (all purposes together, fees included)`:`30 days ${fmtU(m)} + ${fmtU(cost)} > ${fmtU(limM)} (fees included)`,
       fix:'The total the AI may pay without asking (all allowances, AI-checked and trial payees together) is used up. Ask the owner: call kipurse_request_trust for this payee or ask for a one-time approval; do not split or relabel the payment.',
       say_to_user:day?`没有付款：今天 AI 不经你确认能花的总额（所有用途合计 ${fmtU(lim)} USDC）已用完。需要的话在手机上用 Face ID 批准这一笔。/ Not paid: today's total the AI may spend without asking (${fmtU(lim)} USDC, all purposes) is used up.`:`没有付款：近 30 天 AI 不经你确认能花的总额（${fmtU(limM)} USDC）已用完。/ Not paid: the 30-day total the AI may spend without asking is used up.`};}
+  /* ---------------- t1278 S4: re-check at claim time (synchronous; runs inside the ledger's BEGIN IMMEDIATE) ---------------- */
+  const holdsPending=agent=>{try{const cp=costParams();return ledger.db.prepare(`SELECT agent_id,amount FROM payment_hold WHERE state='pending'`).all().filter(h=>agent===undefined||h.agent_id===agent).reduce((a,h)=>a+costOf({amount:h.amount??0,state:'hold'},cp),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fee */
+  /* t1280 (§6#140, owner: duplicate-purchase guard in the FREE version): an AI direct payment to the same payee for the same amount inside
+     10 minutes under a different order key is held for the owner (push card via the owner-ask flow); checked inside the claim's BEGIN IMMEDIATE
+     so two simultaneous copies never both pass. Not for x402 pay-per-call (repeated equal amounts are normal) or merchant-signed orders. The
+     AI's allowSameAmount never skips it; the owner's own payments and an owner-approved ask are not guarded. */
+  const DUP_WINDOW_MS=()=>1000*Number(cfg.duplicateWindowSec??600);
+  function dupInTx(n,key){if(n?.mode!=='direct'||!n.payee||typeof n.amount!=='bigint')return null;
+    const d=ledger.db.prepare(`SELECT purchase_key,state FROM purchases WHERE lower(payee)=lower(?) AND amount=? AND purchase_key<>? AND created_at>=? AND state IN ('claimed','submitted','prepared','paid') LIMIT 1`).get(n.payee,n.amount.toString(),key,Date.now()-DUP_WINDOW_MS());
+    if(!d)return null;
+    return {state:'rejected',reason:'POSSIBLE_DUPLICATE_PURCHASE',nothingPaid:true,askOwnerEligible:true,payee:n.payee,amountAtomic:n.amount.toString(),existing:{purchaseKey:d.purchase_key,state:d.state},
+      detail:'the same amount to the same payee was already started or paid in the last 10 minutes under another order; nothing was sent',
+      fix:'Nothing was paid. If the user really wants a second one, the owner approves it on the phone (kipurse_buy / kipurse_pay with an idempotencyKey sends the card). Do not change the amount to get around this.',
+      say_to_user:'没有付款：10 分钟内已经给同一个收款方付过同样金额，像是重复购买。如果确实要再买一次，请在手机上确认。/ Not paid: the same amount went to the same payee in the last 10 minutes, so this looks like a duplicate. Confirm on your phone if you really want a second one.'};}
+  /* t1281 (§6#141): authoritative: this payment counts amount + fee + its quoted network fee (single caps: the amount only) */
+  function recheckInTx({amount,agentId,scope,ctx,networkFee}){try{const amt=BigInt(amount);const nf=networkFee===undefined||networkFee===null?B('maxNetworkFee'):BigInt(networkFee);
+      if(cfg.everydayCheck){const r=cfg.everydayCheck({amount:amt,cost:costIn(amt,nf),spent24h:everydaySpent()+holdsPending(),spentTerm:ledger._committed(null),...(scope?{chainId:scope.chainId,token:scope.token}:{})})??null;if(r)return r;}
+      {const ac=MD.agentCheck(agentId,amt,scope,holdsPending(agentId),{networkFee:nf});if(ac)return ac;}
+      if(ctx?.mandate){const mm=MD.match({purpose:ctx.purpose,payee:ctx.payee,host:ctx.host,amount:amt,agentId,chainId:scope?.chainId,token:scope?.token,networkFee:nf});
+        if(!mm.ok||mm.mandate?.id!==ctx.mandate.id)return {state:'rejected',reason:'MANDATE_'+String(mm.why??'changed').toUpperCase(),nothingPaid:true,capHit:/^over_/.test(String(mm.why??'')),
+          detail:'another payment used this allowance first; nothing was sent',fix:'Nothing was paid. The owner allowance no longer covers this payment (another payment used it). Ask the owner (kipurse_buy / kipurse_request_trust); do not split the payment.'};}
+      if(ctx&&(['ai_verified','ai_upgraded','stranger'].includes(ctx.tier)||(ctx.tier==='mandate'&&ctx.mandate?.kind!=='one_off'))){const uc=unattendedCheck(amt,{},nf);if(uc)return uc;}
+      return null;}
+    catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The limit re-check failed; nothing was paid. Retry later.'};}}
+  /** the payment's provisional order row (marked __claim; recordOrder completes it) + the one-off allowance use, in the claim transaction */
+  function claimOrderInTx(key,{agentId,n,ctx}){if(!ctx)return;
+    ledger.db.prepare(`INSERT OR REPLACE INTO purchase_order VALUES(?,?,?,?,?,?,?,?)`).run(String(key),Date.now(),agentId??null,n.payee??null,String(n.amount),ctx.tier??null,ctx.status??null,
+      JSON.stringify({__claim:1,...(ctx.order??{}),...(ctx.mandate?{mandateId:ctx.mandate.id}:{}),...(ctx.source?{source:ctx.source}:{})}));
+    if(ctx.mandate?.kind==='one_off'){if(!MD.consume(ctx.mandate.id))throw Error('one_off_already_used');ctx.consumed=true;}}
+  /** after the payment: paid -> close the one-off (already consumed at claim); a definite failure (nothing sent / reverted) -> give it back */
+  const definiteNoPay=r=>!!r&&typeof r==='object'&&(r.state==='failed'||((r.state==='rejected'||r.state==='retry_later')&&!r.txHash&&r.nothingPaid!==false));
+  function settleUse(ctx,r){const m=ctx?.mandate;if(!m)return;if(r?.state==='paid')MD.used(m.id,{consumed:!!ctx.consumed});else if(ctx.consumed&&definiteNoPay(r)){MD.release(m.id);ctx.consumed=false;}}
   // t621 #8: the x402 small-payment float counts against the everyday limits: money funded into it in the last 24h and not yet
   // spent by vouchers is "committed" (spent vouchers are already in outflow24h as normal payment records, so nothing is counted twice).
-  const floatCommitted24h=()=>{try{const since=Date.now()-86400e3;const f=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(funded),0) AS a FROM float_sessions WHERE funded_at>=?`).get(since).a);
-    const v=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(amount),0) AS a FROM float_vouchers WHERE state!='void' AND at>=?`).get(since).a);return f>v?f-v:0n;}catch{return 0n;}};
+  /* t1281: a float takes funded + fee reserve + its funding network fee from the wallet; vouchers count amount + fee (no tx of ours) */
+  const floatCommitted24h=()=>{try{const since=Date.now()-86400e3;const f=BigInt(ledger.db.prepare(`SELECT COALESCE(SUM(funded),0)+COALESCE(SUM(fee_reserve),0)+COALESCE(SUM(network_fee),0) AS a FROM float_sessions WHERE funded_at>=?`).get(since).a);
+    const cp=costParams();let v=0n;for(const x of ledger.db.prepare(`SELECT amount FROM float_vouchers WHERE state!='void' AND at>=?`).all(since))v+=costOf({amount:x.amount??0,result:{networkFee:'0'},state:'voucher'},cp);return f>v?f-v:0n;}catch(e){return missingOk(e);}};
   const everydaySpent=()=>outflow24h()+floatCommitted24h();
   /** Cumulative recorded payment amount. null means the total cannot be checked, so the caller must refuse. */
   const spentCumulative=()=>{try{return ledger.committedSpend();}catch{return null;}};
@@ -598,11 +664,11 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   function everydayGate(amount,{allowUnknown=false,scope}={}){if(!cfg.everydayCheck)return null;
     if(amount===undefined||amount===null){if(allowUnknown)return null;return {state:'rejected',reason:'EVERYDAY_AMOUNT_UNKNOWN',nothingPaid:true,fix:'The payment amount is unknown, so the owner’s everyday limits cannot be checked. Nothing was paid.',say_to_user:'没有付款：不知道这笔要付多少，没法核对你的日常额度。/ Not paid: the amount is unknown, so your everyday limits can’t be checked.'};}
     const spentTerm=spentCumulative();if(spentTerm==null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The cumulative total could not be read. Nothing was paid.',say_to_user:'没有付款：暂时核对不了总额。/ Not paid: the total could not be checked.'};
-    try{return cfg.everydayCheck({amount:BigInt(amount),spent24h:everydaySpent(),spentTerm,...(scope?{chainId:scope.chainId,token:scope.token}:{})})??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit check failed; nothing was paid. Retry later.',say_to_user:'没有付款：暂时核对不了日常额度，请稍后再试。/ Not paid: your everyday limits could not be checked right now.'};}}
+    try{return cfg.everydayCheck({amount:BigInt(amount),cost:costIn(BigInt(amount)),spent24h:everydaySpent(),spentTerm,...(scope?{chainId:scope.chainId,token:scope.token}:{})})??null;}/* t1281: amount + fee (network fee added at claim time) */catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit check failed; nothing was paid. Retry later.',say_to_user:'没有付款：暂时核对不了日常额度，请稍后再试。/ Not paid: your everyday limits could not be checked right now.'};}}
   async function anomalyBefore({payee,amount,tier}){const t=Date.now();
     {const ed=everydayGate(amount,{allowUnknown:true});if(ed)return ed;}/* t609u Layer 2: everyday limits, before signing */for(const [k,ts] of AN.newPayees)if(t-ts>3600e3)AN.newPayees.delete(k);
     if(tier!=='trust_list'&&tier!=='verified'&&payee){const k=lc(payee);if(!AN.newPayees.has(k)){AN.newPayees.set(k,t);if(AN.newPayees.size>=TL.newPayees1h){AN.newPayees.clear();return anomaly('too_many_new_payees');}}}
-    if(amount!==undefined){try{const bal=BigInt(await rd('balanceOf',[p.account],getAddress(cfg.token)));const out=outflow24h();if((out+amount)*100n>(bal+out)*BigInt(TL.balanceOutPct))return anomaly('large_outflow');}catch{}}
+    if(amount!==undefined){try{const bal=BigInt(await rd('balanceOf',[p.account],getAddress(cfg.token)));const out=outflow24h();if((out+costIn(amount))*100n>(bal+out)*BigInt(TL.balanceOutPct))return anomaly('large_outflow');}catch{}}
     return null;}
   // ---- 10-MINUTE HOLD (>= 500 USDC to a payee not on the trust list): cancelable in the app; runs after 10 min if not canceled ----
   try{ledger.db.exec(`CREATE TABLE IF NOT EXISTS payment_hold(id TEXT PRIMARY KEY, idem_key TEXT UNIQUE, created_at INTEGER NOT NULL, release_at INTEGER NOT NULL, state TEXT NOT NULL, agent_id TEXT, payee TEXT, amount TEXT, tier TEXT, args_json TEXT NOT NULL, result_json TEXT)`);}catch{}
@@ -625,7 +691,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const setHold=(id,state,result)=>{try{ledger.db.prepare(`UPDATE payment_hold SET state=?,result_json=? WHERE id=?`).run(state,result?JSON.stringify(result,(k,v)=>typeof v==='bigint'?v.toString():v):null,id);}catch{}};
   async function releaseHold(id){holdTimers.delete(id);const h=getHold(id);if(!h||h.state!=='pending')return holdView(h);
     if(isPaused()){setHold(id,'stopped_paused',{state:'rejected',reason:'wallet_paused_for_safety'});return holdView(getHold(id));}
-    setHold(id,'releasing');let r;try{const a=JSON.parse(h.args_json);r=await payInner(a);recordOrder(r,{agentId:a.agentId,payee:h.payee,amount:h.amount,tier:h.tier,status:a.__status,order:a.order,source:a.addressSource});}catch(e){r={state:'failed',error:String(e?.message).slice(0,200)};}
+    setHold(id,'releasing');let r;try{const a=JSON.parse(h.args_json);a[CTX]={tier:h.tier,payee:h.payee,status:a.__status,order:a.order,source:a.addressSource};/* t1278 S4 */r=await payInner(a);recordOrder(r,{agentId:a.agentId,payee:h.payee,amount:h.amount,tier:h.tier,status:a.__status,order:a.order,source:a.addressSource});}catch(e){r={state:'failed',error:errText(e,200)};}
     setHold(id,r?.state==='paid'?'paid':'failed',r);return holdView(getHold(id));}
   const armHold=h=>{if(holdTimers.has(h.id))return;const ms=Math.max(0,h.release_at-Date.now());const tm=setTimeout(()=>{releaseHold(h.id).catch(()=>{});},ms);tm.unref?.();holdTimers.set(h.id,tm);};
   try{for(const h of ledger.db.prepare(`SELECT * FROM payment_hold WHERE state='pending'`).all())armHold(h);}catch{}
@@ -684,7 +750,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const hold=mode!=='x402'&&amount!==undefined&&amount>=TL.holdAbove&&tier!=='trust_list';
     if(mode==='x402'&&amount!==undefined&&amount>=TL.holdAbove&&tier!=='trust_list')return {reject:capHit({state:'rejected',reason:'X402_OVER_HOLD_LIMIT',nothingPaid:true,capHit:true,...extra,fix:'Web (x402) payments of 500 USDC or more need a payee on the owner trust list (kipurse_request_trust -> owner Face ID).',say_to_user:'没有付款：网页付款达到 500 USDC 需要收款方在你的信任名单里。/ Not paid: web payments of 500 USDC or more need a trusted payee.'})};
     return {v,tier,extra,hold};}
-  const payGuarded=async(o0)=>{let o=o0;if(o&&Object.prototype.hasOwnProperty.call(o,'ownerAsk')&&o[OWNER_OK]!==true){const {ownerAsk:_x,...rest}=o;o=rest;}/* t1170u: ownerAsk only via the server path */
+  const payGuarded=async(o0)=>{let o=o0;await warmFee();/* t1281: the live fee rate for the limit sums */if(o&&Object.prototype.hasOwnProperty.call(o,'ownerAsk')&&o[OWNER_OK]!==true){const {ownerAsk:_x,...rest}=o;o=rest;}/* t1170u: ownerAsk only via the server path */
     if(o.withdrawalId||o.agentId==='owner')return payInner(o);/* owner Siri/phone pay = already Face ID approved by the owner */
     if(o[OWNER_OK]===true&&o.ownerApproval){/* t1170u: the owner tapped + Face ID on this exact request. AI policy gates (new payee, AI caps, everyday, holds) do not
       apply; sanctions (payNormalized), scam blacklist / lookalike / dust refusals still do; the wallet limits and the on-chain approval check stay the authority. */
@@ -700,9 +766,21 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     let n;try{n=await resolveN(o.parsedId?{parsedId:o.parsedId}:o.request);}catch{n=null;}
     const order=normalizeOrder(o);const amount=typeof n?.amount==='bigint'?n.amount:undefined;
     const oc=checkOrder({order,amount,cfg:GUARD});if(oc){try{cfg.obs?.log?.('order_refused',{reason:oc.reason});}catch{}return capHit(oc);}
-    if(!n||n?.ok===false||n?.mode!=='direct'||!n.payee){const r=await payInner(o);recordOrder(r,{agentId:o.agentId,payee:n?.payee,amount,tier:n?.mode==='signed'?'trust_list':null,status:null,order,source:o.addressSource});
-      return r&&typeof r==='object'&&!Array.isArray(r)?{...r,order_recorded:!!r.purchaseKey}:r;}
     const purpose=purposeKey(o.purpose??order?.purpose)??undefined;
+    /* t1278 S3: a signed order is checked against this AI's own caps WITH its amount (and again at claim time) */
+    if(n&&n.ok!==false&&n.mode==='signed'&&n.payee){const sc={chainId:n.chainId,token:n.token};const ac=MD.agentCheck(o.agentId,amount,sc);if(ac)return capHit(ac);
+      const ctx={tier:'trust_list',payee:n.payee,order,source:o.addressSource};const r=await payInner({...o,[CTX]:ctx});recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier:'trust_list',status:null,order,source:o.addressSource});
+      return r&&typeof r==='object'&&!Array.isArray(r)?{...r,order_recorded:!!r.purchaseKey}:r;}
+    /* t1278 S3: an x402 (eip3009) request handed to pay / payAny goes through the SAME gate as paidFetch (new-payee Face ID, per-AI caps, allowances,
+       unattended total, anomaly, >= 500 USDC trust-list rule) and is recorded with its tier, so it counts toward the everyday 24h sums */
+    if(n&&n.ok!==false&&n.mode==='eip3009'&&n.payee){const host=undefined;/* t1280 M1 (§6#140): this 402 object came from the AI's own JSON; its resource URL is not a site the server visited, so it never matches a host-scoped allowance (paidFetch uses the URL the server fetched) */
+      const sc={chainId:n.chainId,token:n.token};const g=await gate({payee:n.payee,amount,agentId:o.agentId,source:o.addressSource,mode:'x402',purpose,host,scope:sc});if(g.reject){const {guardRefusal,...rj}=g.reject;return rj;}
+      const tier=g.tier??'x402';const ord=g.mandate?{...(order??{}),purpose:MD.classifyCategory({purpose:o.purpose,item:order?.item,merchant:order?.merchant,host}),mandateId:g.mandate.id}:order;
+      const ctx={tier,payee:n.payee,host,purpose,status:g.v?.status??null,order:ord,source:o.addressSource,mandate:g.mandate?{id:g.mandate.id,kind:g.mandate.kind}:null};
+      const r=await payInner({...o,allowance:g.tier==='mandate',[CTX]:ctx});recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier,status:ctx.status,order:ord,source:o.addressSource});settleUse(ctx,r);
+      return r&&typeof r==='object'&&!Array.isArray(r)?{...r,...(g.extra??{}),order_recorded:!!r.purchaseKey}:r;}
+    if(!n||n?.ok===false||n?.mode!=='direct'||!n.payee){const r=await payInner(o);recordOrder(r,{agentId:o.agentId,payee:n?.payee,amount,tier:null,status:null,order,source:o.addressSource});
+      return r&&typeof r==='object'&&!Array.isArray(r)?{...r,order_recorded:!!r.purchaseKey}:r;}
     // ESCROW (testnet/fork only until the owner approves mainnet): a payment INTO the owner's escrow is gated on the MERCHANT it is for
     // (new-payee Face ID, scam list, sanctions, single limit); the escrow address itself must be on the owner's trust list on chain.
     const esc=!!cfg.escrow?.address&&lc(n.payee)===lc(cfg.escrow.address);
@@ -712,12 +790,14 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const g=await gate({payee:gp,amount,agentId:o.agentId,source:o.addressSource,mode:'direct',purpose,scope:{chainId:n.chainId,token:n.token}});if(g.reject){const {guardRefusal,...rj}=g.reject;return rj;}
     if(esc&&g.tier==='owner_direct')return {state:'rejected',reason:'escrow_merchant_needs_owner_approval',nothingPaid:true};
     const nm=nameOf(n.payee)??(cleanName(order?.merchant??o.payeeName)||null);if(order?.merchant)setName(n.payee,order.merchant,'order');
-    if(g.tier==='mandate'&&!g.hold){const r=await payInner({...o,allowance:true});const ord={...(order??{}),purpose:MD.classifyCategory({purpose:o.purpose,item:order?.item,merchant:order?.merchant,host:order?.host}),mandateId:g.mandate.id};recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier:'mandate',status:g.v.status,order:ord,source:o.addressSource});
-      if(r?.state==='paid')MD.used(g.mandate.id);
+    if(g.tier==='mandate'&&!g.hold){const ord={...(order??{}),purpose:MD.classifyCategory({purpose:o.purpose,item:order?.item,merchant:order?.merchant,host:order?.host}),mandateId:g.mandate.id};
+      const ctx={tier:'mandate',payee:gp/* the payee the allowance was matched on (escrow: the merchant) */,purpose,status:g.v.status,order:ord,source:o.addressSource,mandate:{id:g.mandate.id,kind:g.mandate.kind}};/* t1278 S4 */
+      const r=await payInner({...o,allowance:true,[CTX]:ctx});recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier:'mandate',status:g.v.status,order:ord,source:o.addressSource});
+      settleUse(ctx,r);
       return r&&typeof r==='object'?{...r,...g.extra,payee_name:nm,payeeVerified:g.v.verified,order_recorded:!!r.purchaseKey,say_to_user:r.say_to_user??(r.state==='paid'?`已付 ${fmtU(amount)} USDC 给 ${nm??'收款方'}（在你设的 AI 付款上限内）。/ Paid ${fmtU(amount)} USDC to ${nm??'the payee'} (within your AI payment limit).`:undefined)}:r;}
     if(g.tier==='owner_direct')return ownerConfirm({payee:n.payee,amount,name:nm,order,agentId:o.agentId,extra:g.extra});
     if(g.hold)return {...placeHold({...o,order},{payee:n.payee,amount,tier:g.tier,status:g.v.status}),...g.extra,payee_name:nm};
-    const r=await payInner(o);recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier:g.tier,status:g.v.status,order,source:o.addressSource});
+    const r=await payInner({...o,[CTX]:{tier:g.tier,payee:gp,purpose,status:g.v.status,order,source:o.addressSource}});recordOrder(r,{agentId:o.agentId,payee:n.payee,amount,tier:g.tier,status:g.v.status,order,source:o.addressSource});
     return r&&typeof r==='object'?{...r,...g.extra,payee_name:nm,payeeVerified:g.v.verified,trial_only:g.tier==='stranger',order_recorded:!!r.purchaseKey,say_to_user:r.say_to_user??sayPaid(r,{name:nm,amount,tier:g.tier})}:r;};
   const fmtU=a=>{const n=BigInt(a??0),w=n/1000000n,f=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
   const TIER_SHORT={trust_list:['信任名单','on your trust list'],verified:['已核实','verified'],ai_verified:['你已批准','you approved'],ai_upgraded:['你已批准','you approved'],stranger:['你已批准','you approved'],mandate:['在你设的 AI 付款上限内','within your AI payment limit']};
@@ -728,7 +808,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   function ownerConfirm({payee,amount,name,order,agentId,extra}){
     if(!TR)return {state:'rejected',reason:'OWNER_CONFIRM_UNAVAILABLE',nothingPaid:true,...extra};
     const nm=name||'新收款方 / New payee';let r;try{r=TR.request({payee,merchantName:nm,chain:undefined,reason:'Owner gave this address to the AI'+(order?.user_request?': "'+String(order.user_request).slice(0,300)+'"':'')+(amount!==undefined?'; first payment '+fmtU(amount)+' USDC':''),single:B('single').toString(),total:B('daily').toString(),expiresInDays:365,agentId:agentId??'agent'});}
-    catch(e){return {state:'rejected',reason:e.code??'OWNER_CONFIRM_FAILED',detail:String(e.message).slice(0,200),nothingPaid:true,...extra};}
+    catch(e){return {state:'rejected',reason:e.code??'OWNER_CONFIRM_FAILED',detail:errText(e,200),nothingPaid:true,...extra};}
     setName(payee,nm,'owner_confirm');try{if(!r.idempotent)cfg.onPayeeConfirm?.({id:r.id,name:nm,payee:String(payee),amount:amount!==undefined?fmtU(amount):null});}catch{}
     return {state:'awaiting_owner_confirm',reason:'OWNER_CONFIRM_REQUIRED',trustRequestId:r.id,nothingPaid:true,...extra,payee_name:nm,payee_tier:'owner_direct_pending',
       fix:'The owner must confirm this new payee on the phone (Face ID). Tell the user, then call kipurse_get_trust_request_status with trustRequestId; when it is trusted, call kipurse_pay again.',
@@ -741,7 +821,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     else{items=[{purpose:pk,single:fmtU(amount??0n),oneOff:{payee:payee??null,host:payee?null:host}}];
       why_zh=({over_single:'超过每笔额度',over_daily:'超过今天的额度',over_monthly:'超过本月的额度',payee_not_in_mandate:'不在这项额度指定的收款方里',recurring_already_paid:'这个周期已经续过费了',recurring_payee_changed:'续费的收款方变了'})[mm.why]??'超出额度';
       why_en=({over_single:'above the per-payment limit',over_daily:'above today\'s limit',over_monthly:'above this month\'s limit',payee_not_in_mandate:'not one of the payees of this allowance',recurring_already_paid:'already renewed this period',recurring_payee_changed:'the renewal payee changed'})[mm.why]??'outside the allowance';}
-    let pr=null;try{pr=MD.propose({items,by:'agent:'+(agentId??'agent'),reason:`${why_en} (${mm.detail??''})`,dedupe:[mm.why,lc(payee??host??''),String(amount),pk].join('|')});}catch(e){return {state:'rejected',reason:'MANDATE_'+String(mm.why).toUpperCase(),nothingPaid:true,decision:'refuse',detail:String(e.message).slice(0,160)};}
+    let pr=null;try{pr=MD.propose({items,by:'agent:'+(agentId??'agent'),reason:`${why_en} (${mm.detail??''})`,dedupe:[mm.why,lc(payee??host??''),String(amount),pk].join('|')});}catch(e){return {state:'rejected',reason:'MANDATE_'+String(mm.why).toUpperCase(),nothingPaid:true,decision:'refuse',detail:errText(e)};}
     return {state:'awaiting_owner_approval',reason:'MANDATE_'+String(mm.why).toUpperCase(),decision:'ask_owner',approvalId:pr.id,nothingPaid:true,detail:mm.detail,
       fix:'Outside the owner allowance: the owner got ONE approval request on the phone (push, Face ID). Tell the user in one sentence, then poll kipurse_approval_status {approvalId}; when approved, call the same payment again (same idempotencyKey). Never split the payment to fit the allowance.',
       say_to_user:`还没付款：${fmtU(amount??0n)} USDC 给 ${nm}${why_zh}${pzh}。我已发到你手机，用 Face ID 同意后我就付。/ Not paid yet: ${fmtU(amount??0n)} USDC to ${nm} is ${why_en}${pen}. I sent it to your phone; approve with Face ID and I will pay.`};}
@@ -754,14 +834,27 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     try{const r=await mfetch(cfg)(u.toString(),{headers:{accept:'application/json',...(auth??{})},redirect:'error',signal:AbortSignal.timeout(cfg.signedOrderTimeoutMs??15000)});
       const j=await r.json().catch(()=>null);return {ok:r.ok,http:r.status,body:j};}catch(e){return {ok:false,error:'status_unreachable'};}}
   const setOrderExtra=(key,extra)=>{try{const x=ledger.db.prepare(`SELECT order_json FROM purchase_order WHERE purchase_key=?`).get(String(key));if(!x)return false;ledger.db.prepare(`UPDATE purchase_order SET order_json=? WHERE purchase_key=?`).run(JSON.stringify({...JSON.parse(x.order_json),...extra}),String(key));return true;}catch{return false;}};
-  const pay=o=>payGuarded(o);
+  /* t1278 C2 (the contract cannot cancel a reservation without the owner): while AI payments are paused (owner stop / anomaly auto-pause) the
+     server never hands out an open x402 authorization (payment header / auth / digest), not even from a stored answer; the reservation stays
+     open on chain until the owner cancels it in the app (openReservations) or it expires and the settle routine reclaims it. */
+  const WITHHOLD=new Set(['prepared','prepared_unconfirmed','payment_not_accepted','already_prepared']);
+  const pausedHold=r=>{if(!r||typeof r!=='object'||Array.isArray(r)||!WITHHOLD.has(r.state)||!isPaused())return r;const {paymentHeader:_h,auth:_a,digest:_d,...rest}=r;
+    return {...rest,state:'paused_reservation_open',reason:'wallet_paused_for_safety',reservationOpen:true,nothingPaid:false,withheld:true,
+      fix:'AI payments are paused for safety. Kipurse does not hand out the open reservation; it expires and is reclaimed. Do not retry.',/* t1279 R12: no in-app cancel exists yet -> do not promise one */
+      say_to_user:'AI 付款已暂停：这笔已预留，启付不会交给商家，到期后自动退回。/ AI payments are paused: Kipurse will not hand this reserved payment to the merchant; it is returned when it expires.'};};
+  /* t1279 R2 (§6#139): while paused an AI must not read the prepared x402 authorization back from the ledger (get_purchase / GET /v1/purchases/:key) */
+  const purchaseForAI=key=>{const r=ledger.get(key);if(!r||typeof r!=='object'||!isPaused())return r;const strip=o=>{if(!o||typeof o!=='object')return o;const {auth:_a,digest:_d,paymentHeader:_h,...rest}=o;return rest;};let res=r.result;if(typeof res==='string'){try{res=JSON.parse(res);}catch{res=null;}}if(res&&typeof res==='object'){res=strip(res);if(res.pending&&typeof res.pending==='object'){const {x402:_x,...p}=res.pending;res={...res,pending:p};}}return {...strip(r),...(res!==undefined?{result:res}:{}),withheld:true};};
+  /** t1278 C2: open x402 reservations this server prepared (ledger view, no chain read): what the app offers to cancel after a stop */
+  const openReservations=()=>{const out=[];try{for(const row of ledger.db.prepare(`SELECT purchase_key,payee,amount,result FROM purchases WHERE state IN ('prepared','submitted')`).all()){let res=null;try{res=JSON.parse(row.result??'null');}catch{res=null;}/* t1279 R8: a prepare tx still confirming is open too */
+    const x=res?.pending?.x402??null;const d=res?.digest??res?.result?.digest??x?.digest??null;if(!d||res?.float)continue;const au=res?.auth??x?.auth;out.push({purchaseKey:row.purchase_key,digest:d,payee:row.payee,amount:row.amount,validBefore:au?.validBefore??null});}}catch{}return out;};
+  const pay=o=>payGuarded(o).then(r=>o?.agentId==='owner'||o?.withdrawalId?r:pausedHold(r));
   /** Voice recap: totals for a period, by payee name, suspicious items. period: today | 7d | 30d | month */
   const spendingSummary=({period='today',tz='America/Chicago'}={})=>{const now=Date.now();let since;
     if(period==='7d')since=now-7*86400e3;else if(period==='30d')since=now-30*86400e3;else{const d=new Date(new Date(now).toLocaleString('en-US',{timeZone:tz}));const off=new Date(now).getTime()-d.getTime();d.setHours(0,0,0,0);if(period==='month')d.setDate(1);since=d.getTime()+off;}
-    const rows=ledger.listFiltered({since,state:'paid',limit:5000});const by=new Map();let total=0n;
-    for(const r of rows){if(r.origin_agent==='owner'&&false)continue;const a=BigInt(r.amount??0);total+=a;const k=lc(r.payee);const e=by.get(k)??{name:nameOf(r.payee)??null,count:0,amount:0n,tier:orderFor(r.purchase_key)?.tier??null};e.count++;e.amount+=a;by.set(k,e);}
+    const rows=ledger.listFiltered({since,state:'paid',limit:5000});const by=new Map();let total=0n;const cp=costParams();/* t1281: amounts are amount + fee + network fee */
+    for(const r of rows){if(r.origin_agent==='owner'&&false)continue;const a=costOf(r,cp);total+=a;const k=lc(r.payee);const e=by.get(k)??{name:nameOf(r.payee)??null,count:0,amount:0n,tier:orderFor(r.purchase_key)?.tier??null};e.count++;e.amount+=a;by.set(k,e);}
     const cats={};for(const r of rows){let c='other';try{const o=orderFor(r.purchase_key);c=MD.CATEGORIES.includes(o?.order?.purpose??o?.purpose)?(o?.order?.purpose??o?.purpose):MD.classifyCategory({purpose:o?.order?.purpose??o?.purpose,item:o?.order?.item??o?.item,merchant:o?.order?.merchant??o?.merchant});}catch{}
-      const e=cats[c]??={key:c,zh:purposeName(c,true),en:purposeName(c,false),count:0,amount:0n};e.count++;e.amount+=BigInt(r.amount??0);}
+      const e=cats[c]??={key:c,zh:purposeName(c,true),en:purposeName(c,false),count:0,amount:0n};e.count++;e.amount+=costOf(r,cp);}
     const categories=Object.values(cats).sort((a,b)=>a.amount<b.amount?1:-1).map(e=>({...e,amount:fmtU(e.amount)}));
     const payees=[...by.values()].sort((a,b)=>a.amount<b.amount?1:-1).map(e=>({name:e.name??'未命名收款方 / unnamed payee',count:e.count,amount:fmtU(e.amount),tier:e.tier}));
     const susp=[];try{for(const d of (cfg.ownerGuard?.deposits()??[]))if((d.status==='wrong_token'||BigInt(d.amount??0)<10000n)&&Number(d.t??d.at??now)>=since/((d.t&&d.t<1e12)?1000:1))susp.push({kind:'dust_or_fake_token_deposit',note:'tiny or fake-token transfer, possible address poisoning'});}catch{}
@@ -770,11 +863,12 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const say=`${({today:'今天',month:'本月','7d':'最近 7 天','30d':'最近 30 天'})[period]??period}共付 ${fmtU(total)} USDC，${rows.length} 笔`+(payees.length?`，最多的是 ${payees[0].name}（${payees[0].amount}）`:'')+(susp.length?`；有 ${susp.length} 条可疑记录`:'')+(p?'；AI 付款目前已暂停':'')+'。';
     return {period,since:new Date(since).toISOString(),total:fmtU(total),count:rows.length,categories,payees,suspicious:susp,paused:p,say_to_user:say};};
   const agentSafetyPause=reason=>{try{cfg.onAgentPause?.(reason??'agent_pause');}catch{}if(!cfg.onAgentPause)AN.localPause={reason:'agent_pause',at:Date.now()};return {ok:true,paused:true,say_to_user:'已暂停 AI 付款。只有你本人在 Kipurse App 里用 Face ID 才能恢复。/ AI payments paused. Only you can resume them in the Kipurse app with Face ID.'};};
-  const payInner=({agentId=agentDefault,intentId,repeatKey,request,parsedId,idempotencyKey,maxAmount,ownerApproval,fallbackOrderId,allowSameAmount,verifiedDomain,withdrawalId,allowance,ownerAsk})=>withIdem(idempotencyKey,agentId,{op:'pay',v:5,intentId,repeatKey,request,parsedId,maxAmount,ownerApproval,fallbackOrderId,allowSameAmount},async()=>{
+  const payInner=o0=>{const {agentId=agentDefault,intentId,repeatKey,request,parsedId,idempotencyKey,maxAmount,ownerApproval,fallbackOrderId,allowSameAmount,verifiedDomain,withdrawalId,allowance,ownerAsk}=o0;const ctx=o0?.[CTX]??null;/* t1278 S4 */
+    return withIdem(idempotencyKey,agentId,{op:'pay',v:5,intentId,repeatKey,request,parsedId,maxAmount,ownerApproval,fallbackOrderId,allowSameAmount},async()=>{
     let n=await resolveN(parsedId?{parsedId}:request);if(n.ok===false)return {state:'rejected',reason:n.code,detail:n.detail};
     if(fallbackOrderId&&!n.merchantOrderId&&n.mode==='direct')n={...n,merchantOrderId:fallbackOrderId};
     if(n.mode==='x402_redirect')return {state:'redirect',reason:'x402_redirect',next:{tool:'kipurse_paid_fetch',url:n.redirectUrl}};
-    return payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal:maxAmount,allowSameAmount:allowSameAmount===true,verifiedDomain,withdrawalId,allowance:allowance===true,ownerAsk:ownerAsk===true});});
+    return payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal:maxAmount,allowSameAmount:allowSameAmount===true,verifiedDomain,withdrawalId,allowance:allowance===true,ownerAsk:ownerAsk===true,ctx});});};
 
   /** V5.1 signed-order upgrade (optional for merchants). Only when: V5.1 wallet, direct request, payee NOT trusted / registered
    *  (stranger tier) and amount > the stranger cap, and the merchant offers a signed order (payment.signedOrderUrl or the caller's
@@ -819,8 +913,8 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
    *  signature) against the order response v and the signer published on its origin d0. null = not usable (the normal path is taken). */
   async function signed54(so,v,d0){
     const A=k=>/^0x[0-9a-fA-F]{40}$/.test(String(so?.[k]??''));if(!A('payee')||!A('adapter')||!A('signer')||!A('payer'))return null;
-    const req={signedOrder:{version:'kipurse.signed-order.v1',payee:so.payee,amount:String(so.amountAtomic),orderId:so.orderId,deadline:Number(so.orderDeadline),chainId:Number(so.chainId),
-      adapter:so.adapter,signer:so.signer,signature:so.signature,payer:so.payer,merchant:{id:d0.host,ref:v.payment.id}}};
+    const req=serverReq({version:'kipurse.signed-order.v1',payee:so.payee,amount:String(so.amountAtomic),orderId:so.orderId,deadline:Number(so.orderDeadline),chainId:Number(so.chainId),
+      adapter:so.adapter,signer:so.signer,signature:so.signature,payer:so.payer,merchant:{id:d0.host,ref:v.payment.id}});
     const n=await resolveN(req);if(!n||n.ok===false||n.mode!=='signed')return null;const o=n.signedOrder;const nowS=BigInt(await chainNow());
     if(lc(o.signer)!==lc(d0.expectedSigner))return null;                                   // the signer the merchant publishes, nobody else
     if(Number(o.chainId)!==Number(cfg.chainId)||lc(o.adapter)!==lc(cfg.adapter)||lc(o.payer??ZERO)!==lc(p.account))return null;
@@ -866,7 +960,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   /** what this merchant domain already took today: max(on-chain merchant day spend, Kipurse's own layered payments in the last 24 h); null = unknown */
   async function merchantSpentToday(m,domain){let chain=0n;try{const ph=cfg.permissionHash??await rd('getHash',[p],cfg.manager);const cnow=await chainNow();
       if(cnow>=p.start)chain=BigInt(await rd('merchantDaySpent',[ph,m,BigInt(Math.floor((cnow-p.start)/86400))]));}catch{return null;}
-    let local=0n;try{for(const r of ledger.db.prepare(`SELECT l.amount FROM layered_pay l JOIN purchases p ON p.purchase_key=l.purchase_key WHERE l.domain=? AND l.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid')`).all(lc(domain),Date.now()-86400e3))local+=BigInt(r.amount);}catch{}
+    let local=0n;try{const cp=costParams();for(const r of ledger.db.prepare(`SELECT l.amount,p.result,p.state FROM layered_pay l JOIN purchases p ON p.purchase_key=l.purchase_key WHERE l.domain=? AND l.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid')`).all(lc(domain),Date.now()-86400e3))local+=costOf(r,cp);}catch{}/* t1281: amount + fees, like the on-chain merchant day */
     return chain>local?chain:local;}
   /** the layered decision for one checked merchant order. Returns null (not applicable), {result} (answer the AI: paid / already paid / hard refusal)
    *  or {why, askSigner, domain, merchantSigned} (no auto-pay; the owner ask may offer "trust <domain>" with the attestor as its signer). */
@@ -912,7 +1006,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const so=at.signedOrder;
     if(!so||lc(so.signer)!==lc(attAddr)||lc(so.payee)!==lc(v.payment.to)||String(so.amount)!==String(v.payment.amountAtomic)||lc(so.payer)!==lc(p.account)||lc(so.adapter)!==lc(cfg.adapter)||Number(so.chainId)!==Number(cfg.chainId)
       ||lc(so.orderId)!==lc(attestorOrderId(domain,v.payment.id))||(v.payment.expiresAt!=null&&Number(so.deadline)>Number(v.payment.expiresAt)))return {...base,askSigner:null,why:'attested_order_mismatch'};
-    const r=await pay({...o,idempotencyKey:ik,request:{signedOrder:so},merchant:v.merchant,verifiedDomain:v.merchant});
+    const r=await pay({...o,idempotencyKey:ik,request:serverReq(so),merchant:v.merchant,verifiedDomain:v.merchant});
     if(r?.state==='paid'){const key=r.purchaseKey;
       try{ledger.db.prepare(`INSERT OR IGNORE INTO layered_pay VALUES(?,?,?,?,?,?,'watching',?,NULL,NULL)`).run(String(key),domain,amt.toString(),Date.now(),merchantSigned?1:0,v.statusUrl??null,Date.now()+CONF.windowMs);}catch{}
       if(cred)lpCred.set(key,String(cred));try{setOrderExtra(key,{statusUrl:v.statusUrl??null,layered:true,merchantSigned,domain});}catch{}
@@ -955,13 +1049,13 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     let order;try{const rq=buildCreateOrder(d,P,{credential:aiCred?null:tok,purchaseId:merchantPurchaseId,signedOrder:!!(signedOrder&&V51)||so54||laySo,payer:so54?p.account:null});
       const r=await f(rq.url,{...rq.init,signal:AbortSignal.timeout(cfg.signedOrderTimeoutMs??15000)});const j=await r.json().catch(()=>null);
       if(!r.ok)return {state:'rejected',reason:'merchant_order_refused',nothingPaid:true,detail:red(`HTTP ${r.status} ${j?.error??j?.code??''}`).slice(0,160),retryAfterSeconds:j?.retryAfterSeconds};order=j;}
-    catch(e){return {state:'rejected',reason:e.code??'merchant_order_failed',nothingPaid:true,detail:red(e.detail??e.message).slice(0,160)};}
+    catch(e){return {state:'rejected',reason:e.code??'merchant_order_failed',nothingPaid:true,detail:scrubUrls(red(e.detail??e.message)).slice(0,160)};}
     const v=orderToPayment(order,d,{chainId:cfg.chainId,usdc:USDC_OF[cfg.chainId],nowS:Number(await chainNow())});
     if(!v.ok)return {state:'rejected',reason:v.code,nothingPaid:true,detail:v.detail==null?v.detail:red(v.detail).slice(0,160),merchantPurchaseId};
     // V5.1 attestor: our own key signs the checked order -> paid within the merchant DOMAIN's trust caps (no merchant signature needed)
     const att=V51&&!o.noAttest?(cfg.attestors?.[lc(v.merchant)]??null):null; // ONE attestor key per trusted domain (a signer binds to exactly one merchant on chain)
     if(att){const so=await attestOrder(att,v,{payer:p.account,chainId:cfg.chainId,verifier:await verifierAddr(),types:ORDER_TYPES51,domain:orderDomain51});
-      const r=await pay({...o,request:{signedOrder:so}});return done(r,v,{attested:true});}
+      const r=await pay({...o,request:serverReq(so)});return done(r,v,{attested:true});}
     /* t1240 §6#110: a merchant-signed order (checked here: signature, published signer, this chain / adapter / wallet, same payee / amount /
        expiry as the order response). With the owner's grant for that signer -> pay it on the signed route (paySignedTrusted; the chain re-checks
        all of it). Without a grant -> unchanged path below; the owner ask then carries the signer so ONE "trust" covers this merchant's later orders. */
@@ -984,7 +1078,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     finally{if(soUrl&&aiCred)soCred.delete(String(soUrl));}};
   // ---- owner setup / limits / trust / deposits / withdrawals (spec 2026-10-20) ----
   const needG=()=>{if(!cfg.ownerGuard)throw Object.assign(Error('owner guard not configured'),{code:'owner_guard_not_configured'});return cfg.ownerGuard;};
-  const wrap=f=>async(...a)=>{try{return await f(...a);}catch(e){return {state:'rejected',reason:e.code??'invalid',detail:String(e.message).slice(0,400),errors:e.errors};}};
+  const wrap=f=>async(...a)=>{try{return await f(...a);}catch(e){return {state:'rejected',reason:e.code??'invalid',detail:errText(e,400),errors:e.errors};}};
   const setup=wrap(async({answers}={})=>{if(!answers)return {questions:QUESTIONS,disclosure:disclosure({feeRecipient:(await fee()).recipient}),riskNotice:{zh:RISK_NOTICE_ZH,en:RISK_NOTICE_EN},
       note:'Ask the owner EVERY question; examples are illustrations only and are never applied. Show the disclosure and get riskNoticeAcknowledged + technicalConsent = true.'};
     const plan=buildOneSignatureBatchV5({answers,current:cfg.permission,adapter:cfg.adapter,manager:cfg.manager,owner:cfg.owner,chainId:cfg.chainId,nowS:await chainNow()});
@@ -1007,7 +1101,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(x.kind==='fetch')return paidFetch({...o,url:x.url});
     // V5.1: an unknown payee above the stranger cap + a merchant that offers signed orders -> ask it for one (payer = this wallet)
     const so=await autoSignedOrder(x,payment,o.signedOrderUrl);if(so?.state)return so;
-    if(so?.signedOrder)return {...(await pay({...o,request:{signedOrder:so.signedOrder}})),signedOrderRequested:true};
+    if(so?.signedOrder)return {...(await pay({...o,request:serverReq(so.signedOrder)})),signedOrderRequested:true};
     // a protocol order id wins; the agent's merchant+orderRef is the reference when the request carries none (EIP-681 / plain address)
     const r=await pay({...o,request:x.request,fallbackOrderId:x.merchantOrderId??undefined});
     if(r?.purchaseKey&&merchant&&merchant!=='owner-withdrawal')try{ledger.setLabel(r.purchaseKey,merchant);}catch{}
@@ -1019,14 +1113,14 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     return r.ok===false?r:{...r,route:r.mode==='signed'?'paySigned':r.mode==='direct'?'payDirect':r.mode==='x402_redirect'?'x402_paid_fetch':'x402_prepare'};};
   const pendingClose=[];
   const x402Info=new Map();
-  const paidFetch=async(o)=>{if(o.agentId==='owner')return paidFetchInner(o);if(replayOf(o.idempotencyKey))return paidFetchInner(o);const order=normalizeOrder(o);
+  const paidFetch=async(o)=>{await warmFee();/* t1281 */if(o.agentId==='owner')return paidFetchInner(o);if(replayOf(o.idempotencyKey))return pausedHold(await paidFetchInner(o));/* t1278 C2 */const order=normalizeOrder(o);
     if(isPaused())return {state:'rejected',reason:'wallet_paused_for_safety',nothingPaid:true,fix:'AI payments are paused; only the owner can resume them in the Kipurse app (Face ID).'};
     {const st=MD.agentCheck(o.agentId,undefined);if(st)return st;}
     const oc=checkOrder({order,amount:undefined,cfg:GUARD});if(oc)return oc;const r=await paidFetchInner(o);const info=x402Info.get(o.idempotencyKey);x402Info.delete(o.idempotencyKey);
     if(r?.guardRefusal){try{ledger.db.prepare(`DELETE FROM idempotency WHERE idem_key=?`).run(o.idempotencyKey);}catch{}const {guardRefusal,...rest}=r;return rest;}/* refusals are not cached: retry works after Face ID trust */
     const cat=MD.classifyCategory({purpose:o.purpose,item:order?.item,merchant:order?.merchant,host:order?.host});const ord=info?.mandate?{...(order??{}),purpose:cat,mandateId:info.mandate.id}:{...(order??{}),purpose:cat};
     recordOrder(r,{agentId:o.agentId,payee:info?.payee??null,amount:info?.amount,tier:info?.tier??'x402',status:info?.status??null,order:ord,source:o.addressSource});
-    if(info?.mandate&&r?.state==='paid')MD.used(info.mandate.id);
+    if(info?.ctx)settleUse(info.ctx,r);else if(info?.mandate&&r?.state==='paid')MD.used(info.mandate.id);/* t1278 S4 */
     return info&&r&&typeof r==='object'?{...r,payee_tier:info.tier,payee_tier_text:info.extra?.payee_tier_text??TIER_SAY[info.tier],...(info.mandate?{mandate:info.mandate}:{})}:r;};
   /* t1264: the agent's request goes through the SSRF guard (public https only, no private / loopback / link-local hosts, no redirects;
      injected test fetch = cfg.fetch / cfg.allowHttpMerchantForTests as for every other merchant call). Agent-supplied headers lose hop-by-hop,
@@ -1037,29 +1131,32 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const paidFetchInner=({agentId=agentDefault,intentId,repeatKey,url,method='GET',headers:hdr0={},body,idempotencyKey,maxAmount,ownerApproval,addressSource,purpose})=>withIdem(idempotencyKey,agentId,{op:'fetch',v:5,intentId,repeatKey,url,method,body,maxAmount},async()=>{
     const fetchImpl=mfetch(cfg);const headers=cleanHeaders(hdr0);
     let first;try{first=await fetchImpl(url,{method,headers,body});}catch(e){if(e?.code==='ssrf_blocked')return {state:'rejected',reason:'url_not_allowed',nothingPaid:true,detail:'only public https URLs can be paid for (no private, local or redirecting hosts)'};throw e;}
-    if(first.status!==402)return {state:'no_payment_needed',status:first.status,body:(await first.text()).slice(0,20000)};
-    const text=await first.text();let parsed;try{parsed=JSON.parse(text);}catch{}
+    /* t1278 S5: bodies are read with a 256 KB cap (after decompression); an oversize 402 body is refused, nothing paid */
+    if(first.status!==402)return {state:'no_payment_needed',status:first.status,body:(await readCapped(first)).text.slice(0,20000)};
+    const fb=await readCapped(first);if(fb.truncated)return {state:'rejected',reason:'x402_response_too_large',nothingPaid:true};const text=fb.text;let parsed;try{parsed=JSON.parse(text);}catch{}
     const n=detect({status:402,headers:first.headers,body:parsed??text,url},{chains:[cfg.chainId]});
     if(!n.ok)return {state:'rejected',reason:n.code,detail:n.detail};
     if(agentId!=='owner'){if(!n.payee)return {state:'rejected',reason:'x402_payee_unknown',nothingPaid:true,guardRefusal:true};
       let host=null;try{host=new URL(url).hostname.toLowerCase();}catch{}
       const g=await gate({payee:n.payee,amount:typeof n.amount==='bigint'?n.amount:BigInt(n.amount??0),agentId,source:addressSource,mode:'x402',purpose:purposeKey(purpose)??undefined,host,scope:{chainId:n.chainId,token:n.token}});if(g.reject)return {...g.reject,guardRefusal:true};
-      x402Info.set(idempotencyKey,{tier:g.tier,payee:n.payee,amount:String(n.amount),status:g.v.status,mandate:g.mandate?{id:g.mandate.id,purpose:g.mandate.purpose}:null,extra:g.extra});}
+      x402Info.set(idempotencyKey,{tier:g.tier,payee:n.payee,amount:String(n.amount),status:g.v.status,mandate:g.mandate?{id:g.mandate.id,purpose:g.mandate.purpose}:null,extra:g.extra,
+        ctx:{tier:g.tier??'x402',payee:n.payee,host,purpose:purposeKey(purpose)??undefined,status:g.v.status,order:g.mandate?{mandateId:g.mandate.id}:{},source:addressSource,mandate:g.mandate?{id:g.mandate.id,kind:g.mandate.kind}:null}});}/* t1278 S4 */
     const fl=cfg.float?.enabled?await floatFetch(n,{agentId,intentId,repeatKey,url,method,headers,body,fetchImpl,maxAmount}):null;
     if(fl)return fl;
-    const r=await payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal:maxAmount,allowance:x402Info.get(idempotencyKey)?.tier==='mandate'});
+    const r=await payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal:maxAmount,allowance:x402Info.get(idempotencyKey)?.tier==='mandate',ctx:x402Info.get(idempotencyKey)?.ctx??null});
     if(['in_progress','already_prepared','already_paid'].includes(r.state)){
       for(let i=0;i<90;i++){const row=ledger.get(r.purchaseKey);if(row.state==='paid')return {state:'paid_by_other_agent',purchaseKey:r.purchaseKey,paidBy:row.claimed_by,result:row.result?JSON.parse(row.result):null};
         if(row.state==='failed'||row.state==='reclaimed')return {state:'other_agent_'+row.state,purchaseKey:r.purchaseKey};await new Promise(z=>setTimeout(z,1000));}
       return {state:'in_progress',purchaseKey:r.purchaseKey,paidBy:r.paidBy};}
     if(r.state!=='prepared')return r;
+    if(agentId!=='owner'&&isPaused())return pausedHold(r);   /* t1278 C2: paused while the reservation was prepared -> never sent to the merchant */
     let second;for(let attempt=0;attempt<3;attempt++){
       second=await fetchImpl(url,{method,headers:{...headers,[r.paymentHeader.name]:r.paymentHeader.value},body});
-      if(second.status!==402||attempt===2)break;await second.text().catch(()=>{});await new Promise(z=>setTimeout(z,cfg.retryDelayMs??4000));}
+      if(second.status!==402||attempt===2)break;await readCapped(second);await new Promise(z=>setTimeout(z,cfg.retryDelayMs??4000));}
     const resp=second.headers.get('PAYMENT-RESPONSE')??second.headers.get('X-PAYMENT-RESPONSE');
     let settlement;try{settlement=resp?JSON.parse(Buffer.from(resp,'base64').toString()):undefined;}catch{}
     const out={state:second.ok?'paid':'payment_not_accepted',status:second.status,purchaseKey:r.purchaseKey,prepareTx:r.txHash,auth:r.auth,digest:r.digest,settlement,
-      amount:n.amount.toString(),fee:r.fee,networkFee:r.networkFee,gasRecovery:r.gasRecovery,total:(n.amount+BigInt(r.fee??0)+BigInt(r.networkFee??0)).toString(),body:(await second.text()).slice(0,20000)};
+      amount:n.amount.toString(),fee:r.fee,networkFee:r.networkFee,gasRecovery:r.gasRecovery,total:(n.amount+BigInt(r.fee??0)+BigInt(r.networkFee??0)).toString(),body:(await readCapped(second)).text.slice(0,20000)};
     ledger.update(r.purchaseKey,agentId,second.ok?{state:'paid',settle_tx:settlement?.transaction??null,result:{...out,vault:r.vault,digest:r.digest}}:{state:'prepared',result:{...r,merchantResponse:out}});
     // ONE sponsored tx per x402 payment: no inline markSettled. Fees wait in the adapter until settleRoutine closes reservations in a batch.
     // t1252 (§6#121, V5.5): markSettledInline = the VAULT closes it with its own USDC-gas UserOp (Circle uses the allowance the cap-sized prepare permit left)
@@ -1090,7 +1187,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const second=await fetchImpl(url,{method,headers:{...headers,[header.name]:header.value},body});
     const resp=second.headers.get('PAYMENT-RESPONSE')??second.headers.get('X-PAYMENT-RESPONSE');let settlement;try{settlement=resp?JSON.parse(Buffer.from(resp,'base64').toString()):undefined;}catch{}
     const out={state:second.ok?'paid':'payment_not_accepted',via:'float',status:second.status,purchaseKey:key,auth:v.auth,settlement,amount:n.amount.toString(),fee:v.fee,networkFee:'0',
-      total:(n.amount+BigInt(v.fee)).toString(),note:v.note,body:(await second.text()).slice(0,20000)};
+      total:(n.amount+BigInt(v.fee)).toString(),note:v.note,body:(await readCapped(second)).text.slice(0,20000)};
     ledger.update(key,agentId,second.ok?{state:'paid',settle_tx:settlement?.transaction??null,result:{float:true,auth:v.auth,fee:v.fee,networkFee:'0',settlement}}:{state:'prepared',result:{float:true,auth:v.auth,merchantResponse:out.status}});
     float.markVoucher(v.auth.nonce,second.ok?'settled':'signed');
     return out;
@@ -1139,12 +1236,12 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         if(BigInt(now)>=BigInt(rs[2])){const tx=await write('reclaim',[digest],{label:'reclaim:'+digest});
           ledger.db.prepare(`UPDATE purchases SET state='reclaimed',settle_tx=? WHERE purchase_key=?`).run('reclaim '+tx.hash,row.purchase_key);out.push({key:row.purchase_key,digest,state:'reclaimed',txHash:tx.hash});continue;}
         out.push({key:row.purchase_key,digest,state:'waiting',validBefore:rs[2].toString()});
-      }catch(e){out.push({key:row.purchase_key,digest,state:'error',error:String(e.shortMessage??e.message).slice(0,160)});}
+      }catch(e){out.push({key:row.purchase_key,digest,state:'error',error:errText(e)});}
     }
     for(let i=0;i<toMark.length;i+=maxBatch){const part=toMark.slice(i,i+maxBatch);
       try{const tx=await write('markSettled',[part.map(x=>x.digest)],{label:'markSettled:batch:'+part.length});
         for(const x of part){ledger.db.prepare(`UPDATE purchases SET state='paid',settle_tx=COALESCE(settle_tx,?) WHERE purchase_key=?`).run('markSettled '+tx.hash,x.key);out.push({key:x.key,digest:x.digest,state:'marked',txHash:tx.hash,batch:part.length});}}
-      catch(e){for(const x of part)out.push({key:x.key,digest:x.digest,state:'error',error:String(e.shortMessage??e.message).slice(0,160)});}}
+      catch(e){for(const x of part)out.push({key:x.key,digest:x.digest,state:'error',error:errText(e)});}}
     return j(out);
   }
   /** Anyone: move accrued fees to the fee recipient in one transfer (code only; no scheduler). */
@@ -1212,15 +1309,15 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const out={ok:true,payee:getAddress(lc(n.payee)),amount:n.amount.toString(),newPayee,purchaseKey:pk};
     /* t1212 §6#97: a known payee is asked only when an ON-CHAIN payee cap refuses it (an allowance approval can never lift that cap, so the
        old path asked again and again); everything else about a known payee stays as it was */
-    if(!newPayee){let pa=null;try{pa=await preflight({__normalized:n},{agentId,intentId:a.intentId,repeatKey:a.repeatKey});}catch{}const tierCap=(pa?.reasons??[]).filter(x=>ONCHAIN_TIER.test(x));
-      if(!tierCap.length)return out;let po=null;try{po=await preflight({__normalized:n},{agentId:'owner',intentId:a.intentId,repeatKey:a.repeatKey});}catch{}
+    if(!newPayee){let pa=null;try{pa=await preflight(normReq(n),{agentId,intentId:a.intentId,repeatKey:a.repeatKey});}catch{}const tierCap=(pa?.reasons??[]).filter(x=>ONCHAIN_TIER.test(x));
+      if(!tierCap.length)return out;let po=null;try{po=await preflight(normReq(n),{agentId:'owner',intentId:a.intentId,repeatKey:a.repeatKey});}catch{}
       const hard=(po?.reasons??[]).find(x=>WALLET_HARD.test(x));if(hard)return {...out,overWallet:true,walletReason:hard};return {...out,overWallet:false,overAuto:true,onchainTierCap:true,why:tierCap};}
-    let po=null;try{po=await preflight({__normalized:n},{agentId:'owner',intentId:a.intentId,repeatKey:a.repeatKey});}catch{}
+    let po=null;try{po=await preflight(normReq(n),{agentId:'owner',intentId:a.intentId,repeatKey:a.repeatKey});}catch{}
     const hard=(po?.reasons??[]).find(x=>WALLET_HARD.test(x));if(hard)return {...out,overWallet:true,walletReason:hard};
     const why=[];{const ed=everydayGate(n.amount);if(ed&&/^EVERYDAY_(SINGLE|DAILY|TERM)_LIMIT/.test(String(ed.reason)))why.push(ed.reason);}
     {const ac=MD.agentCheck(agentId,n.amount);if(ac&&/_CAP$/.test(String(ac.reason)))why.push(ac.reason);}
     {const mm=MD.match({purpose:purposeKey(a.purpose)??undefined,payee:n.payee,amount:n.amount,agentId});if(mm.why&&/^over_/.test(mm.why))why.push(mm.why);}
-    {let pa=null;try{pa=await preflight({__normalized:n},{agentId,intentId:a.intentId,repeatKey:a.repeatKey});}catch{}for(const x of (pa?.reasons??[]))if(/^over_(stranger|unrecognized|verified|trusted|merchant)/.test(x))why.push(x);}
+    {let pa=null;try{pa=await preflight(normReq(n),{agentId,intentId:a.intentId,repeatKey:a.repeatKey});}catch{}for(const x of (pa?.reasons??[]))if(/^over_(stranger|unrecognized|verified|trusted|merchant)/.test(x))why.push(x);}
     return {...out,overWallet:false,overAuto:why.length>0,why};}
   /** the owner's on-chain approval for exactly this request (same identity the payment will use) */
   async function ownerAskApproval(spec,{windowSec=600}={}){const z=await askN(spec);if(!z)return {ok:false,code:'not_direct'};const {n}=z;const a=spec.args??{};
@@ -1294,7 +1391,8 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const claimPurchase=({agentId=agentDefault,intentId,lineKey,ttlSec=600,note})=>{
     if(!/^[A-Za-z0-9._:-]{1,128}$/.test(String(intentId))||!/^[A-Za-z0-9._:/-]{1,256}$/.test(String(lineKey)))return {won:false,error:'bad_intent_or_line_key'};
     return ledger.claimLine(intentId,lineKey,agentId,{ttlMs:Math.min(Math.max(10,ttlSec),86400)*1000,note});};
-  const listPurchases=(q={})=>ledger.listFiltered(q).map(r=>({purchaseKey:r.purchase_key,state:r.state,standard:r.standard,payee:r.payee,amount:r.amount,ref:r.ref,agent:r.origin_agent??r.claimed_by,merchant:r.merchant_id,label:r.label??null,tier:r.tier,txHash:r.tx_hash,createdAt:r.created_at,order:orderFor(r.purchase_key)}));
+  /* t1281: fee + networkFee per row (atomic strings), the same formula as every limit sum (spend-cost.mjs); the app adds them the same way */
+  const listPurchases=(q={})=>{const cp=costParams();return ledger.listFiltered(q).map(r=>{const c=costParts(r,cp);return {purchaseKey:r.purchase_key,state:r.state,standard:r.standard,payee:r.payee,amount:r.amount,fee:c.fee.toString(),networkFee:c.networkFee.toString(),ref:r.ref,agent:r.origin_agent??r.claimed_by,merchant:r.merchant_id,label:r.label??null,tier:r.tier,txHash:r.tx_hash,createdAt:r.created_at,order:orderFor(r.purchase_key)};});};
   const idle=async()=>{await Promise.all(pendingClose);await c.idle?.();};
   const requestRefund=({purchaseKey,reason='other',note=''}={},agentId)=>{if(!cfg.disputes)throw Error('disputes are not enabled on this gateway');
     const pr=listPurchases({limit:100000}).find(x=>x.purchaseKey===purchaseKey||x.txHash===purchaseKey);if(!pr)return {state:'rejected',reason:'unknown_purchase',detail:'no payment with that purchase key; see kipurse_list_purchases'};
@@ -1328,16 +1426,18 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   if(cfg.reconcileOnStart!==false){const t=setTimeout(()=>{reconcileSubmitted().then(()=>reconcileOwnerAsks()).catch(()=>{});},Number(cfg.reconcileOnStartMs??1000));t.unref?.();}
   /** t1264: does this payee route as owner-trusted right now (stored trust on chain, or a live inline KPTR trust)? For the owner-ask trust reconcile. */
   const payeeTrustState=async payee=>{const r=await route({mode:'direct',payee:getAddress(lc(payee))},await chainNow());return {trusted:r.tier==='trusted'&&!r.reason,inline:!!r.inline,merchant:r.merchant??null,tier:r.tier};};
-  return {version:5,reconcileSubmitted,payeeTrustState,reconcileOwnerAsks,reconcileOwnerAsk,purchaseState:settledView,withWalletTx,layeredTrust,sanctions:SC,mandates:MD,ownerAsks:ASK,repushProposal:v=>{try{cfg.onMandateProposal?.(v);}catch{}},ownerAskClass,ownerAskApproval,payApprovedByOwner,logObs:(k,v)=>{try{cfg.obs?.log?.(k,v);}catch{}},merchantStatus,setOrderExtra,isPaused:()=>isPaused(),ledgerPath:ledgerFile,orderFor,orderForTx,listHolds,cancelHold,releaseHold,spendingSummary,agentSafetyPause,addressBook,resolvePayeeName,nameOf,setPayeeName:(a,n)=>setName(a,n,'owner',true),pendingHoldsDue:()=>{try{return ledger.db.prepare(`SELECT count(*) AS n FROM payment_hold WHERE state='pending'`).get().n;}catch{return 0;}},guardrails:()=>({trialSingle:GUARD.trialSingle.toString(),trialDaily:GUARD.trialDaily.toString(),evidenceThreshold:GUARD.evidenceThreshold.toString(),trialUsed24h:trialSpent24h().toString()}),verifyPayee,requestTrustFromOwner,trustRequestStatus,requestRefund,disputes,cardCreate,cards,cardSimulate,idle,status,limits,parse,preflight,pay,payAny,payMerchantOrder,setup,setLimits,proposeTrust,trustList,depositInfo:depositInfoFn,deposits:depositsList,requestWithdrawal,executeWithdrawal,discoverMerchant:discover,parseAny,paidFetch,payNormalized,settleRoutine,markSettledOne,reclaimExpired:settleRoutine,
+  return {version:5,reconcileSubmitted,openReservations,purchaseForAI,payeeTrustState,reconcileOwnerAsks,reconcileOwnerAsk,purchaseState:settledView,withWalletTx,layeredTrust,sanctions:SC,mandates:MD,ownerAsks:ASK,repushProposal:v=>{try{cfg.onMandateProposal?.(v);}catch{}},ownerAskClass,ownerAskApproval,payApprovedByOwner,logObs:(k,v)=>{try{cfg.obs?.log?.(k,v);}catch{}},merchantStatus,setOrderExtra,isPaused:()=>isPaused(),ledgerPath:ledgerFile,orderFor,orderForTx,listHolds,cancelHold,releaseHold,spendingSummary,agentSafetyPause,addressBook,resolvePayeeName,nameOf,setPayeeName:(a,n)=>setName(a,n,'owner',true),pendingHoldsDue:()=>{try{return ledger.db.prepare(`SELECT count(*) AS n FROM payment_hold WHERE state='pending'`).get().n;}catch{return 0;}},guardrails:()=>({trialSingle:GUARD.trialSingle.toString(),trialDaily:GUARD.trialDaily.toString(),evidenceThreshold:GUARD.evidenceThreshold.toString(),trialUsed24h:trialSpent24h().toString()}),verifyPayee,requestTrustFromOwner,trustRequestStatus,requestRefund,disputes,cardCreate,cards,cardSimulate,idle,status,limits,parse,preflight,pay,payAny,payMerchantOrder,setup,setLimits,proposeTrust,trustList,depositInfo:depositInfoFn,deposits:depositsList,requestWithdrawal,executeWithdrawal,discoverMerchant:discover,parseAny,paidFetch,payNormalized,settleRoutine,markSettledOne,reclaimExpired:settleRoutine,
     exportCsv:(o={})=>toCsv(ledger.db,{tz:cfg.timeZone??'America/Chicago',...o,chainId:cfg.chainId,token:cfg.token}),
     receipt:(key,o={})=>taxReceipt(ledger.db,key,{tz:cfg.timeZone??'America/Chicago',...o,chainId:cfg.chainId,token:cfg.token,payer:p.account}),
     annualSummary:(year,o={})=>annualSummary(ledger.db,year??new Date().getFullYear(),{tz:cfg.timeZone??'America/Chicago',...o,chainId:cfg.chainId,token:cfg.token}),
-    exitPlan,recordGasSettlement,collectFees,floatFund:async o=>{/* t621 #8: funding the float is checked against the everyday 24h limit */const ev=(()=>{try{return cfg.everydayGet?.()??null;}catch{return 'err';}})();
+    exitPlan,recordGasSettlement,collectFees,floatFund:async o=>{/* t1278 S10: nothing is funded while AI payments are paused (owner stop / anomaly) */if(isPaused())return {state:'rejected',reason:'wallet_paused_for_safety',nothingPaid:true,fix:'AI payments are paused; only the owner can resume them in the Kipurse app (Face ID).'};
+      /* t621 #8: funding the float is checked against the everyday 24h limit */const ev=(()=>{try{return cfg.everydayGet?.()??null;}catch{return 'err';}})();
       if(ev==='err')return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};
       if(ev&&(ev.authorized===false||ev.daily==null||ev.term==null))return {state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true};
       if(ev){let amt;try{amt=o?.amount!==undefined?BigInt(o.amount):BigInt(await rd('floatCap',[p.account]));}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}
         const spentTerm=spentCumulative();if(spentTerm==null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};
-        if(spentTerm+amt>BigInt(ev.term))return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:ev.term,fix:'Funding the float would exceed the explicit AI total. Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的 AI 总额。/ Not funded: it would go over the total you set.'});
-        if(everydaySpent()+amt>BigInt(ev.daily))return capHit({state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:ev.daily,fix:'Funding the micropayment float would go over the owner’s everyday 24h limit (the float counts as spent). Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的日常额度（小额池里的钱算作已花）。/ Not funded: it would go over your everyday limit (the float counts as spent).'});}
+        await warmFee();const amtCost=costIn(amt);/* t1281: the float takes amount + its fee reserve (network fee: counted in the ledger reservation) */
+        if(spentTerm+amtCost>BigInt(ev.term))return capHit({state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:ev.term,fix:'Funding the float would exceed the explicit AI total. Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的 AI 总额。/ Not funded: it would go over the total you set.'});
+        if(everydaySpent()+amtCost>BigInt(ev.daily))return capHit({state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:ev.daily,fix:'Funding the micropayment float would go over the owner’s everyday 24h limit (the float counts as spent). Nothing was funded.',say_to_user:'没有充入小额池：这会超过你设的日常额度（小额池里的钱算作已花）。/ Not funded: it would go over your everyday limit (the float counts as spent).'});}
       return float.fund(o);},floatReconcile:()=>float.reconcile(),floatStatus:()=>float.status(),gasBook:gas,resetAgentFailures:a=>gas.resetFailures(a),trustRequest,trustSubmit,untrustRequest,untrustSubmit,denySignerRequest,denySignerSubmit,approvalRequest,pause,claimPurchase,merchantInfo,listPurchases,ledger,client:c,permission:p,policy:P};
 }

@@ -4,6 +4,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {keccak256,toHex} from 'viem';
+import {costOf,incomingCost,missingOk} from '../v5/spend-cost.mjs';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 const canon=v=>JSON.stringify(v,(k,x)=>typeof x==='bigint'?x.toString():x);
 
@@ -31,6 +32,8 @@ export class V4Ledger{
     // busy timeout FIRST (and at open): `PRAGMA journal_mode=WAL` takes a lock, and with concurrent openers it used to fail
     // immediately with SQLITE_BUSY "database is locked" because busy_timeout was only set after it (flaky 20-thread race test).
     this.db=store?store.openDb(file,{timeout:10000}):new DatabaseSync(file,{timeout:10000});this.leaseMs=leaseMs;
+    /* t1281 (§6#141): {ppm, maxNetworkFee} for the shared cost formula (src/v5/spend-cost.mjs); the V5 engine sets it from the live fee */
+    this.costParams=()=>({ppm:0n,maxNetworkFee:0n});
     this.db.exec(`PRAGMA busy_timeout=10000;PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS intents(intent_id TEXT PRIMARY KEY, goal TEXT NOT NULL, created_by TEXT NOT NULL, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS purchases(purchase_key TEXT PRIMARY KEY, intent_id TEXT, standard TEXT NOT NULL, chain_id INTEGER NOT NULL, payee TEXT NOT NULL,
@@ -59,30 +62,37 @@ export class V4Ledger{
   }
   idempotencyEnd(key,purchaseKey,response){this.db.prepare('UPDATE idempotency SET purchase_key=?,response=? WHERE idem_key=?').run(purchaseKey??null,canon(response),key);}
   /** Atomic claim. Returns {won:true, row} for exactly one caller per purchase key (until it finishes or its pre-submit lease expires). */
-  claim(key,n,intentId,agent){
+  /* t1278 S4: optional {check, after}, both synchronous and run INSIDE this BEGIN IMMEDIATE: check() (before this purchase is written, so it
+     sees every OTHER claimed / in-flight / paid purchase) may refuse -> {won:false, refused} and nothing is written; after() runs once the claim
+     is written (e.g. the provisional order row, a one-time allowance use). */
+  claim(key,n,intentId,agent){const {check,after}=arguments[4]??{};
     const now=Date.now(),op=operationIdFor(key);
     return this.tx(()=>{
       const r=this.db.prepare('SELECT * FROM purchases WHERE purchase_key=?').get(key);
+      const can=!r||(r.state==='claimed'&&r.lease_until<now)||(r.state==='failed'&&!r.tx_hash);
+      if(can&&check){const x=check();if(x)return {won:false,refused:x,row:r??null};}
       if(!r){this.db.prepare(`INSERT INTO purchases VALUES(?,?,?,?,?,?,?,?,'claimed',?,?,NULL,NULL,NULL,?,?)`).run(key,intentId??null,n.standard,n.chainId,n.payee,n.amount.toString(),n.merchantOrderId??n.resource?.url??null,op,agent,now+this.leaseMs,now,now);
-        this.event(agent,key,'claimed');return {won:true,row:this.get(key)};}
+        this.event(agent,key,'claimed');after?.();return {won:true,row:this.get(key)};}
       // take over only if the previous claimer never submitted anything and its lease expired, or it definitively failed before submit
       if((r.state==='claimed'&&r.lease_until<now)||(r.state==='failed'&&!r.tx_hash)){
         this.db.prepare(`UPDATE purchases SET state='claimed',claimed_by=?,lease_until=?,updated_at=? WHERE purchase_key=?`).run(agent,now+this.leaseMs,now,key);
-        this.event(agent,key,'claim_takeover',{from:r.claimed_by,prevState:r.state});return {won:true,row:this.get(key)};}
+        this.event(agent,key,'claim_takeover',{from:r.claimed_by,prevState:r.state});after?.();return {won:true,row:this.get(key)};}
       this.event(agent,key,'claim_lost',{owner:r.claimed_by,state:r.state});return {won:false,row:r};
     });
   }
   /** Claim and reserve against the AI total in one BEGIN IMMEDIATE. A loser is stored as failed and does not count. */
-  claimWithin(key,n,intentId,agent,limit){
+  claimWithin(key,n,intentId,agent,limit,{check,after,cost}={}){
     const now=Date.now(),op=operationIdFor(key);
     return this.tx(()=>{
       const r=this.db.prepare('SELECT * FROM purchases WHERE purchase_key=?').get(key);
+      {const can=!r||(r.state==='claimed'&&r.lease_until<now)||(r.state==='failed'&&!r.tx_hash);if(can&&check){const x=check();if(x)return {won:false,admitted:false,refused:x,row:r??null};}}
       if(!r)this.db.prepare(`INSERT INTO purchases VALUES(?,?,?,?,?,?,?,?,'claimed',?,?,NULL,NULL,NULL,?,?)`).run(key,intentId??null,n.standard,n.chainId,n.payee,n.amount.toString(),n.merchantOrderId??n.resource?.url??null,op,agent,now+this.leaseMs,now,now);
       else if((r.state==='claimed'&&r.lease_until<now)||(r.state==='failed'&&!r.tx_hash))this.db.prepare(`UPDATE purchases SET state='claimed',claimed_by=?,lease_until=?,updated_at=? WHERE purchase_key=?`).run(agent,now+this.leaseMs,now,key);
       else return {won:false,admitted:false,row:r};
       const others=this._committed(key);
-      if(others+BigInt(n.amount)>BigInt(limit)){this.db.prepare(`UPDATE purchases SET state='failed',updated_at=? WHERE purchase_key=? AND state='claimed'`).run(now,key);this.event(agent,key,'everyday_release',{reason:'term'});return {won:true,admitted:false,row:this.get(key)};}
-      this.event(agent,key,r?'claim_takeover':'claimed');return {won:true,admitted:true,row:this.get(key)};
+      /* t1281: this payment counts amount + fee + network fee (cost), like every other row */
+      if(others+BigInt(cost??incomingCost(n.amount,this.costParams()))>BigInt(limit)){this.db.prepare(`UPDATE purchases SET state='failed',updated_at=? WHERE purchase_key=? AND state='claimed'`).run(now,key);this.event(agent,key,'everyday_release',{reason:'term'});return {won:true,admitted:false,row:this.get(key)};}
+      this.event(agent,key,r?'claim_takeover':'claimed');after?.();return {won:true,admitted:true,row:this.get(key)};
     });
   }
   update(key,agent,fields){
@@ -107,28 +117,34 @@ export class V4Ledger{
    *  exceptKey omits that purchase so the caller can test "others + this amount". */
   /* t1264: only AI-originated rows count: not the owner's own payments, withdrawals or owner-approved asks (purchase_origin / meta agent
      'owner'), and not a 'claimed' row whose lease ran out before anything was sent (it can never be paid without a new claim). */
-  _committed(exceptKey){let sum=0n;const keys=new Set();const now=Date.now();
-    for(const r of this.db.prepare(`SELECT p.purchase_key,p.amount,p.state,p.lease_until,p.tx_hash,o.origin,m.agent_id AS meta_agent FROM purchases p LEFT JOIN purchase_origin o ON o.purchase_key=p.purchase_key LEFT JOIN purchase_meta m ON m.purchase_key=p.purchase_key WHERE p.state IN ('claimed','submitted','prepared','paid')`).all()){
+  /* t1281 (§6#141): every row counts amount + protocol fee + network fee (spend-cost.mjs); an open float counts funded + fee reserve + its network fee */
+  _committed(exceptKey){let sum=0n;const keys=new Set();const now=Date.now();const cp=this.costParams();
+    for(const r of this.db.prepare(`SELECT p.purchase_key,p.amount,p.state,p.lease_until,p.tx_hash,p.result,o.origin,m.agent_id AS meta_agent FROM purchases p LEFT JOIN purchase_origin o ON o.purchase_key=p.purchase_key LEFT JOIN purchase_meta m ON m.purchase_key=p.purchase_key WHERE p.state IN ('claimed','submitted','prepared','paid')`).all()){
       if((r.origin&&r.origin!=='ai')||r.meta_agent==='owner')continue;
       if(r.state==='claimed'&&r.lease_until<now&&!r.tx_hash)continue;
-      keys.add(r.purchase_key);if(r.purchase_key!==exceptKey)sum+=BigInt(r.amount||0);}
-    try{for(const h of this.db.prepare(`SELECT amount FROM payment_hold WHERE state='pending'`).all())sum+=BigInt(h.amount||0);}catch{}
-    try{for(const v of this.db.prepare(`SELECT purchase_key,amount FROM float_vouchers WHERE state!='void'`).all()){if(!v.purchase_key||!keys.has(v.purchase_key))sum+=BigInt(v.amount||0);}}catch{}
-    try{for(const s of this.db.prepare(`SELECT session,funded FROM float_sessions WHERE reconcile_tx IS NULL`).all()){let used=0n;try{used=BigInt(this.db.prepare(`SELECT COALESCE(SUM(amount),0) AS a FROM float_vouchers WHERE session=? AND state!='void'`).get(s.session).a);}catch{}
-      const left=BigInt(s.funded)-used;if(left>0n)sum+=left;}}catch{}
+      keys.add(r.purchase_key);if(r.purchase_key!==exceptKey)sum+=costOf(r,cp);}
+    try{for(const h of this.db.prepare(`SELECT amount FROM payment_hold WHERE state='pending'`).all())sum+=costOf({amount:h.amount||0,state:'hold'},cp);}catch(e){missingOk(e);}
+    try{for(const v of this.db.prepare(`SELECT purchase_key,amount FROM float_vouchers WHERE state!='void'`).all()){if(!v.purchase_key||!keys.has(v.purchase_key))sum+=costOf({amount:v.amount||0,result:{networkFee:'0'},state:'voucher'},cp);}}catch(e){missingOk(e);}
+    try{for(const s of this.db.prepare(`SELECT session,funded,fee_reserve,network_fee FROM float_sessions WHERE reconcile_tx IS NULL`).all()){let used=0n;try{for(const v of this.db.prepare(`SELECT amount FROM float_vouchers WHERE session=? AND state!='void'`).all(s.session))used+=costOf({amount:v.amount||0,result:{networkFee:'0'},state:'voucher'},cp);}catch(e){missingOk(e);}
+      const left=BigInt(s.funded??0)+BigInt(s.fee_reserve??0)+BigInt(s.network_fee??0)-used;if(left>0n)sum+=left;}}catch(e){missingOk(e);}
+    /* t1281 review: a reconciled float's funding network fee really left the wallet (the chain's termSpent keeps it) - keep counting it */
+    try{sum+=BigInt(this.db.prepare(`SELECT COALESCE(SUM(CAST(network_fee AS INTEGER)),0) AS a FROM float_sessions WHERE reconcile_tx IS NOT NULL`).get().a??0);}catch(e){missingOk(e);}
     return sum;}
   committedSpend(){return this.tx(()=>this._committed(null));}
   /** Serialized by BEGIN IMMEDIATE. Keeps this claim only when others + amount fit. Otherwise the claim is released (failed) and does not count. */
+  /* t1281: `amount` is this payment's COST (amount + fee + network fee); the engine passes it */
   admitAmount(key,amount,limit){return this.tx(()=>{const others=this._committed(key);if(others+BigInt(amount)>BigInt(limit)){
     this.db.prepare(`UPDATE purchases SET state='failed',updated_at=? WHERE purchase_key=? AND state='claimed'`).run(Date.now(),key);this.event(null,key,'everyday_release',{reason:'term'});return {ok:false,spent:others.toString()};}
     return {ok:true,spent:others.toString()};});}
   /** Hold a float reservation inside the same lock as the total. The caller deletes it after the real session row exists. */
-  reserveFloat(session,amount,limit){return this.tx(()=>{try{const existing=this.db.prepare(`SELECT fund_tx FROM float_sessions WHERE session=?`).get(session);if(existing&&existing.fund_tx!=='reserved')return {ok:false,error:'reserve_failed'};
-    this.db.prepare(`INSERT OR REPLACE INTO float_sessions(session,float_vault,funded,fee_reserve,network_fee,fund_tx,funded_at) VALUES(?,?,?,?,?,?,?)`).run(session,'reserved',Number(amount),0,0,'reserved',Date.now());}catch{return {ok:false,error:'reserve_failed'};}
+  /* t1281: the reservation holds the fee reserve and the funding network fee too (what really leaves the wallet) */
+  reserveFloat(session,amount,limit,{feeReserve=0n,networkFee=0n}={}){return this.tx(()=>{try{const existing=this.db.prepare(`SELECT fund_tx FROM float_sessions WHERE session=?`).get(session);if(existing&&existing.fund_tx!=='reserved')return {ok:false,error:'reserve_failed'};
+    this.db.prepare(`INSERT OR REPLACE INTO float_sessions(session,float_vault,funded,fee_reserve,network_fee,fund_tx,funded_at) VALUES(?,?,?,?,?,?,?)`).run(session,'reserved',Number(amount),Number(feeReserve),Number(networkFee),'reserved',Date.now());}catch{return {ok:false,error:'reserve_failed'};}
     const spent=this._committed(null);if(spent>BigInt(limit)){this.db.prepare(`DELETE FROM float_sessions WHERE session=? AND fund_tx='reserved'`).run(session);return {ok:false,spent:spent.toString()};}return {ok:true,spent:spent.toString()};});}
   clearFloatReserve(session){try{this.db.prepare(`DELETE FROM float_sessions WHERE session=? AND fund_tx='reserved'`).run(session);}catch{}}
   /** Sum (atomic, BigInt) committed by one agent since a timestamp: claimed/submitted/prepared/paid rows it originated. */
-  agentSpentSince(agent,sinceMs){let t=0n;for(const r of this.db.prepare(`SELECT p.amount FROM purchases p JOIN purchase_meta m ON m.purchase_key=p.purchase_key WHERE m.agent_id=? AND p.state IN ('claimed','submitted','prepared','paid') AND p.created_at>=?`).all(agent,sinceMs))t+=BigInt(r.amount);return t;}
+  /* t1281: amount + fee + network fee per row (spend-cost.mjs) */
+  agentSpentSince(agent,sinceMs){let t=0n;const cp=this.costParams();for(const r of this.db.prepare(`SELECT p.amount,p.result,p.state FROM purchases p JOIN purchase_meta m ON m.purchase_key=p.purchase_key WHERE m.agent_id=? AND p.state IN ('claimed','submitted','prepared','paid') AND p.created_at>=?`).all(agent,sinceMs))t+=costOf(r,cp);return t;}
   history({payee,merchantId}={}){const rows=this.db.prepare(`SELECT p.state,p.amount,p.payee,m.merchant_id FROM purchases p LEFT JOIN purchase_meta m ON m.purchase_key=p.purchase_key`).all()
       .filter(r=>(payee&&r.payee.toLowerCase()===payee.toLowerCase())||(merchantId&&r.merchant_id===merchantId));
     let paid=0,paidAtomic=0n,failed=0;for(const r of rows){if(r.state==='paid'){paid++;paidAtomic+=BigInt(r.amount);}if(r.state==='failed')failed++;}return {purchases:rows.length,paid,paidAtomic:paidAtomic.toString(),failed};}

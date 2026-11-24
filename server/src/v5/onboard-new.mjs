@@ -5,7 +5,7 @@
 //   - he has none -> create his wallet (Coinbase Smart Wallet factory, deterministic, owner = his Base Account) + spend permission/caps +
 //     t1086: the FIRST phone Face ID key is in this same batch. Gas is one user-USDC quote (openingFeeUSDC), repaid in the same confirmation. A later enroll of that key is not charged again.
 import {langOf,X} from './i18n.mjs';import {randomBytes,createHash} from 'node:crypto';import {getAddress,encodeAbiParameters,encodeFunctionData,parseAbi,decodeAbiParameters} from 'viem';
-import {approverInit,DETERMINISTIC_DEPLOYER,WALLET_ABI,APPROVER_ABI,fingerprint,p256Key,ETH_USD_FEED} from './phone-signer.mjs';import {checkLimits,limitsWindow} from './limits-public.mjs';
+import {approverInit,DETERMINISTIC_DEPLOYER,WALLET_ABI,APPROVER_ABI,fingerprint,p256Key,ETH_USD_FEED} from './phone-signer.mjs';import {checkLimits,limitsWindow,subCapsOrThrow,STRANGER_CAPS_API} from './limits-public.mjs';
 import {selfCall,assertNoTopLevelOwnerCall} from './owner-selfcall.mjs';import {seatInit,seatOwners,setKeyCall,SEAT_VERSION} from './key-seat.mjs';import {buildMigrationPlanV5} from './plan.mjs';import {v5Abi,permissionFromJson} from './abi.mjs';import {kvKey} from './store.mjs';import {callsHash} from './onboard-sponsor.mjs';import {CBV,CBV_GUIDE} from './cb-verified.mjs';import {approveCall,depositCall,feeRepayCall,vaultSeedCall,vaultSeedNote,OPENING_VAULT_SEED,USDC_BASE,KIPURSE_FEE_TO,OPENING_FEE_USDC,OPENING_FEE_CAP_USDC,OPENING_WITH_FIRST_KEY_GAS,openingFeeUSDC,fmtOpeningFeeUSDC,openingFeeNote} from './usdc-gas.mjs';
 /** t767u: new wallets set the vault's fee slot to Kipurse's ops account so fronted onboarding gas (and any debt) is repaid from AI payments
  *  without another signature. Cap per operation = 0.05 USDC (= the onboarding worst case the sponsor counts, and the network-fee cap). Only
@@ -39,9 +39,9 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
   const day=()=>new Date().toISOString().slice(0,10),hour=()=>new Date().toISOString().slice(0,13);
   const rlGet=k=>Number(kv.get(k)?.n??0),rlInc=(k,ms)=>kv.put(k,{n:rlGet(k)+1},ms);
   const ipOk=c=>!c||rlGet('rl:spons:'+c+':'+day())<RL.sponsoredPerDay;
-  async function start({x,y,single,daily,term,days,owner,client}){p256Key(x,y);
-    if(client){const k='rl:start:'+client+':'+hour();if(rlGet(k)>=RL.startsPerHour)throw Object.assign(Error('too many setup attempts from this network; try again in an hour'),{code:'rate_limited'});rlInc(k,2*3600e3);}const expect=owner&&/^0x[0-9a-fA-F]{40}$/.test(String(owner))?getAddress(owner):null;const c=checkLimits({single,daily,term,days:days??90});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});
-    const id=randomBytes(12).toString('hex');kv.put(K(id),{x,y,expect,choice:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),days:c.days},state:'start'},ttlMs);
+  async function start({x,y,single,daily,term,days,owner,client,openSingle,openDaily}){p256Key(x,y);
+    if(client){const k='rl:start:'+client+':'+hour();if(rlGet(k)>=RL.startsPerHour)throw Object.assign(Error('too many setup attempts from this network; try again in an hour'),{code:'rate_limited'});rlInc(k,2*3600e3);}const expect=owner&&/^0x[0-9a-fA-F]{40}$/.test(String(owner))?getAddress(owner):null;const c=checkLimits({single,daily,term,days:days??90,openSingle,openDaily});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});
+    const id=randomBytes(12).toString('hex');kv.put(K(id),{x,y,expect,choice:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),days:c.days,...(c.openSingle!==undefined?{openSingle:c.openSingle.toString(),openDaily:c.openDaily.toString()}:{})/* t1281 */},state:'start'},ttlMs);
     return {id,url:`${base()}/onboard/new?id=${id}`,fingerprint:fingerprint(x,y),quote:await quote(expect??'')};}
   async function prepare(id,owner,client,features=[],deposit=null,req=null){const duesSlot=!!sponsor?.onboardOn&&Array.isArray(features)&&features.includes('dues_slot');/* t1008u: no new dues */const o=kv.get(K(id));if(!o)throw Object.assign(Error('unknown or expired'),{code:'unknown'});owner=getAddress(owner);if(o.expect&&o.expect!==owner)throw Object.assign(Error('请用刚才登录的那个 Coinbase 账户'),{code:'owner_mismatch'});
     // t621 #1: idempotent. The APP prepares first, decodes + checks the batch and commits to it (#vh); the page then gets the SAME calls.
@@ -51,7 +51,7 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
     const v0=await cbv(owner);if(!v0.verified)throw cbvErr(v0);
     const mine=reg.byOwner(owner)[0];const ch=o.choice;
     if(mine){if(!await proven(mine.wallet,o.x,o.y,req))throw Object.assign(Error('Sign in with Coinbase on this phone first, then set it up again. 先在这台手机上用 Coinbase 登录，再重新开通。'),{code:'sign_in_first'});
-      const t=await tenantStart(mine.wallet,{x:o.x,y:o.y,single:usd(ch.single),daily:usd(ch.daily),term:usd(ch.term),days:ch.days});
+      const t=await tenantStart(mine.wallet,{x:o.x,y:o.y,single:usd(ch.single),daily:usd(ch.daily),term:usd(ch.term),days:ch.days,...(ch.openSingle!==undefined?{openSingle:usd(ch.openSingle),openDaily:usd(ch.openDaily)}:{})/* t1281 */});
       kv.put(K(id),{...o,state:'prepared',kind:'tenant',wallet:mine.wallet,owner,tid:t.id,calls:t.calls??[]},ttlMs);return {calls:t.calls??[],wallet:mine.wallet,existing:true,owner,chainId,summary:'找到你已有的启付钱包'};}
     {const v=v0;
       // anti-renting: one Coinbase attestation opens at most ONE new Kipurse wallet (Coinbase allows 3 addresses per verified person -> max 3)
@@ -67,7 +67,7 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
     const ppm=await pub.readContract({address:await pub.readContract({address:cfg.adapter,abi:v5Abi,functionName:'fees'}),abi:v5Abi,functionName:'feePpm'});
     const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();const now=Number((await pub.getBlock()).timestamp);
     const pl=buildMigrationPlanV5({chainId,wallet:W,owner,adapter:cfg.adapter,trust:cfg.trust,token:cfg.token,manager:cfg.manager,executor:executorFor?executorFor(W):p.executor,guardian:p.guardian,registry:p.registry,headroom:false,
-      maxFeePpm:p.maxFeePpm,maxNetworkFee:p.maxNetworkFee,fee:{ppm:String(ppm)},stated:{single:ch.single,daily:ch.daily,term:ch.term,openSingle:mn(p.openSingle,ch.single),openDaily:mn(p.openDaily,ch.daily),verifiedSingle:mn(p.verifiedSingle,ch.single),verifiedDaily:mn(p.verifiedDaily,ch.daily)},
+      maxFeePpm:p.maxFeePpm,maxNetworkFee:p.maxNetworkFee,fee:{ppm:String(ppm)},stated:{single:ch.single,daily:ch.daily,term:ch.term,...subCapsOrThrow(ch,p)/* t1281: the ONE stranger formula (limits-public subCaps); template p = base */},
       ...limitsWindow(now,ch.days),salt:BigInt('0x'+randomBytes(8).toString('hex')),revoke:[],zeroReserve:{vault,buffer:0,...(duesSlot?{bundlerFee:DUES_SLOT}:{})}});
     // the SpendPermissionManager must be an OWNER of the wallet, or every spend reverts with Unauthorized() (new wallets start without it; key-seat wallets get it at creation)
     const spmOwner=seat?true:exists&&await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[getAddress(cfg.manager)]});
@@ -146,7 +146,7 @@ ${feeCard(o,t,feeUSDC)}
         let att=null;if(appAttest&&appAttest.mode!=='off'){const r=b?.attest?appAttest.verify({keyId:b.attest.keyId,attestation:b.attest.attestation,x:String(b.x),y:String(b.y)}):{ok:false,reason:'missing'};
           att=r;try{appAttest.log?.('app_attest',{ok:r.ok,reason:r.reason??null,env:r.env??null,mode:appAttest.mode});}catch{}
           if(!r.ok&&appAttest.mode==='require'){json(403,{error:'app_attest_required',detail:'Please use the official Kipurse app from the App Store on an iPhone. 请用 App Store 上的正版启付 App（iPhone）开通。'});return true;}}
-        const out=await start({x:String(b.x),y:String(b.y),single:b.single,daily:b.daily,term:b.term,days:b.days,owner:b.owner,client:clientOf(req)});
+        const out=await start({x:String(b.x),y:String(b.y),single:b.single,daily:b.daily,term:b.term,days:b.days,owner:b.owner,client:clientOf(req),openSingle:b.openSingle,openDaily:b.openDaily});
         if(out?.id){const o=kv.get(K(out.id));if(o)kv.put(K(out.id),{...o,attested:!!att?.ok},ttlMs);}json(200,out);return true;}
       if(p==='/onboard/new/prepare'&&req.method==='POST'){const b=await readBody(req);json(200,await prepare(String(b.id??''),String(b.owner??''),clientOf(req),Array.isArray(b.features)?b.features.map(String).slice(0,8):[],/^\d{1,12}$/.test(String(b.deposit??''))?String(b.deposit):null,req));return true;}
       if(p==='/onboard/new/verified'&&req.method==='GET'){const ow=String(u.searchParams.get('owner')??'');if(!/^0x[0-9a-fA-F]{40}$/.test(ow)){json(400,{error:'bad_owner'});return true;}
@@ -156,7 +156,7 @@ ${feeCard(o,t,feeUSDC)}
         // t1026u: quote already has feeUSDC from live gas→USDC (+buffer, capped). Surface the same amount as openingFee + feeNote.
         const feeAtomic=(()=>{try{const s=String(q.feeUSDC??'');const [w,f='']=s.split('.');return BigInt(w||'0')*1_000_000n+BigInt((f+'000000').slice(0,6));}catch{return OPENING_FEE_CAP_USDC;}})();
         const note=openingFeeNote(feeAtomic);
-        Object.assign(q,{sponsoredByKipurse:false,sponsored:false,includesPhoneApprover:true,feePaidBy:'user_usdc',gasToken:'USDC',openingFeeUSDC:String(feeAtomic),openingFeeCapUSDC:String(OPENING_FEE_CAP_USDC),feeTo:KIPURSE_FEE_TO,feeNote:note,vaultSeedUSDC:String(OPENING_VAULT_SEED),vaultSeedNote:vaultSeedNote()});json(200,q);return true;}
+        Object.assign(q,{sponsoredByKipurse:false,sponsored:false,includesPhoneApprover:true,feePaidBy:'user_usdc',gasToken:'USDC',openingFeeUSDC:String(feeAtomic),openingFeeCapUSDC:String(OPENING_FEE_CAP_USDC),feeTo:KIPURSE_FEE_TO,feeNote:note,vaultSeedUSDC:String(OPENING_VAULT_SEED),vaultSeedNote:vaultSeedNote(),strangerCaps:STRANGER_CAPS_API/* t1281 */});json(200,q);return true;}
       if(p==='/onboard/new/paymaster'){const cors={'access-control-allow-origin':'*','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'content-type','cache-control':'no-store'};
         if(req.method==='OPTIONS'){res.writeHead(204,cors);res.end();return true;}
         if(req.method!=='POST'||!sponsor?.enabled){res.writeHead(404,{...cors,'content-type':'application/json'});res.end(J({error:'not_found'}));return true;}

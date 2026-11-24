@@ -65,6 +65,7 @@ final class AppModel: ObservableObject {
   /// t1266 (fix 8): ONE reset of everything that belongs to the current wallet (sign-out and a followed move both use it).
   func resetWalletScopedState() {
     chainBalances = nil; chainBalancesWallet = nil; stray = []
+    agreedBalance.reset(); onrampBaseline = nil   // t1279 (R14/R15)
     seenApprovals = []; UserDefaults.standard.removeObject(forKey: "seenApprovals")
     AllowanceStore.shared.resetWalletScoped()   // approvals, overall limits, agents, push hints (kp.pendingPushHints), held Face ID
     AIConnect.pendingAmounts = nil
@@ -81,9 +82,17 @@ final class AppModel: ObservableObject {
   }
   /// Signing pages run in SFSafariViewController (shares the owner's Safari/Coinbase login; ASWebAuthenticationSession ephemeral forced re-login).
   /// Leaving the app to fetch a code must never tear it down, so the app lock waits until the sheet is closed.
-  @Published var webSheet: WebSheet? { didSet { if webSheet == nil, lockAfterSheet { lockAfterSheet = false; locked = true }; if webSheet == nil, let r = onrampPendingRef { onrampPendingRef = nil; onrampTrack = OnrampTrack(ref: r) } } }
+  @Published var webSheet: WebSheet? { didSet { if webSheet == nil, lockAfterSheet { lockAfterSheet = false; locked = true }; if webSheet == nil, let r = onrampPendingRef { onrampPendingRef = nil; onrampTrack = OnrampTrack(ref: r) } else if webSheet == nil, onrampTrack == nil { onrampBaseline = nil } } }   // t1279 (R14): no purchase to track -> drop its baseline
   /// Onramp: ref of the checkout page now open; when it closes (redirect or Done) we start checking the purchase.
   var onrampPendingRef: String?
+  /// t1278 (A4) / t1279 (R14): this wallet's USDC + the chain head (two agreeing nodes) just before the Coinbase purchase page opened;
+  /// one purchase at a time. Taken (cleared) by the status sheet; cleared when the purchase is abandoned; stale after OnrampBaseline.maxAge.
+  var onrampBaseline: OnrampBaseline?
+  /// The fresh baseline of THIS purchase, taken once. None -> a balance-only baseline read now (no block: the tx path can't confirm).
+  func onrampBaselineOrNow() async -> OnrampBaseline? {
+    if let b = onrampBaseline { onrampBaseline = nil; if b.fresh() { return b } }
+    return OnrampBaseline(balance: await VaultCheck.usdcBalanceAgreed(Operator.wallet), block: nil)
+  }
   @Published var onrampTrack: OnrampTrack?
   private var lockAfterSheet = false
   /// Last on-chain limits change (from kipurse://limits-updated or seen by polling): drives the success overlay + the 已更新 badge.
@@ -448,7 +457,7 @@ final class AppModel: ObservableObject {
   }
   /// Logout = end the server session + factory-reset the device (fresh-install state, nothing left).
   func logout() {
-    let old = api; poll?.cancel(); session = nil; state = nil; api = OwnerAPI(); catalog = []; agentLink = nil; agentSheet = nil; webSheet = nil
+    let old = api; poll?.cancel(); session = nil; state = nil; agreedBalance.reset(); onrampBaseline = nil; api = OwnerAPI(); catalog = []; agentLink = nil; agentSheet = nil; webSheet = nil
     Task { _ = try? await old.call("logout", [:]); Awareness.wipe(); await LocalWipe.all(); seenApprovals = []; lastRemnants = LocalWipe.remnants() }
   }
   @Published var lastRemnants: [String] = []
@@ -486,7 +495,7 @@ final class AppModel: ObservableObject {
   func resume() async {
     if isMain {
       if MainnetSession.load() != nil, let s = try? await MainnetSession.state(interactive: false) {
-        state = s; mainNeedsSignIn = false; mainError = nil; siriSync(s); startPolling(); return
+        state = agreedShown(s); mainNeedsSignIn = false; mainError = nil; siriSync(s); startPolling(); return
       }
       if let (_, cached) = LedgerCache.load() {
         state = cached; mainNeedsSignIn = false; mainError = nil
@@ -516,7 +525,7 @@ final class AppModel: ObservableObject {
     locked = false; mainNeedsSignIn = false
     if isMain && demo == nil {
       if MainnetSession.load() != nil, let s = try? await MainnetSession.state(interactive: false) {
-        state = s; mainError = nil; startPolling(); return
+        state = agreedShown(s); mainError = nil; startPolling(); return
       }
       if let (_, cached) = LedgerCache.load() { state = cached; Task { await refresh() }; return }
       if needsCoinbase { phoneUnbound = !needsIdentity; return }
@@ -572,40 +581,42 @@ final class AppModel: ObservableObject {
   }
   /// t1036/t1037/t1094: before Face ID / server session the home is a shell (balance "0", empty ledger, no caps).
   /// Read USDC balance + recent Transfer logs + wallet safety caps from Base (read-only). Does not invent a home screen when state is nil.
+  /// t1279 (R15): the last two-node agreed USDC balance of this session (memory only). Home and deposit "已到账" read this, not the server.
+  private(set) var agreedBalance = AgreedBalanceMemory()
+  /// The agreed balance of the shown wallet (demo: the demo state's balance). nil = the chain has not answered yet this session.
+  var agreedBalanceNow: Int64? {
+    if demo != nil { return state?.balance }
+    return agreedBalance.value(for: state?.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet))
+  }
+  /// t1279 (R15): a fresh server state as shown: its balance replaced by the last two-node agreed one of this wallet (if any yet).
+  func agreedShown(_ s: WalletState) -> WalletState { agreedBalance.apply(to: s, wallet: Operator.wallet.isEmpty ? nil : Operator.wallet) }
   func chainBalanceFallback() async {
     guard let s = state else { return }
     let w = s.wallet.flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil }
       ?? (CoinbaseIdentity.isAddress(Operator.wallet) ? Operator.wallet : nil)
     guard let w else { return }
-    let b = await VaultCheck.usdcBalance(w)
+    let b = await VaultCheck.usdcBalanceAgreed(w)   // t1278 (A7): two agreeing public nodes (no Face ID); nil = failed / disagreed
+    agreedBalance.record(b, wallet: w)   // t1279 (R15): nil keeps the last two-node agreed balance (never the server's number)
     // t1129u: 记录 = every real movement. Always merge new on-chain movements (withdraw + its fee, fee-only wallet actions,
     // deposits, payments) into what is shown, one row per tx, balances recomputed from the live balance. Before this, a cached
     // list that already had one row was never read again, and the 27 h look-back was ~3 h on today's Base.
     var ledgerRows: [JSONValue]? = nil
-    if let end = b ?? state?.balance {
+    if let end = agreedBalance.ledgerEnd(chain: b, wallet: w) {   // t1279 (R15): rows only from an agreed balance, never the server's
       ledgerRows = await ChainLedger.update(wallet: w, owner: state?.owner, existing: state?.raw["ledger"]?.array ?? [], endingBalance: end)
     }
-    // t1129u: the server's caps win while a session is open; a chain value is re-read every refresh (cheap: new blocks only).
-    var capsRead: SafetyCaps.Read? = nil
-    if let cur = state, case .ready = cur.capRead, cur.raw["capsSrc"]?.string != "chain" {
-      capsRead = nil
-    } else {
-      SafetyCaps.rpc = GasCheck.rpc
-      capsRead = await SafetyCaps.read(account: w)
-    }
+    // t1278 (A7): the chain's caps (two-node agreed SafetyCaps.read) win over the server's for AILimitGate / firstConnectProblem; re-read every
+    // refresh (cheap: new blocks only). An unreadable chain read keeps the last good value (the server's only until the chain answers).
+    SafetyCaps.rpc = GasCheck.rpc
+    let capsRead: SafetyCaps.Read? = await SafetyCaps.read(account: w)
     guard var next = state else { return }
     let sameWallet = next.wallet == nil || next.wallet?.lowercased() == w.lowercased()
     guard sameWallet else { return }
     var changed = false
-    if let b, next.balance != b { next = next.withBalance(b); changed = true }
+    if let v = agreedBalance.value(for: w), next.balance != v { next = next.withBalance(v); changed = true }   // t1279 (R15): this read, else the last agreed
     if let rows = ledgerRows, rows != (next.raw["ledger"]?.array ?? []) { next = next.withLedger(rows); changed = true }
     if let r = capsRead {
-      let serverReady: Bool = { if case .ready = next.capRead, next.raw["capsSrc"]?.string != "chain" { return true }; return false }()
-      let keepGood: Bool = { if case .unreadable = r.caps, case .ready = next.capRead { return true }; return false }()   // a failed re-read keeps the last good value
-      if !serverReady && !keepGood {
-        let upd = next.withSafetyCaps(r.caps, start: r.start, end: r.end, source: "chain")
-        if upd.raw != next.raw { next = upd; changed = true }
-      }
+      let upd = CapsSource.merged(next, chain: r)   // t1278 (A7): chain wins; unreadable keeps the last good value
+      if upd.raw != next.raw { next = upd; changed = true }
     }
     guard changed else { return }
     state = next; LedgerCache.save(state!)
@@ -630,7 +641,7 @@ final class AppModel: ObservableObject {
       do { let s = try await MainnetSession.state(interactive: false)
         // t1266 (fix 4): a state for any wallet other than the one this phone verified is dropped (never shown, cached or acted on)
         if let sw = s.wallet, !Operator.wallet.isEmpty, sw.lowercased() != Operator.wallet.lowercased() { AuthLog.note("refresh", "dropped state of another wallet"); return }
-        await KipurseSuite.detect(wallet: s.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet), serverVault: s.raw["vault"]?["address"]?.string); state = s;   /* t1197u §6#92: V5.3 only for a wallet whose V5.3 vault exists on chain */ serverDown = false; LedgerCache.save(s); Task { await loadStray(s) }; mainNeedsSignIn = false; mainError = nil; notifyNew(s.approvals); Awareness.publish(s); siriSync(s); Task { await AllowanceStore.shared.loadIfStale() }; await chainBalanceFallback() }   // t1129u: also fills movements the server ledger has not caught up on
+        await KipurseSuite.detect(wallet: s.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet), serverVault: s.raw["vault"]?["address"]?.string); let shown = agreedShown(CapsSource.carry(from: state, into: s)); state = shown;   /* t1278 (A7): keep the last chain caps; t1279 (R15): the server's balance never replaces the last two-node agreed one */   /* t1197u §6#92: V5.3 only for a wallet whose V5.3 vault exists on chain */ serverDown = false; LedgerCache.save(shown); Task { await loadStray(s) }; mainNeedsSignIn = false; mainError = nil; notifyNew(s.approvals); Awareness.publish(s); siriSync(s); Task { await AllowanceStore.shared.loadIfStale() }; await chainBalanceFallback() }   // t1129u: also fills movements the server ledger has not caught up on
       catch MainnetSession.Failure.needsSignIn { if state == nil { mainNeedsSignIn = true }; await chainBalanceFallback() }
       catch MainnetSession.Failure.noKey { mainNeedsSignIn = false; await chainBalanceFallback() }
       catch MainnetSession.Failure.unbound { markUnbound() }
@@ -688,7 +699,7 @@ final class AppModel: ObservableObject {
     mainNeedsSignIn = false
     if demo != nil { return }
     if MainnetSession.load() != nil, let s = try? await MainnetSession.state(interactive: false) {
-      state = s; mainError = nil; siriSync(s); startPolling(); return
+      state = agreedShown(s); mainError = nil; siriSync(s); startPolling(); return
     }
     if let (_, cached) = LedgerCache.load() {
       state = cached; Task { await refresh() }; return
@@ -712,7 +723,7 @@ final class AppModel: ObservableObject {
     defer { ctx.invalidate() }
     do {
       let s = try await MainnetSession.state(interactive: true, context: ctx)
-      state = s; mainNeedsSignIn = false; mainError = nil; siriSync(s); startPolling(); return true
+      state = agreedShown(s); mainNeedsSignIn = false; mainError = nil; siriSync(s); startPolling(); return true
     } catch MainnetSession.Failure.unbound { markUnbound(); return false }
     catch { AuthLog.record("action-signin", error); return false }
   }

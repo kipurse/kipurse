@@ -156,6 +156,6 @@ ${!q.walletPays?`<div class=kc id=kpw-nowp><div class=kt>${t('暂时不能从钱
       if(p==='/owner/withdraw/submitted'){const id=String(b?.id??'');if(!prepared.has(id)){json(200,{ok:false});return true;}pend={id,since:Math.floor(now()/1000),failed:false};
         (async()=>{for(let i=0;i<pollTries;i++){await sleep(pollMs);try{if((await confirm(id)).ok)return;}catch{}}if(pend?.id===id)pend.failed=true;})();json(200,{ok:true});return true;}
       json(404,{error:'not_found'});return true;
-    }catch(e){json(400,e.code==='empty'?{error:'empty'}:{error:e.code??'failed',detail:String(e.message).replace(/\d[\d.,]*\s*(USDC|ETH|USD)/gi,'').slice(0,200)});return true;}}   // t796 M3: no server detail (no balance or chain state) in errors
+    }catch(e){json(400,e.code==='empty'?{error:'empty'}:{error:typeof e?.code==='string'?e.code:'failed'}/* t1278 S6: error code only, never the raw message */);return true;}}   // t796 M3: no server detail (no balance or chain state) in errors
   const pending=()=>pend&&(now()/1000-pend.since<1800)?{...pend}:null;
   return {handle,quote,prepare,plan,confirm,pending,forget:()=>{prepared.clear();done.clear();pend=null;hits.clear();}};}

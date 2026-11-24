@@ -22,9 +22,12 @@ public enum OwnerAsk {
       if !isDomain(merchant ?? "") || m.name != (merchant ?? "").lowercased() { p.append("trust name is not the merchant's domain") }
     } else if !m.signers.isEmpty { p.append("trust must not add order signers") }
     if m.single != single { p.append("per-payment cap differs from what was shown") }
-    if let e = Double(m.expiry), e > now.timeIntervalSince1970, e < now.timeIntervalSince1970 + 366 * 86400 + ClockSkew.upperTolerance {} else { p.append("bad expiry") }
+    // t1281 (§6#141 ③): the gateway always asks for 90 days (TRUST_DEFAULTS.days, chain time); the phone refuses anything longer than
+    // askTrustMaxDays (90 + one day of chain/phone clock slack), so the card can truthfully say 「最长 90 天后到期」 before any tap.
+    if let e = Double(m.expiry), e > now.timeIntervalSince1970, e < now.timeIntervalSince1970 + Double(askTrustMaxDays) * 86400 + ClockSkew.upperTolerance {} else { p.append("bad expiry") }
     return p
   }
+  public static let askTrustMaxDays = 91
   /// a plain lowercase host name such as "shop.example" (what the owner sees and what the merchant id is hashed from)
   public static func isDomain(_ h: String) -> Bool {
     guard h.count >= 3, h.count <= 80, h.contains("."), h == h.lowercased() else { return false }
@@ -74,6 +77,33 @@ public enum OwnerAsk {
   public static func trustCapsLine(_ c: (single: Int64, daily: Int64)) -> (zh: String, en: String) {
     let s = MoneyText.usdc(c.single), d = MoneyText.usdc(c.daily)
     return ("信任后 AI 最多自动付：每笔 \(s)，每天 \(d)", "After trusting, the AI can pay it automatically up to \(s) per payment, \(d) a day")
+  }
+  /// t1281 (§6#141 ③): the card line under 「认识并信任」 before any tap. Only what the phone itself enforces is stated as fact: the caps are
+  /// UPPER bounds (the phone refuses a trust above them) and the trust always expires within 90 days (the phone refuses one without an
+  /// expiry or longer than askTrustMaxDays). The exact signed caps + expiry date are only known after ask-prepare, so they go into the Face ID prompt (trustFaceIDReason).
+  public static func trustCapsCardLine(_ c: (single: Int64, daily: Int64)) -> (zh: String, en: String) {
+    let s = MoneyText.usdc(c.single), d = MoneyText.usdc(c.daily)
+    return ("信任后 AI 最多自动付：每笔 \(s)，每天 \(d)（另加手续费；这是上限，实际可能更低）。信任最长 90 天后自动到期，可随时撤销",
+            "After trusting, the AI can pay it automatically up to \(s) per payment, \(d) a day (plus fees; upper limits, the actual ones may be lower). The trust ends on its own within 90 days and you can remove it any time")
+  }
+  /// t1281: the Face ID prompt of 「认识并信任」, built from the trust message the phone has just checked and will sign (exact caps + expiry),
+  /// plus, when the same Face ID signs a merchant signer grant, that the merchant's orders may use any payee address.
+  public static func trustFaceIDReason(_ m: OwnerTrustMessage, grantName: String?, grantSigned: Bool?, timeZone: TimeZone = .current) -> (zh: String, en: String) {
+    let s = Int64(m.single).map(MoneyText.usdc) ?? "?", d = Int64(m.daily).map(MoneyText.usdc) ?? "?"
+    let exp = trustExpiryText(m.expiry, timeZone: timeZone)
+    let head: (String, String)
+    if let n = grantName { head = grantSigned == false ? ("信任 \(n)（商家未签名，额度减半）并付这笔", "Trust \(n) (unsigned merchant, half limits) and pay") : ("信任 \(n) 并付这笔", "Trust \(n) and pay") }
+    else { head = ("认识并信任，并付这笔", "Trust this payee and pay") }
+    let any = grantName == nil ? ("", "") : ("；\(grantName!) 的订单每单收款地址可以不同，都算在内", "; orders from \(grantName!) may use any payee address and all count")
+    return ("\(head.0)。信任额度：每笔最多 \(s)，每天最多 \(d)，\(exp.zh)\(any.0)", "\(head.1). Trust limits: up to \(s) per payment, \(d) a day, \(exp.en)\(any.1)")
+  }
+  /// "2027年2月22日到期" / "ends Feb 22, 2027"; RequestVerify.noExpiry (inline reusable trust) -> never ends on its own.
+  public static func trustExpiryText(_ expiry: String, timeZone: TimeZone = .current) -> (zh: String, en: String) {
+    if expiry == RequestVerify.noExpiry { return ("不会自动到期，可随时撤销", "no end date, you can remove it any time") }
+    guard let e = Double(expiry), e > 0, e < 4_102_444_800 else { return ("到期日未知", "end date unknown") }
+    let date = Date(timeIntervalSince1970: e)
+    func fmt(_ f: String, _ loc: String) -> String { let x = DateFormatter(); x.locale = Locale(identifier: loc); x.timeZone = timeZone; x.dateFormat = f; return x.string(from: date) }
+    return (fmt("yyyy年M月d日", "zh_CN") + "到期", "ends " + fmt("MMM d, yyyy", "en_US_POSIX"))
   }
   /// Full address in groups of 4 for the card (what the owner compares).
   public static func grouped(_ a: String) -> String {

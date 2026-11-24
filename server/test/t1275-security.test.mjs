@@ -69,12 +69,13 @@ test('t1275 /oauth/first: per-IP rate limit, at most maxFirstPending open first 
   assert.equal(openFirst(t.S).length,5);assert.equal(Object.keys(t.S.oauth.clients).length,5,'clients of pruned requests went with them');
   // the newest request is the one kept: a flood cannot push the owner's own request out before it is made
   const last=await t.call('/oauth/first',{agent:'siri',...AM},{ip:'198.51.100.1'});assert.equal(last.code,200);assert.ok(t.S.oauth.pending[last.out.req]);assert.equal(openFirst(t.S).length,5);
-  // maxClients: every slot held by a live client -> 429 too_many_clients, nothing written
+  // maxClients (t1278 S7): an open request no longer pins its client: the oldest unused client (and its request) makes room, never a refusal
   const t2=oa({opts:{maxClients:2,maxFirstPending:5}});let ip=0;const go=()=>t2.call('/oauth/first',{agent:'muse',...AM},{ip:'10.0.0.'+(ip++)});
-  assert.equal((await go()).code,200);assert.equal((await go()).code,200);const c=await go();assert.equal(c.code,429);assert.equal(c.out.error,'too_many_clients');assert.equal(Object.keys(t2.S.oauth.pending).length,2);
-  // maxPending (open requests of every kind) -> 429 too_many
-  const t3=oa({opts:{maxPending:3}});for(let i=0;i<3;i++)t3.S.oauth.pending['x'+i]={client_id:'c',redirect_uri:'https://a.example/cb',exp:Date.now()/1000+600,status:'pending'};
-  const p=await t3.call('/oauth/first',{agent:'siri',...AM});assert.equal(p.code,429);assert.equal(p.out.error,'too_many');assert.equal(Object.keys(t3.S.oauth.clients).length,0);});
+  const c1=await go();assert.equal(c1.code,200);assert.equal((await go()).code,200);const c=await go();assert.equal(c.code,200);assert.equal(Object.keys(t2.S.oauth.clients).length,2);
+  assert.ok(!t2.S.oauth.pending[c1.out.req],'the oldest request went with its client');assert.equal(Object.keys(t2.S.oauth.pending).length,2);
+  // maxPending (open requests of every kind; t1278 S7): the oldest open request makes room, never a refusal
+  const t3=oa({opts:{maxPending:3}});for(let i=0;i<3;i++)t3.S.oauth.pending['x'+i]={client_id:'c',redirect_uri:'https://a.example/cb',exp:Date.now()/1000+600+i,status:'pending'};
+  const p=await t3.call('/oauth/first',{agent:'siri',...AM});assert.equal(p.code,200);assert.ok(!t3.S.oauth.pending.x0,'oldest dropped');assert.equal(Object.values(t3.S.oauth.pending).filter(x=>x.status==='pending').length,3);});
 
 test('t1275 /oauth/owner-decide: deny needs the phone session or a Base Account decline signature; without, the request stays open',async()=>{
   let sess=false;const msgs=[];const t=oa({verify:async(m,sig)=>{msgs.push(m);return sig==='0xgood'&&m.startsWith('Kipurse: DECLINE');},opts:{ownerAuth:()=>sess}});

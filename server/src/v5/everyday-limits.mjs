@@ -73,15 +73,17 @@ export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now(),scope=n
     return {ok:true,free:true,feeUSDC:'0',...get()};}
   /** Engine hook. spentTerm is cumulative AI spend already recorded. Missing total or missing spentTerm refuses.
    *  The chain floor is not used as a stand-in budget. */
-  function check({amount,spent24h=0n,spentTerm,chainId,token}={}){if(amount===undefined||amount===null)return null;
+  /* t1281 (§6#141): `cost` = what this payment takes from the wallet (amount + protocol fee + network fee when known), and spent24h /
+     spentTerm are counted the same way by the engine; the per-payment limit compares the amount only (like the chain). No cost -> amount. */
+  function check({amount,cost,spent24h=0n,spentTerm,chainId,token}={}){if(amount===undefined||amount===null)return null;
     /* t1181u: a payment on another network / with another token never spends these limits (refused, nothing paid) */
     if(chainId!==undefined||token!==undefined||SC){const pay={chainId:chainId??SC?.chainId,token:token??(chainId===undefined?SC?.token:undefined)};
       const sx=scopeCheck('everyday AI limit',raw(),pay,SC);if(sx)return sx;if(SC){const cx=scopeCheck('everyday AI limit',SC,pay,SC);if(cx)return cx;}}
-    const e=get(),a=BigInt(amount);
+    const e=get(),a=BigInt(amount),c=cost===undefined||cost===null?a:BigInt(cost);
     if(!e.authorized||e.single==null||e.daily==null||e.term==null)return UNCONFIRMED;
     if(a>BigInt(e.single))return {state:'rejected',reason:'EVERYDAY_SINGLE_LIMIT',nothingPaid:true,capHit:true,limit:e.single,fix:'Over the owner’s everyday per-payment limit. Only the owner can raise it in the Kipurse app (Face ID).',say_to_user:'没有付款：超过了你设的日常单笔额度。可以在 App 里免费调高（在链上底线以内）。/ Not paid: over your everyday per-payment limit. You can raise it for free in the app (up to the on-chain floor).'};
-    if(BigInt(spent24h)+a>BigInt(e.daily))return {state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:e.daily,fix:'Over the owner’s everyday 24h limit. Only the owner can raise it in the Kipurse app (Face ID).',say_to_user:'没有付款：超过了你设的日常额度（24 小时内）。可以在 App 里免费调高（在链上底线以内）。/ Not paid: over your everyday limit for 24h. You can raise it for free in the app (up to the on-chain floor).'};
+    if(BigInt(spent24h)+c>BigInt(e.daily))return {state:'rejected',reason:'EVERYDAY_DAILY_LIMIT',nothingPaid:true,capHit:true,limit:e.daily,fix:'Over the owner’s everyday 24h limit. Only the owner can raise it in the Kipurse app (Face ID).',say_to_user:'没有付款：超过了你设的日常额度（24 小时内）。可以在 App 里免费调高（在链上底线以内）。/ Not paid: over your everyday limit for 24h. You can raise it for free in the app (up to the on-chain floor).'};
     if(spentTerm===undefined||spentTerm===null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The cumulative total could not be checked. Nothing was paid.',say_to_user:'没有付款：暂时核对不了总额，请稍后再试。/ Not paid: the total limit could not be checked right now.'};
-    if(BigInt(spentTerm)+a>BigInt(e.term))return {state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:e.term,fix:'Over the owner’s explicit total AI budget. Nothing was paid.',say_to_user:'没有付款：超过了你设的 AI 总额。/ Not paid: over the total you set for AI spending.'};
+    if(BigInt(spentTerm)+c>BigInt(e.term))return {state:'rejected',reason:'EVERYDAY_TERM_LIMIT',nothingPaid:true,capHit:true,limit:e.term,fix:'Over the owner’s explicit total AI budget. Nothing was paid.',say_to_user:'没有付款：超过了你设的 AI 总额。/ Not paid: over the total you set for AI spending.'};
     return null;}
   return {get,set,check,scope:scopeNow,forget:()=>{try{kv.del?.(K);}catch{}return {ok:true};}};}

@@ -62,12 +62,29 @@ public enum Mainnet {
     guard let n = Int(days), n >= 1, n <= 365 else { return L("期限要 1–365 天") }
     return nil
   }
-  /// The public signing page for exactly these numbers.
-  public static func limitsURL(single: String, daily: String, term: String, days: String) -> URL? {
+  /// The public signing page for exactly these numbers. t1281: `openSingle` / `openDaily` (the stranger limits, only when the server takes
+  /// them) are shown on that page too; nil keeps the URL exactly as before.
+  public static func limitsURL(single: String, daily: String, term: String, days: String, openSingle: String? = nil, openDaily: String? = nil) -> URL? {
     var c = URLComponents(url: server.appendingPathComponent("owner/limits"), resolvingAgainstBaseURL: false)!
     func f(_ v: String) -> String { AnswerRules.format(AnswerRules.parseUSDC(v) ?? 0) }
     c.queryItems = [.init(name: "single", value: f(single)), .init(name: "daily", value: f(daily)), .init(name: "term", value: f(term)), .init(name: "days", value: days)]
+    if let os = openSingle, let od = openDaily { c.queryItems! += [.init(name: "openSingle", value: f(os)), .init(name: "openDaily", value: f(od))] }
     return c.url
+  }
+  /// t1281 (§6#141 ①): the owner's limits for strangers (付给陌生收款方). nil = OK, else a short reason. Same rules and order as the
+  /// server (RequestVerify.strangerChoiceError = gw strangerChoiceError): 0 < per payment <= normal per payment, 0 < per day <= normal
+  /// per day, per payment <= per day. Call it after limitsError (the normal limits must be valid first).
+  public static func strangerError(single: String, daily: String, openSingle: String, openDaily: String) -> String? {
+    if [openSingle, openDaily].contains(where: AnswerRules.looksMisgrouped) { return L(AnswerRules.badGroupingHint) }
+    guard let s = AnswerRules.parseUSDC(single), let d = AnswerRules.parseUSDC(daily) else { return nil }
+    guard let os = AnswerRules.parseUSDC(openSingle), let od = AnswerRules.parseUSDC(openDaily), os >= 0, od >= 0 else { return L("付给陌生收款方的每笔、每天都要填大于 0 的数") }
+    switch RequestVerify.strangerChoiceError(single: String(s), daily: String(d), openSingle: String(os), openDaily: String(od)) {
+    case nil: return nil
+    case "stranger_single_above_single": return L("付给陌生收款方的每笔不能大于普通的每笔")
+    case "stranger_daily_above_daily": return L("付给陌生收款方的每天不能大于普通的每天")
+    case "stranger_single_above_stranger_daily": return L("付给陌生收款方的每笔不能大于它的每天")
+    default: return L("付给陌生收款方的每笔、每天都要填大于 0 的数")
+    }
   }
 }
 
@@ -189,6 +206,9 @@ public extension WalletState {
   var capSingle: Int64? { raw["caps"]?["single"]?.atomic }
   var capDaily: Int64? { raw["caps"]?["daily"]?.atomic }
   var capTerm: Int64? { raw["caps"]?["term"]?.atomic }
+  /// t1281: the signed stranger limits (Policy.openSingle / openDaily) from the gateway status; nil when the server doesn't report them.
+  var capOpenSingle: Int64? { raw["caps"]?["openSingle"]?.atomic }
+  var capOpenDaily: Int64? { raw["caps"]?["openDaily"]?.atomic }
   /// t679: limits the owner signed in the authorization (Policy.maxNetworkFee / maxFeePpm), from the gateway status.
   var capMaxNetworkFee: Int64? { raw["caps"]?["maxNetworkFee"]?.atomic }
   var capFeePpm: Int64? { raw["caps"]?["maxFeePpm"]?.atomic }

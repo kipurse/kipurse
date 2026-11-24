@@ -490,7 +490,12 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["+10"].exists); XCTAssertTrue(app.staticTexts["余额 14.13"].exists)
     XCTAssertFalse(app.staticTexts["手续费（你的 Coinbase 付）"].exists, "fee rows folded (audit #8)"); XCTAssertTrue(app.descendants(matching: .any)["ledger.feeTotal"].exists, "one fee total line")
     shot("ledger-home")
-    row.tap(); XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 20), "tap opens BaseScan")
+    // t1276 (§6#136): records are drawers — folded by default, tap shows the details + the explorer button; amounts never masked
+    let ex = app.buttons["ledger.row.1.explorer"]; XCTAssertFalse(ex.exists, "folded by default")
+    if app.buttons["balance.hide"].exists { app.buttons["balance.hide"].tap() }
+    XCTAssertTrue(app.staticTexts["−0.03"].exists, "record amounts stay visible with the wallet total hidden")
+    row.tap(); XCTAssertTrue(ex.waitForExistence(timeout: 5), "tap opens the details"); shot("ledger-open")
+    ex.tap(); XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 20), "explorer button opens BaseScan")
   }
 
   func testAgentCards() {
@@ -575,7 +580,7 @@ final class KipurseUITests: XCTestCase {
     let open = app.buttons["connect.open"]; XCTAssertTrue(open.waitForExistence(timeout: 8)); shot("connect-card")
     open.tap()
     chooseUnsetLimits()
-    XCTAssertTrue(app.staticTexts["Grok Bot 想连接你的钱包"].waitForExistence(timeout: 8), "title")
+    XCTAssertTrue(app.staticTexts["Grok 想连接你的钱包"].waitForExistence(timeout: 8), "title")
     let details = app.buttons["技术细节"]
     XCTAssertTrue(details.waitForExistence(timeout: 5), "details")
     details.tap()
@@ -830,7 +835,9 @@ final class KipurseUITests: XCTestCase {
     XCTAssertFalse(app.buttons["用 Face ID 解锁"].exists, "no app lock")
     XCTAssertEqual(app.buttons["balance.reveal"].firstMatch.label, "显示余额")
     let mask = app.staticTexts["balance.masked"]; XCTAssertTrue(mask.exists); XCTAssertFalse(app.staticTexts["****"].exists)
-    XCTAssertFalse(app.staticTexts["余额 14.10"].exists, "ledger balances are masked too")
+    // t1276 (§6#136, owner 2026-11-23): only the wallet total is masked; record amounts / balances stay visible
+    let r0 = app.buttons["ledger.row.0"]; reveal(r0); XCTAssertTrue(r0.waitForExistence(timeout: 8))
+    XCTAssertTrue(app.staticTexts["余额 14.10"].exists, "record balances are not masked"); XCTAssertTrue(app.staticTexts["−0.03"].exists, "record amounts are not masked")
     shot("balance-hidden")
   }
   /// Eye toggle: shown -> tap eye hides immediately (no Face ID); eye.slash is back.
@@ -1150,7 +1157,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertFalse(app.buttons["life.approvals"].exists, "t927: approvals have one place (no extra banner)")
     XCTAssertTrue(app.staticTexts["待你批准"].waitForExistence(timeout: 5), "§6#110: 待你批准 on AI 生活")
     let tr = app.buttons["life.trusted"]; for _ in 0..<8 where !tr.exists || !tr.isHittable { app.swipeUp() }; XCTAssertTrue(tr.isHittable, "trusted merchants on AI 生活")
-    let pz = app.buttons["safety.pause"]; for _ in 0..<8 where !pz.exists || !pz.isHittable { app.swipeUp() }; XCTAssertTrue(pz.isHittable, "pause on AI 生活 (never gated)")
+    let pz = app.buttons["safety.pause"]; for _ in 0..<8 where !pz.exists || !pz.isHittable { app.swipeDown() }; XCTAssertTrue(pz.isHittable, "pause at the top of AI 生活 (never gated, t1277d)")
     tr.tap(); XCTAssertTrue(app.navigationBars["信任的商家"].waitForExistence(timeout: 5)); back()   // t1245 U30: same name as its entry
     tab("钱包").tap(); XCTAssertTrue(app.buttons["home.deposit"].waitForExistence(timeout: 5), "Coinbase-wallet top-up button"); XCTAssertTrue(app.buttons["home.withdraw"].exists)
     XCTAssertFalse(app.staticTexts["待你批准"].exists, "§6#110: approvals have one place (AI 生活)")

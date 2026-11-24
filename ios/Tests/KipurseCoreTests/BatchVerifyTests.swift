@@ -21,8 +21,8 @@ final class BatchVerifyTests: XCTestCase {
     XCTAssertFalse(BatchVerify.setup(calls: calls("setupNew"), wallet: "0x" + String(repeating: "1", count: 40), owner: owner, x: x, y: y, choice: choice, newWallet: true, now: now).ok, "wrong wallet")
   }
   func testEnrollAcceptedAndTamperingRejected() {
-    let r = BatchVerify.enroll(calls: calls("enroll"), wallet: wallet, owner: owner, x: x, y: y); XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
-    for k in ["enroll_remove_owner", "enroll_refund_attacker", "enroll_refund_big", "enroll_other_phone"] { XCTAssertFalse(BatchVerify.enroll(calls: tampered(k), wallet: wallet, owner: owner, x: x, y: y).ok, k) }
+    let r = BatchVerify.enroll(calls: calls("enroll"), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String); XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
+    for k in ["enroll_remove_owner", "enroll_refund_attacker", "enroll_refund_big", "enroll_other_phone"] { XCTAssertFalse(BatchVerify.enroll(calls: tampered(k), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String).ok, k) }
   }
   func testRevoke() {
     XCTAssertTrue(BatchVerify.revoke(calls: calls("revoke"), wallet: wallet, owner: owner, approver: v["revokeApprover"] as? String).ok)

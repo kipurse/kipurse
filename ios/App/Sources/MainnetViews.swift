@@ -235,7 +235,7 @@ struct DepositView: View {
           BigButton(T("从 Coinbase 钱包转入", "Move in from Coinbase Wallet"), icon: "arrow.down.circle.fill") {
             Haptics.tap(); waiting = true; watchUntil = Date().addingTimeInterval(600)
             guard let u = CoinbaseDepositView.transferURL(wallet: w) else { return }
-            if m.demo == nil { CoinbaseDepositView.openTransfer(m, u, baseline: m.state?.balance ?? 0) } else { m.lastLaunch = u.absoluteString }   // in-app browser only
+            if m.demo == nil { CoinbaseDepositView.openTransfer(m, u, baseline: baseline ?? m.agreedBalanceNow) } else { m.lastLaunch = u.absoluteString }   // in-app browser only
           }.accessibilityIdentifier("deposit.coinbase")
           if waiting {
             HStack(spacing: 8) { ProgressView(); Text(T("正在等待到账…转账后回到这里，到账会自动提示。", "Waiting for your money… come back here after sending; you'll see it when it arrives.")).font(.footnote).foregroundStyle(.secondary) }
@@ -245,7 +245,8 @@ struct DepositView: View {
         }
       } else { Text(L("还没有钱包地址")).foregroundStyle(.secondary) }
     }
-    .onAppear { if baseline == nil { baseline = m.state?.balance ?? s.balance } }
+    .onAppear { if baseline == nil { baseline = m.agreedBalanceNow } }   // t1279 (R15): two-node agreed balance only, never the server's
+    .task { if m.demo == nil, let w = s.wallet, let b = await VaultCheck.usdcBalanceAgreed(w), !waiting, arrived == nil { baseline = b } }   // t1279 (R15)
     .task { while !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000_000); if Task.isCancelled { break }; await check() } }
     .onChange(of: phase) { p in if p == .active { Task { await check() } } }
   }
@@ -257,8 +258,8 @@ struct DepositView: View {
       // t1209: -kpArrive UI-test hook only: arrive on the 2nd tick so "waiting" stays 5-10 s
       if demoTicks >= 2, case .object(var j)? = m.state?.raw { j["balance"] = .string("\((m.state?.balance ?? 0) + 10_000_000)"); m.state = WalletState(.object(j)) }
     } else { await m.refresh() }
-    let now = m.state?.balance ?? 0
-    if let b = baseline, now > b { arrived = (now - b, now); waiting = false; Haptics.success() }
+    let now = m.agreedBalanceNow   // t1279 (R15): agreed chain balance (demo: the demo state's)
+    if let plus = DepositArrival.plus(baseline: baseline, now: now), let n = now { arrived = (plus, n); waiting = false; Haptics.success() }
   }
 }
 
@@ -281,10 +282,26 @@ struct MainLimitsView: View {
   @State private var showTopup = false; @State private var topupNeeded = false
   @State private var advOpen = CommandLine.arguments.contains("-kpLimitsAdvanced")
   @State private var ops = ""   // t1185u (§6#85): daily on-chain operations (V5.3 vaults only)
+  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (§6#141 ①)
+  @State private var strangerKnown = false   // t1281 review: today's signed stranger limits were read; without them a change would overwrite them
+  /// t1281: shown only when the server takes explicit stranger limits AND reports today's ones (or the offline demo / UI mock); otherwise
+  /// the legacy path, unchanged — never send "same as normal" for a wallet whose current stranger limits we have not seen.
+  var strangerShown: Bool {
+    #if DEBUG
+    if UserDefaults.standard.string(forKey: "kpMockLimits") != nil { return true }
+    #endif
+    return DemoGuard.active || (fee?.strangerCaps == true && strangerKnown) }
+  /// The stranger limits to send (USDC text): "same" = exactly the normal per payment / per day; nil = don't send (older server).
+  var stranger: (String, String)? { strangerShown ? (strangerSame ? (single, daily) : (strangerSingle, strangerDaily)) : nil }
+  var strangerSummary: String { strangerSame
+    ? T("付给陌生收款方：和普通额度一样（每笔 \(single) · 每天 \(daily) USDC）", "New payees: same as your normal limits (\(single) per payment · \(daily) per day, USDC)")
+    : T("付给陌生收款方：每笔 \(strangerSingle) · 每天 \(strangerDaily) USDC（每天含手续费）", "New payees: \(strangerSingle) per payment · \(strangerDaily) per day, USDC (per day includes fees)") }
   var opsState: OpsCap.State? { OpsCap.state(live.raw) }
   /// The number to send, only when the owner changed it (nil = no setOpsPerDay call in the batch).
   var opsChange: Int? { guard let o = opsState, let n = OpsCap.parse(ops), n != o.perDay else { return nil }; return n }
-  var err: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days) ?? (opsState != nil ? OpsCap.error(ops) : nil) }
+  var err: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days)
+    ?? (strangerShown && !strangerSame ? Mainnet.strangerError(single: single, daily: daily, openSingle: strangerSingle, openDaily: strangerDaily) : nil)
+    ?? (opsState != nil ? OpsCap.error(ops) : nil) }
   /// t1094: use live state so a read-only chain caps fallback can update this page.
   var live: WalletState { m.state ?? s }
   var evTotal: Int64? { AnswerRules.parseUSDC(evTerm) }
@@ -429,6 +446,7 @@ struct MainLimitsView: View {
             AmountPicker(title: L("每天最多"), presets: ["5", "20", "50", "100", "1000", "10000"], unit: "USDC", showFooter: false, value: $daily).card(padding: 18)
             AmountPicker(title: L("总额最多"), presets: ["1000", "5000", "10000", "50000", "100000", "500000"], unit: "USDC", showFooter: false, value: $term).card(padding: 18)
             AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days).card(padding: 18)
+            if strangerShown { StrangerCapCard(idPrefix: "limits", same: $strangerSame, single: $strangerSingle, daily: $strangerDaily) }   // t1281
             if let os = opsState {   // t1185u (§6#85, owner-approved minimal addition): daily on-chain operations, same picker style
               VStack(alignment: .leading, spacing: 10) {
                 HStack { Text(T("每天链上操作次数", "On-chain operations per day")).font(.headline); Spacer()
@@ -442,6 +460,7 @@ struct MainLimitsView: View {
               VStack(alignment: .leading, spacing: 6) {
                 Text(L("你要确认的内容")).font(.headline)
                 Text(L("每笔 \(single) · 每天 \(daily) · 总额 \(term) USDC · \(days) 天")).font(.subheadline.monospacedDigit()).accessibilityIdentifier("limits.summary")
+                if strangerShown { Text(strangerSummary).font(.subheadline.monospacedDigit()).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("limits.stranger.summary") }   // t1281
                 if let n = opsChange { Text(T("每天链上操作最多 \(n) 次", "On-chain operations: at most \(n) per day")).font(.subheadline.monospacedDigit()).accessibilityIdentifier("ops.summary") }
                 Text(LimitsFee.text(fee)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("limits.fee")
                 Text(floorFeeLine).font(.subheadline.weight(.semibold)).accessibilityIdentifier("floor.cost")
@@ -472,6 +491,9 @@ struct MainLimitsView: View {
         if let v = live.capSingle { single = AnswerRules.format(v) }
         if let v = live.capDaily { daily = AnswerRules.format(v) }
         if let v = live.capTerm { term = AnswerRules.format(v) }
+        // t1281: today's signed stranger limits; the toggle is on only when they equal the normal limits (or the server doesn't report them)
+        if let os = live.capOpenSingle, let od = live.capOpenDaily {
+          strangerSingle = AnswerRules.format(os); strangerDaily = AnswerRules.format(od); strangerSame = os == live.capSingle && od == live.capDaily; strangerKnown = true }
       }
     }
   }
@@ -640,16 +662,19 @@ struct LedgerRowView: View {
     if LedgerText.isFee(r) || r.kind == "walletfee" { return (r.delta >= 0 ? "+" : "−") + MoneyText.fee(a, style: feeStyle ?? MoneyText.FeeStyle.page([a])) }
     return MoneyText.signed(r.delta)
   }
-  private func hide(_ t: String) -> String { m.balanceRevealed ? t : t.replacingOccurrences(of: "[0-9][0-9.,]*", with: BalanceMask.short, options: .regularExpression) }
+  /// t1276 (§6#136): collapsed = one summary line (title, time, amount, balance); the order details show only when expanded.
+  var expanded = false
+  var hasDetails: Bool { LedgerRowView.hasOrder(r) }
+  static func hasOrder(_ r: LedgerRow) -> Bool { r.kind == "payment" && (r.orderItem != nil || r.orderQuote != nil || r.orderTier != nil || r.payeeName != nil || r.payeeAddress != nil) }
   var body: some View {
     HStack(alignment: .center, spacing: 12) {
       Image(systemName: r.kind == "deposit" ? "arrow.down" : r.kind == "withdraw" ? "arrow.uturn.down" : r.kind == "payment" ? "sparkles" : "circle.dotted")
         .font(.footnote.weight(.semibold)).foregroundStyle(r.delta >= 0 ? Brand.positive : Brand.accent)
         .frame(width: 32, height: 32).background((r.delta >= 0 ? Brand.positive : Brand.accent).opacity(0.12), in: Circle()).accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 3) {
-        Text(hide(LedgerText.title(r, feeStyle: feeStyle))).font(.subheadline.weight(.medium)).lineLimit(2).multilineTextAlignment(.leading)
+        Text(LedgerText.title(r, feeStyle: feeStyle)).font(.subheadline.weight(.medium)).lineLimit(expanded ? nil : 1).multilineTextAlignment(.leading)
         Text(Mainnet.localTime(r.t) + (r.isVault ? T(" · 预留的手续费", " · set aside for network fees") : "")).font(.caption).foregroundStyle(.secondary)
-        if r.kind == "payment", r.orderItem != nil || r.orderQuote != nil || r.orderTier != nil || r.payeeName != nil {
+        if expanded, hasDetails {
           VStack(alignment: .leading, spacing: 2) {
             if let n = r.payeeName { Text(T("收款方：", "Payee: ") + n).fontWeight(.medium) }
             if let i = r.orderItem { Text(T("买的：", "For: ") + i + (r.orderMerchant.map { " · " + $0 } ?? "")).lineLimit(2) }
@@ -662,11 +687,34 @@ struct LedgerRowView: View {
       }
       Spacer(minLength: 8)
       VStack(alignment: .trailing, spacing: 3) {
-        Text(m.balanceRevealed ? amountText : BalanceMask.short).accessibilityValue(m.balanceRevealed ? r.signed : "").font(Brand.money(16, .semibold)).foregroundStyle(r.delta >= 0 ? Brand.positive : Color.primary)
-        if let b = r.balance { Text(L("余额 \(m.balanceRevealed ? MoneyText.amount(b) : BalanceMask.short)")).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+        // t1276 (§6#136, owner): record amounts are always shown; the eye only hides the wallet total at the top.
+        Text(amountText).accessibilityValue(r.signed).font(Brand.money(16, .semibold)).foregroundStyle(r.delta >= 0 ? Brand.positive : Color.primary)
+        if let b = r.balance { Text(L("余额 \(MoneyText.amount(b))")).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
         else { Text(T("不在钱包里扣", "Not from the wallet")).font(.caption).foregroundStyle(.secondary) }
       }
+      Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.tertiary).rotationEffect(.degrees(expanded ? 180 : 0)).accessibilityHidden(true)
     }.padding(.vertical, 8).contentShape(Rectangle()).assistantRef(.payment(txHash: r.tx))
+  }
+}
+/// t1276 (§6#136, owner 2026-11-23): one record as a drawer. Folded by default (state is per screen, so leaving the page folds it again);
+/// tap = show the details + 「在区块浏览器查看」, tap again = fold. The explorer opens only from that button, not from the whole row.
+struct LedgerItem: View {
+  @EnvironmentObject var m: AppModel
+  let r: LedgerRow; let explorer: String
+  var feeStyle: MoneyText.FeeStyle? = nil
+  var dim = false
+  var id: String? = nil
+  @State private var open = false
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Button { withAnimation(.easeInOut(duration: 0.2)) { open.toggle() } } label: { LedgerRowView(r: r, feeStyle: feeStyle, expanded: open).opacity(dim ? 0.5 : 1) }
+        .buttonStyle(.plain).foregroundStyle(.primary).accessibilityIdentifier(id ?? "ledger.item")
+        .accessibilityHint(open ? T("收起详情", "Hide details") : T("显示详情", "Show details"))
+      if open, let u = r.url(explorer: explorer) {
+        Button { m.webSheet = WebSheet(url: u) } label: { Label(T("在区块浏览器查看", "View on block explorer"), systemImage: "arrow.up.right.square").font(.footnote.weight(.semibold)) }
+          .buttonStyle(.borderless).padding(.leading, 44).padding(.bottom, 8).accessibilityIdentifier((id ?? "ledger.item") + ".explorer")
+      }
+    }
   }
 }
 /// §6#110 (owner 2026-11-21): wallet records split into 入金 (deposits) / 支付 (payments) / 提现 (withdrawals).
@@ -707,7 +755,7 @@ struct LedgerSection: View {
         let clean = s.ledger.filter { filter.keep($0) }
         if !s.ledger.isEmpty && clean.isEmpty { Text(T("这一类还没有记录", "Nothing of this type yet")).font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical, 16).accessibilityIdentifier("ledger.filterEmpty") }
         ForEach(Array(clean.prefix(3).enumerated()), id: \.element.id) { i, r in
-          Button { if let u = r.url(explorer: s.explorer) { m.webSheet = WebSheet(url: u) } } label: { LedgerRowView(r: r) }.foregroundStyle(.primary).accessibilityIdentifier("ledger.row.\(i)")
+          LedgerItem(r: r, explorer: s.explorer, id: "ledger.row.\(i)")
           if i < min(3, clean.count) - 1 { Divider() }
         }
         FeeTotalRow(rows: s.ledger)
@@ -727,13 +775,13 @@ struct LedgerList: View {
       Section(filter == .all ? T("资金进出", "Money in and out") : filter.title) {
         let rows = s.ledger.filter { filter.keep($0) }
         if rows.isEmpty { Text(T("这一类还没有记录", "Nothing of this type yet")).foregroundStyle(.secondary) }
-        ForEach(rows) { r in Button { if let u = r.url(explorer: s.explorer) { m.webSheet = WebSheet(url: u) } } label: { LedgerRowView(r: r, feeStyle: LedgerSummarySection.feeStyle(s.ledger)) }.foregroundStyle(.primary) } }
+        ForEach(rows) { r in LedgerItem(r: r, explorer: s.explorer, feeStyle: LedgerSummarySection.feeStyle(s.ledger)) } }
       FeeDetailSection(rows: s.ledger, explorer: s.explorer)   // 0A#5: every fee row stays one tap away under every filter
       SuspiciousToggle(rows: s.ledger.filter(\.suspicious), explorer: s.explorer)
       }.listRowBackground(GlassRowBG()) }
       // t1245 (§6#115 U8): glass list on the brand background, like the wallet card it is opened from
       .listStyle(.insetGrouped).kpSectionRhythm().scrollContentBackground(.hidden).background(MockBG())
-      .navigationTitle(T("全部记录", "All activity")).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarTrailing) { BalanceEyeButton(font: .body) } }
+      .navigationTitle(T("全部记录", "All activity")).navigationBarTitleDisplayMode(.inline)
   }
 }
 
@@ -879,7 +927,8 @@ struct MainWithdrawView: View {
     // t784: the phone checks the chain itself before showing anything to sign (never trusts the server's numbers alone)
     if m.demoWithdraw == nil {
       let stopped = T("为了安全先停下了，没有转出任何钱，也没有扣费。", "Paused for safety. Nothing was sent or charged.")
-      if knownOwner == nil, await VaultCheck.isOwner(wallet: x.wallet, address: x.to) != true { phase = .failed(T("没能在链上确认收款账户是这个钱包的主人。", "Couldn't confirm on-chain that the destination owns this wallet. ") + stopped); return }
+      if knownOwner == nil, await VaultCheck.isOwnerAgreed(wallet: x.wallet, address: x.to) != true {   // t1278 (A7): two agreeing nodes
+        phase = .failed(T("没能在链上确认收款账户是这个钱包的主人。", "Couldn't confirm on-chain that the destination owns this wallet. ") + stopped); return }
       var vault: String? = nil
       if let v = x.vault {
         if VaultCheck.problem(server: v, chain: await VaultCheck.fetch(wallet: x.wallet)) != nil { phase = .failed(T("启付钱包地址和链上记录对不上。", "The vault address doesn't match the chain. ") + stopped); return }
@@ -915,9 +964,11 @@ struct MainWithdrawView: View {
       phase = .failed(T("提现内容和你的账户对不上（\(e.rawValue)），已停止，没有转出任何钱。", "The withdrawal doesn't match your account (\(e.rawValue)). Stopped; nothing was sent.")); return }
     if m.demoWithdraw == nil, let ct = chainTotal, Int64(a) > ct { phase = .failed(T("提现金额超过了钱包余额，已停止，没有转出任何钱。", "The amount is more than the on-chain balance. Stopped; nothing was sent.")); return }
     if Operator.ownerAccount == nil, WithdrawTarget.owner == nil { WithdrawTarget.owner = mine }
+    let wChain = (pl["chainId"] as? Int) ?? Int(pl["chainId"] as? String ?? "") ?? 8453
+    guard wChain == BatchVerify.chainId else { phase = .failed(T("准备失败，请再试一次。", "Couldn't prepare it. Please try again.")); return }   // t1280 (L2): Base only
     planId = id; phase = .waiting
     var u = URLComponents(url: server.appendingPathComponent("owner/withdraw"), resolvingAgainstBaseURL: false)!; u.queryItems = [URLQueryItem(name: "plan", value: id)]
-    guard let wu = u.url, let cu = BatchVerify.committedURL(wu, chainId: (pl["chainId"] as? Int) ?? Int(pl["chainId"] as? String ?? "") ?? 8453, from: owner, calls: calls) else { phase = .failed(T("准备失败，请再试一次。", "Couldn't prepare it. Please try again.")); return }
+    guard let wu = u.url, let cu = BatchVerify.committedURL(wu, chainId: wChain, from: owner, calls: calls) else { phase = .failed(T("准备失败，请再试一次。", "Couldn't prepare it. Please try again.")); return }
     let srv = server, sheet = WebSheet(url: cu); page = sheet
     poll?.cancel()
     poll = Task { @MainActor in
@@ -1016,14 +1067,26 @@ enum OnboardAPI {
 @MainActor final class OnboardFlow: ObservableObject {
   enum Phase: Equatable { case form, starting, signing, done(siri: Bool) }
   @Published var phase: Phase = .form; @Published var quote: Onboard.Quote?; @Published var err: String?; @Published var fingerprint: String?; @Published var fpMismatch: String?; @Published var removes = 0; @Published var laterChangeUSDC: String?
+  /// t1281: the server takes the owner's own stranger limits (quote.strangerCaps). Off = an older server: the block stays hidden and
+  /// nothing new is sent, so the opening stays on the legacy formula the phone already verifies.
+  @Published var strangerCaps = false
+  static var uiMock: Bool {
+    #if DEBUG
+    return UserDefaults.standard.string(forKey: "kpOnboardServer") != nil   // UI tests: local simulator mock / no server
+    #else
+    return false
+    #endif
+  }
   func loadQuote() async { do { let owner = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey).flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil }
     let qj = try await OnboardAPI.get(OnboardAPI.isNew ? "onboard/new/quote" : "onboard/quote", owner: OnboardAPI.isNew ? owner : nil)
-    quote = Onboard.Quote(qj); laterChangeUSDC = qj["limitsChangeUSDC"]?.string; if quote == nil { err = L("读不到手续费") } } catch { err = error.localizedDescription } }
-  func start(_ m: AppModel, single: String, daily: String, term: String, days: String, deposit: String = "") async {
+    quote = Onboard.Quote(qj); laterChangeUSDC = qj["limitsChangeUSDC"]?.string; strangerCaps = qj["strangerCaps"]?.atomic == 1; if quote == nil { err = L("读不到手续费") } } catch { err = error.localizedDescription } }
+  /// `stranger`: the owner's limits for strangers (USDC text, per payment / per day); nil = an older server (nothing sent, legacy formula).
+  func start(_ m: AppModel, single: String, daily: String, term: String, days: String, deposit: String = "", stranger: (String, String)? = nil) async {
     err = nil; phase = .starting
     do {
       let (x, y) = try OnboardAPI.key(); fingerprint = PhoneTrust.fingerprint(x: x, y: y)
       var sb: [String: Any] = Onboard.startBody(x: x, y: y, single: single, daily: daily, term: term, days: days, owner: UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey))
+      if let st = stranger { sb["openSingle"] = AnswerRules.format(AnswerRules.parseUSDC(st.0) ?? 0); sb["openDaily"] = AnswerRules.format(AnswerRules.parseUSDC(st.1) ?? 0) }   // t1281
       if OnboardAPI.isNew, let att = await AppAttest.attest(x: Hex.encode(x), y: Hex.encode(y)) { sb["attest"] = att }   // genuine-app proof (t629)
       let r = try await OnboardAPI.post(OnboardAPI.isNew ? "onboard/new/start" : "onboard/start", sb)
       guard let id = r["id"]?.string, let u = r["url"]?.string.flatMap(URL.init(string:)) else { throw NSError(domain: "kipurse", code: 2, userInfo: [NSLocalizedDescriptionKey: L("服务器没有返回确认页")]) }
@@ -1032,7 +1095,7 @@ enum OnboardAPI {
       if case .array(let a)? = r["removes"] { removes = a.count }
       if let sfp = r["fingerprint"]?.string, sfp != fingerprint { fpMismatch = sfp; throw NSError(domain: "kipurse", code: 3, userInfo: [NSLocalizedDescriptionKey: T("安全检查没通过：服务器发来的内容和这台 iPhone 的不一样。已停止，没有扣钱。", "Safety check failed: the server's data doesn't match this iPhone. Stopped; nothing charged.")]) }
       // t621 #1: the phone decodes the exact batch first and commits to it (#vh); the signing page refuses anything else.
-      let (url, verifiedW, verifiedO) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit)
+      let (url, verifiedW, verifiedO) = try await Self.verifiedPage(u, id: id, start: r, x: x, y: y, single: single, daily: daily, term: term, days: days, deposit: deposit, stranger: stranger)
       phase = .signing
       m.openOwnerPage(url) { [weak self] mm in
         guard let j = try? await OnboardAPI.post("onboard/confirm", ["id": id]), j["ok"]?.bool == true else { return false }
@@ -1048,11 +1111,12 @@ extension OnboardFlow {
   static func stop(_ msg: String) -> NSError { NSError(domain: "kipurse", code: 4, userInfo: [NSLocalizedDescriptionKey: msg]) }
   /// Returns the signing-page URL with the commitment, the wallet the phone itself checked (nil for the simulator mock), and the owner the
   /// phone itself holds (t1275: the SIWE-verified sign-in owner, or the stored owner of the known wallet; never a server field).
-  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "") async throws -> (URL, String?, String?) {
+  static func verifiedPage(_ u: URL, id: String, start r: JSONValue, x: [UInt8], y: [UInt8], single: String, daily: String, term: String, days: String, deposit: String = "", stranger: (String, String)? = nil) async throws -> (URL, String?, String?) {
     #if DEBUG
     if UserDefaults.standard.string(forKey: "kpOnboardServer") != nil { return (u, nil, nil) }   // UI tests: local simulator mock, no real batch
     #endif
-    let choice = RequestVerify.Choice(single: String(AnswerRules.parseUSDC(single) ?? 0), daily: String(AnswerRules.parseUSDC(daily) ?? 0), term: String(AnswerRules.parseUSDC(term) ?? 0), days: Int(days))
+    let choice = RequestVerify.Choice(single: String(AnswerRules.parseUSDC(single) ?? 0), daily: String(AnswerRules.parseUSDC(daily) ?? 0), term: String(AnswerRules.parseUSDC(term) ?? 0), days: Int(days),
+                                      openSingle: stranger.map { String(AnswerRules.parseUSDC($0.0) ?? 0) }, openDaily: stranger.map { String(AnswerRules.parseUSDC($0.1) ?? 0) })   // t1281: exactly what the owner chose
     let bad = { (p: [String]) in stop(T("手机检查发现开通内容和你选的不一致，已停止，没有扣钱：", "This iPhone found a mismatch in the setup. Stopped; nothing charged: ") + p.joined(separator: "; ")) }
     var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil, heldOwner: String?
     if OnboardAPI.isNew {
@@ -1081,13 +1145,40 @@ extension OnboardFlow {
   }
 }
 
+/// t1281 (owner decision §6#141 ①): 付给陌生收款方 — the owner's own limit for payees he has not trusted that are not verified merchants
+/// (policy openSingle / openDaily). Default: the same as the normal limits. Same block on the opening page and the wallet safety limits page.
+struct StrangerCapCard: View {
+  let idPrefix: String
+  @Binding var same: Bool; @Binding var single: String; @Binding var daily: String
+  static let explainZh = "陌生收款方 = 你没信任过、也不是认证商家的收款方。每天的数含手续费；所有陌生收款方共用这一个额度。"
+  static let explainEn = "A new payee is one you haven't trusted and that isn't a verified merchant. The per-day amount includes fees, and all new payees share this one limit."
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text(T("付给陌生收款方", "Paying new payees")).font(.headline).accessibilityIdentifier("\(idPrefix).stranger.title")
+      Text(T(Self.explainZh, Self.explainEn)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("\(idPrefix).stranger.explain")
+      Toggle(T("和普通额度一样", "Same as my normal limits"), isOn: $same.animation()).tint(Brand.accent).accessibilityIdentifier("\(idPrefix).stranger.same")
+      if !same {
+        AmountPicker(title: T("每笔最多", "Per payment, at most"), presets: ["0.1", "1", "5", "10", "50", "100"], unit: "USDC", showFooter: false, value: $single)
+          .accessibilityElement(children: .contain).accessibilityIdentifier("\(idPrefix).stranger.single")
+        AmountPicker(title: T("每天最多（含手续费）", "Per day, at most (fees included)"), presets: ["1", "5", "20", "50", "100", "1000"], unit: "USDC", showFooter: false, value: $daily)
+          .accessibilityElement(children: .contain).accessibilityIdentifier("\(idPrefix).stranger.daily")
+      }
+    }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 18).accessibilityElement(children: .contain).accessibilityIdentifier("\(idPrefix).stranger")
+  }
+}
+
 /// 开通: one screen, one fee page, one signature.
 struct OnboardView: View {
   @EnvironmentObject var m: AppModel
   @StateObject private var f = OnboardFlow()
   @StateObject private var cbv = CBVerifyModel()
   @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"; @State private var deposit = ""   // t603u: no preset limits; t1008u: deposit = opening
-  var limitsErr: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days) }
+  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (§6#141 ①)
+  var strangerShown: Bool { f.strangerCaps || OnboardFlow.uiMock }
+  var limitsErr: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days)
+    ?? (strangerShown && !strangerSame ? Mainnet.strangerError(single: single, daily: daily, openSingle: strangerSingle, openDaily: strangerDaily) : nil) }
+  /// t1281: what goes to the server (explicit even when "same", so the guided setup sends the default too); nil on an older server.
+  var stranger: (String, String)? { strangerShown ? (strangerSame ? (single, daily) : (strangerSingle, strangerDaily)) : nil }
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: KP.Space.cardGap) {
@@ -1114,11 +1205,12 @@ struct OnboardView: View {
       AmountPicker(title: L("总额最多"), presets: ["100", "200", "500", "1000"], unit: "USDC", showFooter: false, value: $term)
       AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days)
     }.accessibilityIdentifier("onboard.manual")
+    if strangerShown { StrangerCapCard(idPrefix: "onboard", same: $strangerSame, single: $strangerSingle, daily: $strangerDaily) }   // t1281
     if let e = limitsErr ?? f.err { WarnBox(text: e, tone: Brand.caution, icon: "info.circle.fill") }
     BigButton(f.phase == .starting ? T("正在准备…", "Preparing…") : T("充值并开通", "Deposit and open"), icon: "arrow.down.circle.fill", disabled: !Onboard.canOpen(quote: f.quote, starting: f.phase == .starting, deposit: deposit, limitsError: limitsErr)) {
       // t1113u (§6#59, supersedes 0B.3 "limits never block opening"): no silent default plan; the user's own three limits go into the one opening batch.
       guard limitsErr == nil else { return }
-      Task { await f.start(m, single: single, daily: daily, term: term, days: days, deposit: deposit) }
+      Task { await f.start(m, single: single, daily: daily, term: term, days: days, deposit: deposit, stranger: stranger) }
     }.accessibilityIdentifier("onboard.go")
     if f.phase == .signing, f.fingerprint != nil {
       VStack(alignment: .leading, spacing: 6) {
@@ -1152,10 +1244,12 @@ struct OnboardView: View {
 
 /// Real per-change fee from the server (/owner/limits/fee): actual network cost in USDC, 0% markup, first authorization free.
 struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool; let fromWallet: Bool
+  /// t1281: the server takes the owner's own stranger limits (shows the 付给陌生收款方 block; off = older server, legacy path).
+  var strangerCaps = false
   static func load() async -> LimitsFee? {
     guard let (d, resp) = try? await URLSession.shared.data(from: Mainnet.server.appendingPathComponent("owner/limits/fee")), (resp as? HTTPURLResponse)?.statusCode == 200,
           let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any], let t = j["usdcText"] as? String, (j["gasToken"] as? String) == Principles.gasToken else { return nil }
-    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false, fromWallet: (j["feeFrom"] as? String) == UsdcGas.feeFrom) }
+    return LimitsFee(usdcText: t, firstFree: (j["firstFree"] as? Bool) ?? false, fromWallet: (j["feeFrom"] as? String) == UsdcGas.feeFrom, strangerCaps: (j["strangerCaps"] as? Int) == 1) }
   static func text(_ f: LimitsFee?) -> String {
     guard let f else { return T("手续费按实际成本用 USDC 付，0 加价，永远不用 ETH。", "Network fee: actual cost in USDC, 0% markup. Never ETH.") }
     if f.fromWallet { return T(UsdcGas.feeDialog(usdc: f.usdcText), "Changing the wallet safety limit needs a small network fee (about \(f.usdcText) USDC), taken from your Kipurse balance.") }
@@ -1166,10 +1260,12 @@ struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool; let fro
 // MARK: - Limits: the phone decodes the exact batch the server built and compares it with the user's choice BEFORE the signing page opens.
 extension MainLimitsView {
   func verifyThenSign() async {
-    guard let u0 = Mainnet.limitsURL(single: single, daily: daily, term: term, days: days),
+    let st = stranger   // t1281: nil on an older server (legacy formula, nothing new sent)
+    guard let u0 = Mainnet.limitsURL(single: single, daily: daily, term: term, days: days, openSingle: st?.0, openDaily: st?.1),
           let sA = AnswerRules.parseUSDC(single), let dA = AnswerRules.parseUSDC(daily), let tA = AnswerRules.parseUSDC(term) else { return }
     let opsN = opsChange
-    let choice = RequestVerify.Choice(single: String(sA), daily: String(dA), term: String(tA), days: Int(days), opsPerDay: opsN)
+    let osA = st.map { AnswerRules.parseUSDC($0.0) ?? 0 }, odA = st.map { AnswerRules.parseUSDC($0.1) ?? 0 }
+    let choice = RequestVerify.Choice(single: String(sA), daily: String(dA), term: String(tA), days: Int(days), opsPerDay: opsN, openSingle: osA.map { String($0) }, openDaily: odA.map { String($0) })
     #if DEBUG
     if UserDefaults.standard.string(forKey: "kpMockLimits") == "tampered" {   // UI test: a server that returns a batch for someone else's wallet
       let res = RequestVerify.limitsBatch(calls: [["to": "0x2000000000000000000000000000000000000004", "data": "0x34fcd5be"]], wallet: PhoneTrust.mainnetWallet, chainId: 8453, choice: choice, currentExecutor: nil)
@@ -1179,6 +1275,7 @@ extension MainLimitsView {
       var r = URLRequest(url: Mainnet.server.appendingPathComponent("owner/limits/prepare")); r.setValue(Loc.code, forHTTPHeaderField: "x-kp-lang"); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "content-type")
       var body: [String: Any] = ["single": String(sA), "daily": String(dA), "term": String(tA), "days": Int(days) ?? 0]
       if let n = opsN { body["opsPerDay"] = n }   // t1185u: only when the owner changed it
+      if let a = osA, let b = odA { body["openSingle"] = String(a); body["openDaily"] = String(b) }   // t1281: the owner's own stranger limits, atomic
       r.httpBody = try JSONSerialization.data(withJSONObject: body)
       let (d, resp) = try await URLSession.shared.data(for: r)
       if (resp as? HTTPURLResponse)?.statusCode == 402 { let e = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]; let t = (e?["fee"] as? [String: Any])?["usdcText"] as? String ?? "?"
@@ -1195,6 +1292,8 @@ extension MainLimitsView {
       // your Base Account (signs only). The paused relay / Pimlico approve / refund-to-you shapes are refused here, before any page opens.
       let rep = RequestVerify.limitsReply(j, wallet: PhoneTrust.mainnetWallet, owner: Operator.ownerAccount ?? (j["owner"] as? String), choice: choice)
       guard rep.result.ok, let from = rep.from else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + rep.result.problems.joined(separator: "; "); return }
+      // t1280 (Q3): the permission this change revokes must be the live one on chain (SpendPermissionManager, two agreeing public nodes)
+      guard let ra = rep.result.revokeArgs, await RequestVerify.revokedIsLive(ra) else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + "the permission it replaces is not your live one on chain"; return }
       var c = URLComponents(url: u0, resolvingAgainstBaseURL: false)!; c.queryItems = (c.queryItems ?? []) + [.init(name: "plan", value: id)]
       guard let u1 = c.url, !from.isEmpty, let u = BatchVerify.committedURL(u1, chainId: chain, from: from, calls: calls) else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       m.openLimitsSigning(u)
@@ -1248,7 +1347,7 @@ struct SuspiciousToggle: View {
         }.buttonStyle(.plain).padding(.top, 8).accessibilityIdentifier("ledger.suspicious.toggle")
         if open {
           Text(T("可疑小额转账，可能是假地址，别用它付款。", "Suspicious tiny transfer. It may come from a fake address. Never pay it.")).font(.caption).foregroundStyle(Brand.negative).accessibilityIdentifier("ledger.suspicious.warning")
-          ForEach(rows) { r in Button { if let u = r.url(explorer: explorer) { m.webSheet = WebSheet(url: u) } } label: { LedgerRowView(r: r).opacity(0.5) }.foregroundStyle(.primary) }
+          ForEach(rows) { r in LedgerItem(r: r, explorer: explorer, dim: true) }
         }
       }
     }
@@ -1282,8 +1381,8 @@ struct BuyWithCoinbaseAccount: View {
     #endif
     if let (c, j) = try? await MainnetSession.authedPost("phone/onramp/session", ["redirectUrl": "kipurse://deposit-done"]) { reply = OnrampReply.parse(c, j) }
     switch reply {
-    case .open(let u, let ref): m.onrampPendingRef = ref; m.openFreePage(u) { _ in false }
-    case .fallback(let u): InApp.open(u)   // t785u: stays in the app
+    case .open(let u, let ref): m.onrampBaseline = nil; m.onrampBaseline = await OnrampBaseline.read(wallet: Operator.wallet); m.onrampPendingRef = ref; m.openFreePage(u) { _ in false }   // t1278 (A4) / t1279 (R14): balance + chain head before paying
+    case .fallback(let u): m.onrampBaseline = nil; InApp.open(u)   // t785u: stays in the app; t1279: nothing of ours to track
     }
   }
 }
@@ -1336,6 +1435,7 @@ struct OnrampStatusSheet: View {
     .task { await poll() }
   }
   func poll() async {
+    let baseline = m.demo != nil ? nil : await m.onrampBaselineOrNow()   // t1278 (A4) / t1279 (R14): this purchase's fresh baseline, taken once (else balance-only, read now)
     for _ in 0..<180 {
       let since = Date().timeIntervalSince(track.returnedAt)
       #if DEBUG
@@ -1346,7 +1446,10 @@ struct OnrampStatusSheet: View {
       }
       #endif
       let r = try? await MainnetSession.authedPost("phone/onramp/status", ["ref": track.ref])
-      let st = OnrampState.parse(r?.0, r?.1, secondsSinceReturn: since)
+      var st = OnrampState.parse(r?.0, r?.1, secondsSinceReturn: since)
+      // t1278 (A4): the server's "arrived" shows only once the phone sees it on chain (two agreeing nodes); until then "arriving"
+      // t1279 (R14): the amount is typed on Coinbase's page (unknown to the phone) -> no tx path; balance must rise by about the shown "+X"
+      if case .arrived(let a, let tx) = st { st = st.gated(chainConfirmed: await OnrampChainConfirm.confirmed(wallet: Operator.wallet, typed: nil, shown: a, txHash: tx, baseline: baseline)) }
       if st != .checking || state == .checking { withAnimation { state = st } }
       if st.isFinal { if case .arrived = st { Haptics.success(); await m.refresh() }; return }
       try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -1366,7 +1469,7 @@ struct FeeTotalRow: View {
       Divider()
       HStack(spacing: 12) { Image(systemName: "fuelpump").font(.footnote.weight(.semibold)).foregroundStyle(.secondary).frame(width: 32, height: 32).background(Color.secondary.opacity(0.12), in: Circle())
         Text(T("手续费合计（\(fees.count) 笔）", "Fees (\(Beginner.plural(fees.count, "payment", "payments")))")).font(.subheadline)
-        Spacer(); Text(m.balanceRevealed ? MoneyText.feeUSDC(total) : BalanceMask.short).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+        Spacer(); Text(MoneyText.feeUSDC(total)).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
       }.padding(.vertical, 8).accessibilityElement(children: .combine).accessibilityIdentifier("ledger.feeTotal")
     }
   }
@@ -1395,12 +1498,12 @@ struct LedgerSummarySection: View {
       + ok.filter { $0.kind == "withdraw" }.reduce(Int64(0)) { $0 + ($1.fee ?? 0) }
     let withdrawn = ok.filter { $0.kind == "withdraw" }.reduce(Int64(0)) { $0 + abs($1.delta) - ($1.fee ?? 0) }
     let style = Self.feeStyle(rows)
-    let money: (Int64) -> String = { m.balanceRevealed ? MoneyText.usdc($0) : BalanceMask.short }
+    let money: (Int64) -> String = { MoneyText.usdc($0) }   // t1276: records are never masked
     Section(T("汇总", "Summary")) {
       if filter == .all || filter == .deposit { LabeledContent(T("充值合计", "Added"), value: money(added)) }
       if (filter == .all && paid > 0) || filter == .payment { LabeledContent(T("AI 付款合计", "AI payments"), value: money(paid)) }
       if (filter == .all && withdrawn > 0) || filter == .withdraw { LabeledContent(T("提现合计", "Withdrawn"), value: money(withdrawn)) }
-      if filter == .all { LabeledContent(T("手续费合计", "Fees total"), value: m.balanceRevealed ? MoneyText.feeUSDC(fees, style: style) : BalanceMask.short) }
+      if filter == .all { LabeledContent(T("手续费合计", "Fees total"), value: MoneyText.feeUSDC(fees, style: style)) }
     }.accessibilityIdentifier("ledger.summary")
   }
 }
@@ -1415,7 +1518,7 @@ struct FeeDetailSection: View {
     if !fees.isEmpty {
       Section {
         Button { withAnimation { open.toggle() } } label: { HStack { Text(T("查看每一笔费用（\(fees.count)）", "Show each fee (\(fees.count))")); Spacer(); Image(systemName: open ? "chevron.up" : "chevron.down") } }.accessibilityIdentifier("ledger.feeToggle")
-        if open { ForEach(fees) { r in Button { if let u = r.url(explorer: explorer) { m.webSheet = WebSheet(url: u) } } label: { LedgerRowView(r: r, feeStyle: LedgerSummarySection.feeStyle(rows)) }.foregroundStyle(.primary) } }
+        if open { ForEach(fees) { r in LedgerItem(r: r, explorer: explorer, feeStyle: LedgerSummarySection.feeStyle(rows)) } }
       }
     }
   }

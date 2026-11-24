@@ -3,7 +3,7 @@
 // RFC 7591 dynamic client registration, RFC 7009 revocation. Public clients only (no secrets). Owner consent is required:
 // in the browser (owner cookie + CSRF) or in the iOS app (Face ID) via kipurse://oauth?req=<id>.
 // Tokens/codes are stored only as SHA-256 hashes and never logged.
-import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
+import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';import {ipHash} from '../src/v5/store.mjs';
 
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const b64url=b=>Buffer.from(b).toString('base64url');
@@ -63,7 +63,7 @@ export const firstConnectDigest=f=>'0x'+createHash('sha256').update(firstConnect
 const atomicDec=v=>{const b=BigInt(v);const whole=b/1000000n,frac=b%1000000n;if(frac===0n)return whole.toString();return `${whole}.${frac.toString().padStart(6,'0').replace(/0+$/,'')}`;};
 const atomic3=b=>{const ok=v=>/^[1-9]\d*$/.test(String(v??''));if(!ok(b?.single)||!ok(b?.daily)||!ok(b?.total))return null;const s=BigInt(b.single),d=BigInt(b.daily),t=BigInt(b.total);if(s>d||d>t)return null;return {single:s.toString(),daily:d.toString(),total:t.toString()};};
 /** phoneApprover (mainnet): {active:()=>{approver,x,y,fingerprint}|null, onChain:async a=>bool (still an owner of the wallet), verify:(a,digestHex,r,s)=>bool} */
-export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,commitSpend=null,everydayView=null,approveExtras=null,onConnected=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null,log=null,onForget=null,maxClients=Number(process.env.KIPURSE_OAUTH_MAX_CLIENTS??200),clientIdleMs=30*86400e3,maxPending=200,maxFirstPending=5,ownerAuth=null}){
+export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAuthorization=null,commitSpend=null,everydayView=null,approveExtras=null,onConnected=null,ownerSession,network='test',verifyOwner=null,wallet=null,ownerAddress=null,consentScript=null,phoneApprover=null,log=null,onForget=null,maxClients=Number(process.env.KIPURSE_OAUTH_MAX_CLIENTS??200),clientIdleMs=30*86400e3,maxPending=200,maxFirstPending=5,ownerAuth=null,maxClientsPerIp=Number(process.env.KIPURSE_OAUTH_CLIENTS_PER_IP??20),maxPendingPerIp=Number(process.env.KIPURSE_OAUTH_PENDING_PER_IP??10)}){
   S.oauth??={clients:{},pending:{},codes:{},tokens:{}};let O=S.oauth;
   const RES=()=>base()+'/mcp';
   const hits=new Map(),authHits=new Map(),firstHits=new Map();/* t1275: firstHits = /oauth/first per IP key */// ip -> [count, windowStart]
@@ -89,32 +89,51 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   const denyLink=p=>{const u=new URL(p.redirect_uri);if(p.state!=null)u.searchParams.set('state',p.state);u.searchParams.set('iss',base());u.searchParams.set('error','access_denied');return u.toString();};   // t1275: no state change
   const challenge=()=>`Bearer resource_metadata="${base()}/.well-known/oauth-protected-resource", scope="wallet"`;
 
-  /* t1265 cap, shared by register and (t1275) /oauth/first: at maxClients drop the oldest never-used client older than 10 min; false = full */
-  function clientRoom(){if(Object.keys(O.clients).length<maxClients)return true;const busy=liveClients(),n=Date.now();
-    const old=Object.entries(O.clients).filter(([id,c])=>!busy.has(id)&&!c.used&&n-Number(c.created??0)>600e3).sort((x,y)=>Number(x[1].created??0)-Number(y[1].created??0))[0];
-    if(!old)return false;drop('clients',old[0]);return true;}
-  function register(body){const uris=body.redirect_uris;
+  /* t1278 S7: what an unauthenticated caller created is tagged with a salted hash of its IP (never the IP), so one source can neither fill
+     the wallet's client cap nor its open-request cap. A client counts as "in use" only through a code or token: an open request never makes
+     it unevictable (a flood of requests could otherwise pin every slot). Evicting a client drops its open requests. */
+  const ipKey=ip=>ip==null||ip===''?null:ipHash(String(ip));
+  const usedClients=()=>{const live=new Set();for(const t of ['codes','tokens'])for(const v of Object.values(O[t]))if(v?.client_id)live.add(v.client_id);return live;};
+  const dropClient=id=>{for(const [k,x] of Object.entries(O.pending))if(x.client_id===id&&x.status==='pending')drop('pending',k);drop('clients',id);};
+  const byAge=(x,y)=>Number(x[1].created??0)-Number(y[1].created??0);
+  /** the evictable client to drop: oldest of the source with the most of them (a flooder pays first); older than 10 min preferred */
+  /* t1279 R4 (§6#139): a client with an OPEN consent request (the owner may be on the approval screen right now) is evicted only after every
+     client without one, and the plain "oldest > 10 min" shortcut never takes it: within the heaviest source, idle clients go first */
+  const withOpen=()=>{const s=new Set();for(const x of Object.values(O.pending))if(x?.status==='pending'&&x.client_id)s.add(x.client_id);return s;};
+  function evictClient(only){const busy=usedClients(),open=withOpen(),n=Date.now();const cand=Object.entries(O.clients).filter(([id,c])=>!busy.has(id)&&!c.used&&(only===undefined||c.ipk===only));if(!cand.length)return false;
+    const old=cand.filter(([id,c])=>!open.has(id)&&n-Number(c.created??0)>600e3).sort(byAge)[0];if(old&&only===undefined){dropClient(old[0]);return true;}
+    const cnt=new Map();for(const [,c] of cand)cnt.set(c.ipk??null,(cnt.get(c.ipk??null)??0)+1);let top=null,tn=-1;for(const [k,v] of cnt)if(v>tn){top=k;tn=v;}
+    const src=cand.filter(([,c])=>(c.ipk??null)===top);const pick=(src.filter(([id])=>!open.has(id)).sort(byAge)[0])??src.sort(byAge)[0];dropClient(pick[0]);return true;}
+  /* t1265 cap, shared by register and (t1275) /oauth/first; t1278 S7: per-IP cap first, then the wallet cap; false = every slot holds a used client */
+  function clientRoom(ipk){if(ipk&&Object.values(O.clients).filter(c=>c.ipk===ipk).length>=maxClientsPerIp&&!evictClient(ipk))return false;
+    while(Object.keys(O.clients).length>=maxClients)if(!evictClient())return false;return true;}
+  /** t1278 S7: room for one more open request: per-IP cap, then the wallet cap; the oldest open request (of the heaviest source) is dropped, never refused */
+  function pendingRoom(ipk){const open=()=>Object.entries(O.pending).filter(([,x])=>x.status==='pending');
+    if(ipk){const mine=open().filter(([,x])=>x.ipk===ipk).sort((a,b)=>a[1].exp-b[1].exp);for(const [k] of mine.slice(0,Math.max(0,mine.length-maxPendingPerIp+1)))drop('pending',k);}
+    for(let all=open();all.length>=maxPending;all=open()){const cnt=new Map();for(const [,x] of all)cnt.set(x.ipk??null,(cnt.get(x.ipk??null)??0)+1);let top=null,tn=-1;for(const [k,v] of cnt)if(v>tn){top=k;tn=v;}
+      const k=all.filter(([,x])=>(x.ipk??null)===top).sort((a,b)=>a[1].exp-b[1].exp)[0][0];drop('pending',k);}}
+  function register(body,ipk=null){const uris=body.redirect_uris;
     if(!Array.isArray(uris)||!uris.length||uris.length>10||!uris.every(validRedirect))return [400,{error:'invalid_redirect_uri',error_description:'redirect_uris must be https or loopback http, no fragments'}];
     /* t1265: at most maxClients registrations per wallet. At the cap the oldest client that has never been used (no token, code or request)
        and is older than 10 minutes makes room; only when every slot is in use is the registration refused (so a burst cannot lock DCR). */
-    if(gc())save();if(!clientRoom())return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];
+    if(gc())save();if(!clientRoom(ipk))return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];
     let name=cleanClientName(body.client_name);if(isGrokBotRegistration(uris)&&!/grok bot/i.test(name))name='Grok Bot';else if(isGeminiSparkRegistration(uris))name='Gemini Spark';else if(uris.some(x=>{try{const h=new URL(x).hostname;return h==='muse.ai'||h.endsWith('.muse.ai');}catch{return false;}})&&!/muse/i.test(name))name='Muse';const id='kpc_'+rnd(16);
-    O.clients[id]={name,redirect_uris:uris,created:Date.now()};save();
+    O.clients[id]={name,redirect_uris:uris,created:Date.now(),...(ipk?{ipk}:{})};save();
     return [201,{client_id:id,client_id_issued_at:Math.floor(Date.now()/1000),client_name:name,redirect_uris:uris,token_endpoint_auth_method:'none',grant_types:['authorization_code','refresh_token'],response_types:['code']}];}
 
   /** Validate an authorize request. Returns {err} (render, never redirect) or {req}. */
   const ERR_EN={'too_many':'Too many connection requests are open. Try again in a few minutes.','未知的客户端（client_id）':'This AI app isn’t registered with your wallet (unknown client).','回调地址不匹配（redirect_uri 必须和注册时完全一致）':'The AI app sent a return address that doesn’t match its registration.'};const errEn=e=>ERR_EN[e]??'The connection request was not valid.';
-  function startAuthorize(q){const c=O.clients[q.get('client_id')||''];if(!c)return {err:'未知的客户端（client_id）'};
+  function startAuthorize(q,ipk=null){const c=O.clients[q.get('client_id')||''];if(!c)return {err:'未知的客户端（client_id）'};
     const ru=q.get('redirect_uri')||(c.redirect_uris.length===1?c.redirect_uris[0]:'');if(!c.redirect_uris.some(r=>redirectMatches(r,ru)))return {err:'回调地址不匹配（redirect_uri 必须和注册时完全一致）'};
     const back=(e)=>{const u=new URL(ru);u.searchParams.set('error',e);if(q.get('state'))u.searchParams.set('state',q.get('state'));u.searchParams.set('iss',base());return {redirect:u.toString()};};
     if(q.get('response_type')!=='code')return back('unsupported_response_type');
     if(q.get('code_challenge_method')!=='S256'||!/^[A-Za-z0-9_-]{43}$/.test(q.get('code_challenge')||''))return back('invalid_request');
     const r=q.get('resource');if(r&&r.replace(/\/$/,'')!==RES())return back('invalid_target');
-    gc();if(Object.values(O.pending).filter(x=>x.status==='pending').length>=maxPending)return {err:'too_many'};   // t1265: bounded open requests
+    gc();   // t1265: bounded open requests; t1278 S7: the oldest open request makes room (pendingRoom below), never a refusal
     // same request reopened after the owner approved (in-app browser didn't follow the redirect): hand back the unused code link
     for(const [pid,x] of Object.entries(O.pending))if(x.status==='approved'&&x.redirect&&x.codeHash&&O.codes[x.codeHash]&&x.client_id===q.get('client_id')&&x.redirect_uri===ru&&x.challenge===q.get('code_challenge')&&x.state===(q.get('state')??null))return {done:x.redirect,req:pid,client:c};
     for(const x of Object.values(O.pending))if(MAIN&&x.status==='approved'&&x.codeHash&&!O.codes[x.codeHash]&&x.codeExp>=Date.now()/1000&&x.client_id===q.get('client_id')&&x.redirect_uri===ru&&x.challenge===q.get('code_challenge')&&x.state===(q.get('state')??null))return {used:true,client:c};
-    const id=rnd(18);O.pending[id]={client_id:q.get('client_id'),redirect_uri:ru,challenge:q.get('code_challenge'),state:q.get('state')??null,exp:Date.now()/1000+REQ_TTL,status:'pending'};save();
+    pendingRoom(ipk);const id=rnd(18);O.pending[id]={client_id:q.get('client_id'),redirect_uri:ru,challenge:q.get('code_challenge'),state:q.get('state')??null,exp:Date.now()/1000+REQ_TTL,status:'pending',...(ipk?{ipk}:{})};save();
     return {req:id,client:c};}
 
   /** Owner decision (browser with CSRF, or app after Face ID). Returns the redirect URL for the agent. */
@@ -127,7 +146,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
     u.searchParams.set('code',code);p.codeHash=sha(code);p.codeExp=Date.now()/1000+CODE_TTL;p.status='approved';p.redirect=u.toString();save();return p.redirect;}
 
   function issue(client_id,agentId){const at=rnd(32),rt=rnd(32),n=Date.now()/1000;if(O.clients[client_id])O.clients[client_id].used=Date.now();
-    O.tokens[sha(at)]={type:'access',client_id,agentId,exp:n+ACCESS_TTL};O.tokens[sha(rt)]={type:'refresh',client_id,agentId,exp:n+REFRESH_TTL};save();
+    O.tokens[sha(at)]={type:'access',client_id,agentId,exp:n+ACCESS_TTL};O.tokens[sha(rt)]={type:'refresh',client_id,agentId,exp:n+REFRESH_TTL,at:sha(at)};save();/* t1280 (§6#140): the refresh token remembers its access token, so rotating ends the old one */
     return {access_token:at,token_type:'Bearer',expires_in:ACCESS_TTL,refresh_token:rt,scope:'wallet'};}
 
   function token(b){const bad=(e,d)=>[400,{error:e,error_description:d}];gc();
@@ -139,7 +158,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
       return [200,issue(c.client_id,c.agentId)];}
     if(b.grant_type==='refresh_token'){const k=sha(String(b.refresh_token||''));const t=O.tokens[k];
       if(!t||t.type!=='refresh'||t.exp<Date.now()/1000||t.client_id!==b.client_id||!isAgentLive(t.agentId))return bad('invalid_grant','refresh token invalid');
-      drop('tokens',k);return [200,issue(t.client_id,t.agentId)];}// rotation
+      drop('tokens',k);if(t.at&&O.tokens[t.at]?.type==='access')drop('tokens',t.at);return [200,issue(t.client_id,t.agentId)];}// rotation (t1280: the previous access token ends too)
     return bad('unsupported_grant_type','use authorization_code or refresh_token');}
 
   function revoke(b){drop('tokens',sha(String(b.token||'')));save();return [200,{}];}
@@ -200,19 +219,19 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
       return [200,{mode:'first',req:id,clientId:shown.clientId,name:shown.agent,kind:mapClient(shown.agent),redirect:shown.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(shown.exp),wallet,single:q.single,daily:q.daily,total:q.total,nonce:shown.nonce,fingerprint:a.fingerprint,digest:firstConnectDigest(shown),rejectDigest:firstConnectDigest({...shown,action:'reject'}),access:'request-only'}];}
     delete p.proposal;p.phase='signing';p.phaseAt=Date.now();save();const f=phoneFields(id,'approve');
     return [200,{mode:'reuse',req:id,clientId:f.clientId,name:f.name,kind:mapClient(f.name),redirect:f.redirect,returnsTo:host,origin:p.origin??'computer',exp:Math.floor(f.exp),wallet,fingerprint:a.fingerprint,digest:connectDigest(f),rejectDigest:connectDigest({...f,action:'reject'}),access:'request-only'}];}
-  function beginFirst(body){gc();const names={siri:'Siri',muse:'Muse','grok-bot':'Grok Bot',grok:'Grok Bot',claude:'Claude'};const agent=names[String(body?.agent||'').toLowerCase()]||null;if(!agent)return [400,{error:'unknown_agent'}];
+  function beginFirst(body,ipk=null){gc();const names={siri:'Siri',muse:'Muse','grok-bot':'Grok Bot',grok:'Grok Bot',claude:'Claude'};const agent=names[String(body?.agent||'').toLowerCase()]||null;if(!agent)return [400,{error:'unknown_agent'}];
     const live=currentSpend();if(live.mode==='enforced'&&live.authorized===true)return [409,{error:'already_confirmed'}];
     const q=atomic3(body);if(!q)return [400,{error:'limits_required'}];
     const a=phoneApprover?.active();if(!a)return [409,{error:'no_phone_signer'}];
     /* t1275: unauthenticated, so the same caps as the normal path: open requests (maxPending) and clients (maxClients); and at most
        maxFirstPending open first-connect requests per wallet - the oldest one (and its unused client) makes room, so a flood cannot lock the owner out */
-    if(Object.values(O.pending).filter(x=>x.status==='pending').length>=maxPending)return [429,{error:'too_many',error_description:'too many open connection requests; try again in a few minutes'}];
+    /* t1278 S7: per-IP and wallet caps make room by dropping the oldest open request (pendingRoom), never by refusing */
     const fp=Object.entries(O.pending).filter(([,x])=>x.status==='pending'&&x.challenge==='first').sort((x,y)=>x[1].exp-y[1].exp);
     for(const [k,x] of fp.slice(0,Math.max(0,fp.length-maxFirstPending+1))){drop('pending',k);if(O.clients[x.client_id]&&!O.clients[x.client_id].used&&!liveClients().has(x.client_id))drop('clients',x.client_id);}
-    if(!clientRoom())return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];
+    if(!clientRoom(ipk))return [429,{error:'too_many_clients',error_description:'too many registered clients for this wallet; try again later'}];pendingRoom(ipk);
     const id=rnd(18),clientId='kpc_'+rnd(16),redirect='https://kipurse.com/connect/'+encodeURIComponent(agent);
-    O.clients[clientId]={name:agent,redirect_uris:[redirect],created:Date.now()};
-    O.pending[id]={client_id:clientId,redirect_uri:redirect,challenge:'first',state:null,exp:Date.now()/1000+REQ_TTL,status:'pending',origin:'phone',proposal:{...q,nonce:rnd(18)}};save();
+    O.clients[clientId]={name:agent,redirect_uris:[redirect],created:Date.now(),...(ipk?{ipk}:{})};
+    O.pending[id]={client_id:clientId,redirect_uri:redirect,challenge:'first',state:null,exp:Date.now()/1000+REQ_TTL,status:'pending',origin:'phone',proposal:{...q,nonce:rnd(18)},...(ipk?{ipk}:{})};save();
     const shown=firstFields(id,'approve');let host='';try{host=new URL(redirect).host;}catch{}
     return [200,{mode:'first',req:id,clientId,name:agent,kind:mapClient(agent),redirect,returnsTo:host,origin:'phone',exp:Math.floor(shown.exp),wallet,single:q.single,daily:q.daily,total:q.total,nonce:shown.nonce,fingerprint:a.fingerprint,digest:firstConnectDigest(shown),rejectDigest:firstConnectDigest({...shown,action:'reject'}),access:'request-only'}];}
   async function phoneDecide(b){const id=String(b.req||''),approve=b.approve===true;gc();const p=O.pending[id];
@@ -284,7 +303,7 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
     if(p==='/.well-known/oauth-authorization-server'||p==='/.well-known/oauth-authorization-server/mcp'||p==='/.well-known/openid-configuration'){json(200,asm());return true;}
     if(!p.startsWith('/oauth/'))return false;
     if(limited(ip)){json(429,{error:'slow_down'},{'retry-after':'60'});return true;}
-    if(p==='/oauth/register'&&req.method==='POST'){const [c,b]=register(await readBody(req));json(c,b);return true;}
+    if(p==='/oauth/register'&&req.method==='POST'){const [c,b]=register(await readBody(req),ipKey(ip));json(c,b);return true;}
     if(p==='/oauth/token'&&req.method==='POST'){const body={...(await readBody(req))};// client_secret_basic clients (e.g. Gemini): client_id in the Basic header; there is no secret to check (public clients)
       const ba=/^Basic\s+(.+)$/i.exec(String(req.headers.authorization??''));if(ba&&!body.client_id){try{body.client_id=decodeURIComponent(Buffer.from(ba[1],'base64').toString().split(':')[0]);}catch{}}
       const [c,b]=token(body);json(c,b);return true;}
@@ -303,7 +322,7 @@ else if(j.status==='expired'||j.status==='used'){st.textContent=T.expired;fin=tr
       if(!ok){json(403,{error:'not_owner',error_description:'确认不是钱包主人的 Base Account'});return true;}
       try{json(200,{redirect:decide(id,true)});}catch(e){if(spendError(e)){json(403,{error:e.code,error_description:e.message});return true;}throw e;}return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/first'&&req.method==='POST'){if(bump(firstHits,ip,Number(process.env.KIPURSE_OAUTH_FIRST_PER_MIN??10))){json(429,{error:'slow_down'},{'retry-after':'60'});return true;}   // t1275
-const [c,b]=beginFirst(await readBody(req));json(c,b);return true;}
+const [c,b]=beginFirst(await readBody(req),ipKey(ip));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-prepare'&&req.method==='POST'){const [c,b]=phonePrepare(await readBody(req));json(c,b);return true;}
     if(MAIN&&phoneApprover&&p==='/oauth/phone-decide'&&req.method==='POST'){const [c,b]=await phoneDecide(await readBody(req));json(c,b);return true;}
     if(p==='/oauth/status'){const r=O.pending[u.searchParams.get('req')||''];
@@ -312,7 +331,7 @@ const [c,b]=beginFirst(await readBody(req));json(c,b);return true;}
     const nonce=rnd(12);const html=(code,body)=>{res.writeHead(code,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-frame-options':'DENY','referrer-policy':'no-referrer',
       'content-security-policy':`default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src 'self'${MAIN?" https:; frame-src https://keys.coinbase.com":''}; form-action 'self' https: http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'`});res.end(body);};
     if(p==='/oauth/authorize'&&req.method==='GET'){if(bump(authHits,ip,Number(process.env.KIPURSE_OAUTH_AUTHORIZE_PER_MIN??10))){json(429,{error:'slow_down'},{'retry-after':'60'});return true;}   // t1265: each GET can open a request
-      const r=startAuthorize(u.searchParams);
+      const r=startAuthorize(u.searchParams,ipKey(ip));
       if(r.err){const en=(()=>{const q=new URL(req.url,'http://x').searchParams.get('lang');return q==='zh'||q==='en'?q==='en':!/^\s*zh/i.test(String(req.headers['accept-language']??''));})();const tt=en?'Can’t connect':'无法连接';html(400,page(tt,`<div class=mk>K</div><div class=t>${tt}</div><p class=s>${esc(en?errEn(r.err):r.err)}</p><p class=muted>${en?'Go back to your AI app and start the connection again.':'请回到 AI 应用重新连接。'}</p>`,nonce));return true;}
       if(r.redirect){res.writeHead(302,{location:r.redirect});res.end();return true;}
       if(r.used){const en=(()=>{const q=new URL(req.url,'http://x').searchParams.get('lang');return q==='zh'||q==='en'?q==='en':!/^\s*zh/i.test(String(req.headers['accept-language']??''));})();html(200,page(en?'Already connected':'已经连接',`<div class=mk>K</div><div class=t>${en?'Already connected':'这个连接已经完成'}</div><p class=s>${en?'Go back to '+esc(r.client.name)+'. To connect again, start over in your AI.':'请回到 '+esc(r.client.name)+'。如需重新连接，请在 AI 里重新开始。'}</p>`,nonce));return true;}

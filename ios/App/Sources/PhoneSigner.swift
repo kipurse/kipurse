@@ -260,6 +260,8 @@ struct PhoneApproveTrustSheet: View {
       if ceil0 == nil { issues.append(T(SignedLimitsCopy.noneZH, SignedLimitsCopy.noneEN)) }
       else if let ceil0, !OwnerAsk.trustCapProblems(om, ceiling: ceil0).isEmpty { issues.append(T("这次信任的额度超过你在手机上设的 AI 花钱上限，已停止。", "This trust is above the AI spending limits set on this phone, so it was stopped.")) }
       issues += PhoneTrust.suiteProblems(om)   // t1250 (§6#119): V5.5 wallets only - the KR-05 rules the V5.5 trust contract enforces
+      // t1280 (Q4): the epoch must be the merchant's CURRENT trust epoch, read by this phone on chain (two agreeing nodes), not the server's word
+      if !(await PhoneTrust.chainEpochMatches(account: om.account, merchant: om.merchant, epoch: om.epoch)) { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) }
       // t1250: on V5.5 a reusable ("remember") trust is OwnerInlineTrust (seat kind 6); else OwnerTrust, as before
       if let d = PhoneTrust.trustDigest(om) { if Hex.encode(d).lowercased() != (j["digest"] as? String ?? "").lowercased() { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) } else { hash = PhoneTrust.walletHash(d) } }
       // t1214 (§6#100/#102): V5.4 wallets only — the same Face ID also signs the merchant-signer grant; the phone recomputes it and it must match the card exactly
@@ -267,7 +269,7 @@ struct PhoneApproveTrustSheet: View {
         func g(_ k: String) -> String { if let v = gm[k] as? String { return v }; if let n = gm[k] as? NSNumber { return n.stringValue }; return "" }
         let gr = OwnerSignerTrustMessage(account: g("account"), merchant: g("merchant"), name: g("name"), epoch: g("epoch"), signers: gm["signers"] as? [String] ?? [],
           single: g("single"), daily: g("daily"), expiry: g("expiry"), nonce: g("nonce"), deadline: g("deadline"))
-        if !PhoneTrust.signerTrustProblems(gr, card: om).isEmpty || !KipurseSuite.active.signerGrants /* t1250: V5.4 and V5.5 */ { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) }
+        if !PhoneTrust.signerTrustProblems(gr, card: om).isEmpty || !KipurseSuite.active.signerGrants /* t1250: V5.4 and V5.5 */ || !SignerGrantDomain.shownNameOK(gr.name) /* t1278 (A3): the footer names a readable domain */ { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) }
         else if let gd = PhoneTrust.signerTrustDigest(gr, adapter: KipurseSuite.active.adapter), Hex.encode(gd).lowercased() == (gj["digest"] as? String ?? "").lowercased() { grant = gr; grantHash = PhoneTrust.walletHash(gd) }
         else { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) }
       }
@@ -288,7 +290,7 @@ struct PhoneApproveTrustSheet: View {
   /// t1214 (§6#102, V5.4 only): ONE Face ID signs the trust (kind 1) and the merchant-signer grant (kind 5).
   func approveWithGrant(_ gh: [UInt8], _ g: OwnerSignerTrustMessage) async {
     guard let h = hash else { return }; busy = true; defer { busy = false }
-    let ctx = LAContext(); ctx.localizedCancelTitle = T("取消", "Cancel"); ctx.touchIDAuthenticationAllowableReuseDuration = 10; defer { ctx.invalidate() }
+    let ctx = LAContext(); ctx.localizedCancelTitle = T("取消", "Cancel"); ctx.touchIDAuthenticationAllowableReuseDuration = 0; defer { ctx.invalidate() }
     await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     guard (try? await ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: T("用 Face ID 批准", "Approve with Face ID"))) == true, let k = PhoneKey.existing(context: ctx) else { state = T("已取消。", "Canceled."); return }
     do { let (r, s) = try PhoneKey.sign(h, key: k, reusesUnlock: true), (gr, gs) = try PhoneKey.sign(gh, key: k, reusesUnlock: true)
@@ -330,7 +332,9 @@ extension PhoneKey {
     else { throw stopErr([T("服务器回应不对", "unexpected server reply")]) }
     if let o = Operator.ownerAccount, o.lowercased() != owner.lowercased() { throw stopErr([T("确认人不是你的 Coinbase 钱包", "the signer isn't your Coinbase wallet")]) }
     if !Operator.wallet.isEmpty, Operator.wallet.lowercased() != wallet.lowercased() { throw stopErr([T("这不是你的钱包", "not your wallet")]) }
-    return (calls, owner, wallet, (r["chainId"] as? Int) ?? Int(r["chainId"] as? String ?? "") ?? 8453)
+    let chain = (r["chainId"] as? Int) ?? Int(r["chainId"] as? String ?? "") ?? 8453
+    guard chain == BatchVerify.chainId else { throw stopErr([T("服务器回应不对", "unexpected server reply")]) }   // t1280 (L2): Base only, like limits / resume / owner-pay
+    return (calls, owner, wallet, chain)
   }
   /// replacing: the old approver from phone/status (t843). The server's `replaces` must name the same one, and the batch must add-then-remove exactly it.
   static func verifiedEnrollURL(_ r: [String: Any], x: [UInt8], y: [UInt8], siri: Bool = false, replacing: String? = nil) throws -> URL {

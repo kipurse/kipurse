@@ -4,7 +4,7 @@
 // t1275: IPv6 is expanded to 8 groups first; v4-mapped / v4-compatible / SIIT / NAT64 / 6to4 / Teredo carry an IPv4 that is checked as IPv4; only
 // 2000::/3 can be public; anything unparsable is private. The host is resolved ONCE and the real connection is pinned to the vetted address
 // (https.request lookup override; SNI + certificate are still checked against the original hostname), so DNS rebinding cannot swap it.
-import {lookup} from 'node:dns/promises';import {isIP} from 'node:net';import https from 'node:https';import http from 'node:http';import zlib from 'node:zlib';import {Readable} from 'node:stream';
+import {lookup} from 'node:dns/promises';import {isIP} from 'node:net';import https from 'node:https';import http from 'node:http';import zlib from 'node:zlib';import {Readable,Transform} from 'node:stream';
 const v4priv=a=>{const p=a.split('.').map(Number);return p[0]===0||p[0]===10||p[0]===127||(p[0]===100&&p[1]>=64&&p[1]<=127)||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168)||(p[0]===192&&p[1]===0&&(p[2]===0||p[2]===2))||(p[0]===198&&(p[1]===18||p[1]===19))||(p[0]===198&&p[1]===51&&p[2]===100)||(p[0]===203&&p[1]===0&&p[2]===113)||p[0]>=224;};
 /* t1275: '1:2::a.b.c.d' -> [8 x uint16] or null */
 export function expand6(s){s=String(s).toLowerCase().replace(/^\[|\]$/g,'').replace(/%.*$/,'');const m=/^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(s);
@@ -35,24 +35,43 @@ export async function vetUrl(url,{resolve=h=>lookup(h,{all:true,verbatim:true})}
 export async function assertPublicUrl(url,opts={}){return (await vetUrl(url,opts)).u;}
 /* t1275: fetch-compatible request whose TCP connection goes ONLY to `pin` ({address,family}); TLS servername / cert check stay on u.hostname. */
 const NULL_BODY=new Set([101,103,204,205,304]);
-export function pinnedFetch(pin){return (url,opts={})=>new Promise((ok,fail)=>{const u=new URL(String(url));const mod=u.protocol==='https:'?https:u.protocol==='http:'?http:null;if(!mod)return fail(new TypeError('unsupported protocol'));
+/** t1278 S5: every merchant / x402 request: a default 15 s deadline and at most 256 KB of body AFTER decompression. */
+export const FETCH_LIMITS={timeoutMs:15_000,maxBodyBytes:256*1024};
+const tooLarge=()=>Object.assign(Error('response_too_large'),{code:'response_too_large'});
+/* a stream that errors (response_too_large) once more than max bytes passed through, and stops the source (no further reading / inflating) */
+function capStream(src,max){let n=0;const t=new Transform({transform(ch,_e,cb){n+=ch.length;if(n>max){src.destroy?.();return cb(tooLarge());}cb(null,ch);}});
+  src.on('error',e=>t.destroy(e));return src.pipe(t);}
+/** Read a fetch Response body as text with a hard byte cap (stops reading at the cap). Never throws:
+ *  {text, truncated, error}; truncated = the body was larger than max (text holds the first max bytes). */
+export async function readCapped(res,{max=FETCH_LIMITS.maxBodyBytes,prefer='text'}={}){
+  try{if(res?.body&&typeof res.body.getReader==='function'){const rd=res.body.getReader();const parts=[];let n=0;
+      try{for(;;){const {done,value}=await rd.read();if(done)break;const b=Buffer.from(value);if(n+b.length>max){parts.push(b.subarray(0,max-n));n=max;try{await rd.cancel();}catch{}return {text:Buffer.concat(parts).toString('utf8'),truncated:true};}parts.push(b);n+=b.length;}}
+      catch(e){if(e?.code==='response_too_large'||e?.cause?.code==='response_too_large')return {text:Buffer.concat(parts).toString('utf8'),truncated:true};return {text:Buffer.concat(parts).toString('utf8'),truncated:false,error:'read_failed'};}
+      return {text:Buffer.concat(parts).toString('utf8'),truncated:false};}
+    if(typeof res?.text!=='function'){if(typeof res?.json!=='function')return {text:'',truncated:false};}   /* injected test doubles with json() only */
+    const t=(prefer==='json'&&typeof res.json==='function')||typeof res.text!=='function'?JSON.stringify(await res.json()):String(await res.text());const b=Buffer.from(t,'utf8');
+    return b.length>max?{text:b.subarray(0,max).toString('utf8'),truncated:true}:{text:t,truncated:false};}
+  catch(e){return {text:'',truncated:e?.code==='response_too_large',error:e?.code==='response_too_large'?undefined:'read_failed'};}}
+export function pinnedFetch(pin,{maxBodyBytes=FETCH_LIMITS.maxBodyBytes,timeoutMs=FETCH_LIMITS.timeoutMs}={}){return (url,opts={})=>new Promise((ok,fail)=>{const u=new URL(String(url));const mod=u.protocol==='https:'?https:u.protocol==='http:'?http:null;if(!mod)return fail(new TypeError('unsupported protocol'));
   const hdr={};const h0=opts.headers;if(h0&&typeof h0.forEach==='function'&&!Array.isArray(h0))h0.forEach((v,k)=>{hdr[k]=v;});else if(Array.isArray(h0))for(const [k,v] of h0)hdr[k]=v;else Object.assign(hdr,h0??{});
   for(const k of Object.keys(hdr))if(/^(accept-encoding|host|connection|transfer-encoding|keep-alive|upgrade)$/i.test(k))delete hdr[k];hdr['accept-encoding']='gzip, deflate, br';
   let body=opts.body;if(body!=null&&!(typeof body==='string'||body instanceof Uint8Array))body=String(body);if(body!=null)hdr['content-length']=Buffer.byteLength(body);
   const host=u.hostname.replace(/^\[|\]$/g,'');const lk=(_h,o,cb)=>{if(typeof o==='function')cb=o;if(o?.all)cb(null,[{address:pin.address,family:pin.family}]);else cb(null,pin.address,pin.family);};
   const req=mod.request({protocol:u.protocol,hostname:host,port:u.port||undefined,path:u.pathname+u.search,method:String(opts.method??'GET').toUpperCase(),headers:hdr,lookup:lk,agent:false,
-    ...(u.protocol==='https:'&&!isIP(host)?{servername:host}:{}),signal:opts.signal},res=>{const st=res.statusCode;
+    ...(u.protocol==='https:'&&!isIP(host)?{servername:host}:{}),signal:opts.signal??AbortSignal.timeout(timeoutMs)/* t1278 S5 */},res=>{const st=res.statusCode;
     if(st>=300&&st<400&&res.headers.location&&opts.redirect!=='manual'){res.resume();return fail(new TypeError('fetch failed: redirect refused'));}
     const H=new Headers();for(let i=0;i<res.rawHeaders.length;i+=2){try{H.append(res.rawHeaders[i],res.rawHeaders[i+1]);}catch{}}
     const enc=String(res.headers['content-encoding']??'').toLowerCase().trim();let s=res;const dz=enc==='gzip'||enc==='x-gzip'?zlib.createGunzip():enc==='deflate'?zlib.createInflate():enc==='br'?zlib.createBrotliDecompress():null;
-    if(dz){s=res.pipe(dz);res.on('error',e=>dz.destroy(e));H.delete('content-encoding');H.delete('content-length');}
+    if(dz){s=res.pipe(dz);res.on('error',e=>dz.destroy(e));dz.on('error',()=>res.destroy());H.delete('content-encoding');H.delete('content-length');}
     const nb=NULL_BODY.has(st)||String(opts.method??'GET').toUpperCase()==='HEAD';if(nb)res.resume();
+    if(!nb){const raw=s;s=capStream(raw,maxBodyBytes);s.on('error',()=>{res.destroy();});}   /* t1278 S5: decompressed bytes are capped (a zip bomb stops at the cap) */
     try{ok(new Response(nb?null:Readable.toWeb(s),{status:st<200||st>599?502:st,statusText:res.statusMessage??'',headers:H}));}catch(e){fail(e);}});
   req.on('error',fail);if(body!=null)req.write(body);req.end();});}
 const NATIVE_FETCH=globalThis.fetch;
 /** fetch wrapper: guard + no redirects. allowLocal: the test-only http://127.0.0.1 merchant (cfg.allowHttpMerchantForTests).
  *  t1275: with the platform fetch (production), the request is sent by pinnedFetch to the address just vetted (pin overrides for tests). */
-export function guardFetch(f,{allowLocal=false,resolve,pin}={}){const pinOn=pin??(f===NATIVE_FETCH?pinnedFetch:null);return async(url,opts={})=>{const u=new URL(String(url));
+export function guardFetch(f,{allowLocal=false,resolve,pin,timeoutMs=FETCH_LIMITS.timeoutMs}={}){const pinOn=pin??(f===NATIVE_FETCH?pinnedFetch:null);return async(url,opts0={})=>{const u=new URL(String(url));
+  const opts={...opts0,signal:opts0.signal??AbortSignal.timeout(timeoutMs)};/* t1278 S5: default deadline for every guarded request */
   const local=['127.0.0.1','localhost'].includes(u.hostname)&&allowLocal;if(local)return f(u.toString(),{...opts,redirect:'error'});
   const v=await vetUrl(u,{resolve});if(pinOn)return pinOn(v.addrs[0])(v.u.toString(),{...opts,redirect:'error'});
   return f(v.u.toString(),{...opts,redirect:'error'});};}

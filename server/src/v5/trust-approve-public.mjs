@@ -87,5 +87,5 @@ button{display:block;width:100%;border:0;border-radius:14px;padding:15px;font-si
       if(p==='/approve/trust/reject'){let ok=false;try{ok=await verifyMessage({address:OWNER,message:rejectMessage(id,r.payee),signature:String(b.signature??'')});}catch{ok=false;}
         if(!ok){json(403,{error:'not_owner'});return true;}const v=ownerApi.reject(id);prepared.delete(id);json(200,{status:v.status});return true;}
       json(404,{error:'not_found'});return true;
-    }catch(e){json(400,{error:e.code??'failed',detail:String(e.message).slice(0,300)});return true;}finally{busy.delete(id);}}
+    }catch(e){json(400,{error:typeof e?.code==='string'?e.code:'failed'});return true;}finally{busy.delete(id);}}/* t1278 S6: error code only, never the raw message */
   return {handle,url};}

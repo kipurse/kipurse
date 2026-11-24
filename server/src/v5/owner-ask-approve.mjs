@@ -104,7 +104,7 @@ export function createOwnerAskApproval({engine,phone,pub,wallet,everyday,walletC
     if(trustJobs.size){try{await Promise.allSettled([...trustJobs.values()]);}catch{}}/* t1243: another card's background trust still holds the wallet: pay after it */
     let out;try{const signature=phonePayWrapper(cap.index,{purchaseKey:c.pay.purchaseKey,payee:c.pay.payee,amount:c.pay.amount,deadline:c.pay.deadline},String(b.pay.r),String(b.pay.s));
       out=await engine.payApprovedByOwner(a.spec,{agentId:a.agentId,idempotencyKey:ownerKey(id),ownerApproval:{signature,deadline:c.pay.deadline}});}
-    catch(e){out={state:'failed',reason:String(e?.code??e?.message??'error').slice(0,80)};}
+    catch(e){out={state:'failed',reason:typeof e?.code==='string'?e.code.slice(0,80):'error'};}/* t1278 S6 */
     const paid=['paid','already_paid','paid_by_other_agent','already_paid_on_chain'].includes(out?.state);
     /* t1264: sent but not confirmed (or a late-confirmed reservation): the outcome is UNKNOWN -> the ask stays executing with {state:'unknown'}
        (the AI is told not to start it again); engine.reconcileOwnerAsk settles it from the chain later. Never 'failed'. */

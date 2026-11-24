@@ -184,7 +184,7 @@ public enum BatchVerify {
       if to == deployer, approver == nil { approver = Self.approver(d, wallet: wallet, x: x, y: y, maxSingle: nil, maxDaily: nil, problems: &p); continue }
       guard to == lc(wallet) else { p.append("step \(i + 1) calls an unknown contract \(to)"); continue }
       if s == selAddOwner, d.count == 36, let a = RequestVerify.R(b: Array(d.dropFirst(4))).addr(0), let ap = approver, a == ap { added = true }
-      else if s == selRemoveOwner { if let e = removeProblem(d, owner: owner, keep: [approver ?? "", spm], only: replacing) { p.append(e) }
+      else if s == selRemoveOwner { if let e = removeProblem(d, owner: owner, keep: [approver ?? "", spm], only: replacing) { p.append(e) }   // t1280: L1 reverted - after "forget my data" (or an unconfirmed approver) the server removes a DEAD key with replaces = nil; the owner and the SPM always stay
         if !added { removedBeforeAdd = true }
         let r = RequestVerify.R(b: Array(d.dropFirst(4))); if let o = r.int(32), let b = r.bytes(o), b.count == 32 { removed.append(Hex.encode(Array(b.suffix(20)))) } }
       else if s == selExecute { fees += 1; if fees > 1 { p.append("more than one fee payment") }  // t906: the wallet pays the fee to Kipurse ops (fixed address, max 0.05) while gas is sponsored

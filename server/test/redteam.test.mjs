@@ -59,5 +59,5 @@ test('RT2-10 everyday life: at most ONE Face ID per new payee, then zero frictio
   for(const [p,m,a] of [['study','PaperHub','0.5'],['work','TransAPI','2'],['dev','CloudGPU','1'],['promo','ExampleShop','3'],['daily','Coffee','4']]){const to=fresh();const n0=props.length;
     const r1=await buy.buy({purpose:p,item:'first',merchant:m,to,amount:a,idempotencyKey:'idem-life-'+m},'grok');assert.equal(r1.decision,'ask_owner');ok();
     assert.equal((await buy.buy({purpose:p,item:'first',merchant:m,to,amount:a,idempotencyKey:'idem-life-'+m},'grok')).state,'paid',m);
-    for(let i=0;i<2;i++)assert.equal((await buy.buy({purpose:p,item:'again',merchant:m,to,amount:String(Number(a)/2),idempotencyKey:idem()},'grok')).state,'paid',m+' again');
+    for(let i=0;i<2;i++)assert.equal((await buy.buy({purpose:p,item:'again '+i,merchant:m,to,amount:(Number(a)/2-i*0.01).toFixed(2),idempotencyKey:idem()},'grok')).state,'paid',m+' again');/* t1280: different purchases; an exact same-amount repeat inside 10 min is the duplicate guard's job (t1280-reaudit) */
     assert.equal(props.length-n0,1,'one approval for '+m);}});

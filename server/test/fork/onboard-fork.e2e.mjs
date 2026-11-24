@@ -5,7 +5,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {createPublicClient,createTestClient,createWalletClient,http as vh,parseAbi,getAddress,decodeAbiParameters,encodeAbiParameters,encodeFunctionData,toHex,serializeTransaction} from 'viem';import {base} from 'viem/chains';
 import * as P256 from 'ox/P256';
 import {createPhoneEnrollment,WALLET_ABI,approverInit,DETERMINISTIC_DEPLOYER} from '../../src/v5/phone-signer.mjs';import {createOnboarding,ONBOARD_GAS} from '../../src/v5/onboard.mjs';
-import {buildMigrationPlanV5} from '../../src/v5/plan.mjs';import {decodePolicyV5,v5Abi,permissionFromJson} from '../../src/v5/abi.mjs';import {limitsWindow} from '../../src/v5/limits-public.mjs';
+import {buildMigrationPlanV5} from '../../src/v5/plan.mjs';import {decodePolicyV5,v5Abi,permissionFromJson} from '../../src/v5/abi.mjs';import {limitsWindow,subCapsOrThrow} from '../../src/v5/limits-public.mjs';
 const RPC=process.env.FORK_RPC,PJ=process.env.FORK_PERMISSION_JSON;const MANAGER='0xf85210B21cC50302F477BA56686d2019dC9b67Ad';
 const ERC20=parseAbi(['function balanceOf(address) view returns (uint256)','function transfer(address,uint256) returns (bool)']);
 const AD=parseAbi(['function trust() view returns (address)','function fees() view returns (address)','function vaultAddress(address) view returns (address)']);
@@ -38,7 +38,7 @@ test('one-time setup: one atomic Base Account batch (permission+caps, approver V
   // same shape as planCapChange() in mainnet-owner-launch.mjs
   const planFor=async(c,{wallet=W,revoke=[S.permission],zr={vault:W,buffer:0}}={})=>{const cp=pol();const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();
     return buildMigrationPlanV5({chainId:8453,wallet,owner:OWNER,adapter:A,trust,token:USDC,manager:MANAGER,executor:cp.executor,guardian:cp.guardian,registry:cp.registry,headroom:false,maxFeePpm:cp.maxFeePpm,maxNetworkFee:cp.maxNetworkFee,fee:{ppm:String(ppm)},
-      stated:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),openSingle:mn(cp.openSingle,c.single),openDaily:mn(cp.openDaily,c.daily),verifiedSingle:mn(cp.verifiedSingle,c.single),verifiedDaily:mn(cp.verifiedDaily,c.daily)},
+      stated:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),...subCapsOrThrow(c,cp)/* t1281: same ONE formula as planCapChange */},
       ...limitsWindow(await chainNow(),c.days,S.permission.end),salt:BigInt(S.permission.salt)+1n+BigInt(Math.floor(Math.random()*1e6)),revoke,zeroReserve:zr});};
   const PH=createPhoneEnrollment({S,save,pub,wallet:W,trust,owner:OWNER,chainId:8453,base:()=>'http://fork.invalid',caps:()=>({single:1000000n,daily:2000000n}),script:()=>'',approverVersion:'v2'});
   const ONB=createOnboarding({keyProof:()=>true/* t1265: owner proof is covered by test/t1265-auth.test.mjs */,S,save,pub,wallet:W,owner:OWNER,trust,base:()=>'http://fork.invalid',phone:PH,plan:c=>planFor(c),enabled:true,token:USDC,ownerPay:()=>true,

@@ -13,7 +13,8 @@ const loseAnswer=(e,{fns=['payDirect']}={})=>{const orig=e.client.write;let i=0;
   const h='0x'+'e'.repeat(56)+(++i).toString(16).padStart(8,'0');await o.beforeSend?.(h);throw Error('userOp receipt timeout '+h);};return ()=>{e.client.write=orig;};};
 
 test('t1264 #1: purchaseUsed unreadable -> retry_later (nothing paid, nothing sent), the claim is released and the SAME key retries for real',async()=>{
-  const e=engineFor();const orig=e.client.read;let down=true;e.client.read=async(fn,args)=>{if(down&&fn==='purchaseUsed')throw Error('rpc 503');return orig(fn,args);};
+  /* t1278 S11: a preflight that cannot read fails closed by itself (t1278-preflight test); here the read fails only at the send (after the preflight) */
+  const e=engineFor();const orig=e.client.read;let down=true,seen=0;e.client.read=async(fn,args)=>{if(down&&fn==='purchaseUsed'&&++seen>1)throw Error('rpc 503');return orig(fn,args);};
   const k=idem('rd');const r=await e.engine.pay({agentId:'owner',request:direct('20000','t1264-rd-1'),idempotencyKey:k});
   assert.equal(r.state,'retry_later',JSON.stringify(r));assert.equal(r.reason,'chain_read_failed');assert.equal(r.nothingPaid,true);assert.equal(pays(e.s),0,'nothing sent');
   const rw=row(e,r.purchaseKey);assert.equal(rw.state,'failed');assert.equal(rw.tx_hash,null,'released: no tx, claimable again');

@@ -87,6 +87,10 @@ public enum AllowanceText {
       let ai = name(o["aiName"]).map { T("。AI 说它是“\($0)”，未核实", ". The AI calls it \"\($0)\" (not verified)") } ?? ""
       let swap = payeeSwap ? T("。注意：你以前批准的同名收款方不是这个地址，可能是冒充", ". Warning: the payee with this name you approved before has a DIFFERENT address, this may be an impostor") : ""
       let note = name(o["note"])
+      if (o["dup"] as? Bool) == true {   // t1280 (§6#140): suspected duplicate purchase - the flag is in the signed text
+        return T("⚠️ 疑似重复购买：10 分钟内已经给 \(target) 付过同样的 \(usdc(i["single"])) USDC（\(note.map { "用途：\($0)" } ?? pz)）。这次还没付，确实要再买一次才点「再付一次」",
+                 "⚠️ Possible duplicate: \(usdc(i["single"])) USDC already went to \(target) in the last 10 minutes (\(note.map { "for: \($0)" } ?? pe)). Nothing has been paid for this one; tap \"Pay again\" only if you really want a second one")
+      }
       return T("⚠️ 新收款方 \(target)，付 \(usdc(i["single"])) USDC（\(note.map { "用途：\($0)" } ?? pz)）。AI 可能被骗，确认是你要付的人再批准", "⚠️ NEW payee \(target), \(usdc(i["single"])) USDC (\(note.map { "for: \($0)" } ?? pe)). The AI could be tricked: approve only if you mean to pay them") + ai + swap
     default:
       if s(i["purpose"]) == "all" {
@@ -98,8 +102,73 @@ public enum AllowanceText {
     }
   }
 
+  // MARK: t1281 (handbook §6#141 ③): the signed-but-hidden terms, shown under the card lines
+  /// One extra row on an approval card. `id` is the row kind: site / payee / replaces / remember / expires (UI id allow.detail.<id>).
+  public struct Detail: Equatable { public let id: String, zh: String, en: String
+    public init(id: String, zh: String, en: String) { self.id = id; self.zh = zh; self.en = en } }
+  /// Built ONLY from the signed items (the same parsed text the card lines come from), never from server free text:
+  /// - site: hosts[] (recurring / allowance) and oneOff.host even when a payee is named. The gateway (mandates.mjs match) counts a host hit
+  ///   for ANY payee on that site, so the row says so.
+  /// - payee: every full payee address (recurring.payee, oneOff.payee, payees[]), grouped in 4s like the new-payee card.
+  /// - replaces: the earlier approval this one replaces. remember: one-off with a payee (owner_payee on approval). expires: expiresInDays.
+  /// A new-payee ask card (oneOff.ask) gets none: it pays one payment only (no grant is made from these fields) and its own rows already
+  /// show the full address; agent_limits items have none of these fields.
+  public static func details(_ p: Parsed) -> [Detail] {
+    var out = [Detail]()
+    for i in p.items {
+      let kind = s(i["kind"])
+      guard ["recurring", "one_off", "allowance"].contains(kind) else { continue }
+      let o = i["oneOff"] as? [String: Any], r = i["recurring"] as? [String: Any]
+      if (o?["ask"] as? Bool) == true { continue }
+      // payees named in the signed item (lowercase, valid addresses only, no repeats)
+      var payees = [String]()
+      for a in [s(r?["payee"]), s(o?["payee"])] + ((i["payees"] as? [Any]) ?? []).map({ s($0) }) {
+        let x = a.lowercased(); if BatchVerify.addrBytes(x) != nil, !payees.contains(x) { payees.append(x) } }
+      var hosts = [String]()
+      for h in ((i["hosts"] as? [Any]) ?? []).map({ s($0) }) + [s(o?["host"])] { let x = h.lowercased(); if isHost(x), !hosts.contains(x) { hosts.append(x) } }
+      for a in payees { out.append(Detail(id: "payee", zh: "收款地址：" + OwnerAsk.grouped(a), en: "Payee address: " + OwnerAsk.grouped(a))) }
+      for h in hosts {
+        let also = payees.isEmpty ? ("", "") : ("（不只上面的收款地址）", " (not only the payee address above)")
+        out.append(Detail(id: "site", zh: "按网站：只要是 \(h) 上的收款方都算\(also.0)", en: "By site: any payee on \(h) counts\(also.1)"))
+      }
+      let rep = s(i["replaces"])
+      if !rep.isEmpty, !(i["replaces"] is NSNull) {
+        let safe = rep.count <= 40 && rep.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }
+        out.append(Detail(id: "replaces", zh: "会替换你之前批准的一项" + (safe ? "（\(short(rep))）" : ""), en: "Replaces one you approved before" + (safe ? " (\(short(rep)))" : "")))
+      }
+      if kind == "one_off", let o, !s(o["payee"]).isEmpty, let rem = o["remember"] as? Bool {
+        out.append(rem ? Detail(id: "remember", zh: "批准后记住这个收款方，以后它不算新收款方", en: "After approval this payee is remembered and no longer counts as new")
+                       : Detail(id: "remember", zh: "不记住这个收款方，只付这一次", en: "This payee is not remembered: this payment only"))
+      }
+      // t1281 review: approving a recurring item / an allowance with payees also remembers those payees as yours (gateway mandates
+      // approve inserts owner_payee) - say so; and a plain overall limit replaces the current one (ONE LIMIT)
+      if (kind == "recurring" && !s(r?["payee"]).isEmpty) || (kind == "allowance" && !payees.isEmpty) {
+        out.append(Detail(id: "remember", zh: "批准后记住这些收款方，以后它们不算新收款方", en: "After approval these payees are remembered and no longer count as new"))
+      }
+      if kind == "allowance", payees.isEmpty, hosts.isEmpty, ((i["agents"] as? [Any]) ?? []).isEmpty {
+        out.append(Detail(id: "overall", zh: "批准后会代替你现在的 AI 花钱总上限", en: "After approval this replaces your current overall AI spending limit"))
+      }
+      if let v = validity(i["expiresInDays"]) {
+        out.append(kind == "one_off" ? Detail(id: "expires", zh: "只能用一次，\(v.zh)内有效", en: "Single use, valid for \(v.en)")
+                                     : Detail(id: "expires", zh: "有效 \(v.zh)", en: "Valid for \(v.en)"))
+      }
+    }
+    return out
+  }
+  /// a host as the gateway normalizes it (/^[a-z0-9.-]{3,253}$/ after lowercasing)
+  static func isHost(_ h: String) -> Bool { h.count >= 3 && h.count <= 253 && h.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "." || $0 == "-") } }
+  /// expiresInDays (gateway: 1/24 ... 366) -> "90 天" / "90 days"; under a day in hours. Anything else -> nil (row not shown).
+  static func validity(_ v: Any?) -> (zh: String, en: String)? {
+    guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+    let d = n.doubleValue; guard d.isFinite, d > 0, d <= 366 else { return nil }
+    if d >= 1 { let k = Int(d.rounded()); return ("\(k) 天", k == 1 ? "1 day" : "\(k) days") }
+    let h = max(1, Int((d * 24).rounded())); return ("\(h) 小时", h == 1 ? "1 hour" : "\(h) hours")
+  }
+
   // MARK: the new-payee card
   /// The server's ask summary (payee + amount) must be exactly the ONE signed one-off ask item.
+  /// t1280: the signed one-off ask is a suspected duplicate (only "pay again" / decline are offered).
+  public static func askIsDup(_ p: Parsed) -> Bool { ((p.items.first?["oneOff"] as? [String: Any])?["dup"] as? Bool) == true }
   public static func askMatches(_ p: Parsed, payee: String, amount: String) -> Bool {
     guard p.items.count == 1, let i = p.items.first, s(i["kind"]) == "one_off", let o = i["oneOff"] as? [String: Any], (o["ask"] as? Bool) == true else { return false }
     return s(o["payee"]).lowercased() == payee.lowercased() && !payee.isEmpty && atomic(i["single"]).map(String.init) == amount

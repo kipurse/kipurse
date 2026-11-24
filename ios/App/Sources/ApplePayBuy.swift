@@ -23,6 +23,7 @@ struct ApplePayBuySheet: View {
   @State private var busy = false
   @State private var err: String?
   @State private var state: OnrampState = .checking
+  @State private var baseline: OnrampBaseline?   // t1278 (A4) / t1279 (R14): this wallet's USDC + chain head (two nodes) before paying
   @StateObject private var cbv = CBVerifyModel()
   var mock: Bool {
     #if DEBUG
@@ -153,11 +154,16 @@ struct ApplePayBuySheet: View {
     if od?.0 == 503, od?.1["error"] as? String == "verify_unavailable" { err = T("暂时无法确认 Coinbase 验证状态，没有扣钱。请稍后再试。", "Couldn't check your Coinbase verification right now. Nothing was charged. Try again shortly."); return }
     guard let (c, j) = od, c == 200, j["ok"] as? Bool == true, let u = ApplePayOnramp.payURL(j), let ref = j["ref"] as? String else {
       err = T("现在没法用 Apple Pay 直接买（Coinbase 拒绝或还没开通）。钱没有动。", "Apple Pay direct buying isn't available right now (Coinbase declined or not enabled). No money moved."); return }
+    baseline = nil; if !mock { baseline = await OnrampBaseline.read(wallet: Operator.wallet) }   // t1278 (A4) / t1279 (R14): a new purchase never reuses an old baseline
     step = .paying(u, ref)
   }
   func poll(_ ref: String) async {
     for _ in 0..<180 {
-      if let (c, j) = await post("status", ["ref": ref]) { let s = OnrampState.parse(c, j, secondsSinceReturn: 0); withAnimation { state = s }; if s.isFinal { if case .arrived = s { Haptics.success(); await m.refresh() }; return } }
+      if let (c, j) = await post("status", ["ref": ref]) { var s = OnrampState.parse(c, j, secondsSinceReturn: 0)
+        // t1278 (A4): the server's "arrived" shows only once the phone sees it on chain (two agreeing nodes); until then "arriving"
+        // t1279 (R14): tx must be mined after the purchase started and carry ~the typed $ amount (net, fees out); else balance rose by ~it
+        if !mock, case .arrived(let a, let tx) = s { s = s.gated(chainConfirmed: await OnrampChainConfirm.confirmed(wallet: Operator.wallet, typed: Int64(amount) * 1_000_000, shown: a, txHash: tx, baseline: baseline)) }
+        withAnimation { state = s }; if s.isFinal { baseline = nil; if case .arrived = s { Haptics.success(); await m.refresh() }; return } }
       try? await Task.sleep(nanoseconds: 4_000_000_000); if Task.isCancelled { return }
     }
   }

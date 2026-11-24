@@ -56,7 +56,7 @@ export function createJointTrust({store=plainStore,file,auditFile,caps,feePpm=10
       let cc;try{cc=C();}catch{return {ok:false,trusted:false,reason:'owner_limits_not_set',detail:'run kipurse_setup: the owner must choose the limits first'};}
       if(a>cc.unrecognizedSingle)return {ok:false,trusted:false,reason:'over_unrecognized_cap',detail:`payee not on the owner's trust list: at most ${cc.unrecognizedSingle} atomic USDC per payment (owner-set); ask with kipurse_request_trust`};
       if(BigInt(S.untrustedSpend[dd]??0)+tot>cc.unrecognizedDaily)return {ok:false,trusted:false,reason:'over_unrecognized_daily',detail:'owner-set daily cap for unrecognized payees reached (incl. fees)'};return {ok:true,trusted:false};},
-    recordPaid({decision,amount,purchaseKey}){const a=BigInt(amount),dd=day(now()),tot=a+fee(a);
+    recordPaid({decision,amount,purchaseKey,networkFee=0n}){const a=BigInt(amount),dd=day(now()),tot=a+fee(a)+BigInt(networkFee??0n);/* t1281 (§6#141): what left the wallet incl. the network fee */
       if(decision?.trusted&&S.trusted[decision.key]){const v=S.trusted[decision.key];v.spent[dd]=(BigInt(v.spent[dd]??0)+tot).toString();}else S.untrustedSpend[dd]=(BigInt(S.untrustedSpend[dd]??0)+tot).toString();
       save();audit('paid',{purchaseKey,amount:a.toString(),trusted:!!decision?.trusted,subject:decision?.key??null});},
     auditVerify(){let p='genesis';for(const l of store.readLines(auditFile)){const r=JSON.parse(l);const {hash,...rest}=r;if(r.prev!==p||sha(JSON.stringify(rest))!==hash)return false;p=hash;}return true;},

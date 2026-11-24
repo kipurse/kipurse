@@ -27,9 +27,9 @@ test('t1264: daily operations used up (decision wait, retryable) is not stored; 
   const k2=idem('pol');const p=await e.engine.pay({agentId:'owner',request:direct('999000000','t1264r-pol'),idempotencyKey:k2});assert.equal(p.state,'rejected');assert.ok(stored(e,k2),'policy refusal is terminal: stored');});
 
 test('t1264: per-AI caps (agentSpent) count only the AI\'s own payments, not owner-approved asks / owner / withdrawal rows',()=>{
-  const db=new DatabaseSync(':memory:');let t=1.8e12;db.exec(`CREATE TABLE purchases(purchase_key TEXT PRIMARY KEY, state TEXT NOT NULL);CREATE TABLE purchase_order(purchase_key TEXT PRIMARY KEY, created_at INTEGER NOT NULL, agent_id TEXT, payee TEXT, amount TEXT, tier TEXT, address_status TEXT, order_json TEXT NOT NULL)`);
+  const db=new DatabaseSync(':memory:');let t=1.8e12;db.exec(`CREATE TABLE purchases(purchase_key TEXT PRIMARY KEY, state TEXT NOT NULL, result TEXT);/* t1281: the real purchases table has result (fee / networkFee) */CREATE TABLE purchase_order(purchase_key TEXT PRIMARY KEY, created_at INTEGER NOT NULL, agent_id TEXT, payee TEXT, amount TEXT, tier TEXT, address_status TEXT, order_json TEXT NOT NULL)`);
   const M=createMandates({db,now:()=>t});const p=M.propose({items:[{kind:'agent_limits',agentId:'grok',daily:'10',monthly:'100'}],by:'owner'});assert.equal(M.approve(p.id,()=>true).ok,true);
-  const add=(k,amt,origin)=>{db.prepare(`INSERT INTO purchases VALUES(?,'paid')`).run(k);db.prepare(`INSERT INTO purchase_order VALUES(?,?,?,?,?,?,?,?)`).run(k,t,'grok','0x1',String(amt),'x',null,'{}');if(origin)db.prepare(`INSERT INTO purchase_origin VALUES(?,?)`).run(k,origin);};
+  const add=(k,amt,origin)=>{db.prepare(`INSERT INTO purchases VALUES(?,'paid',NULL)`).run(k);db.prepare(`INSERT INTO purchase_order VALUES(?,?,?,?,?,?,?,?)`).run(k,t,'grok','0x1',String(amt),'x',null,'{}');if(origin)db.prepare(`INSERT INTO purchase_origin VALUES(?,?)`).run(k,origin);};
   add('ai1',4000000,null);add('ask1',50000000,'owner_ask');add('own1',20000000,'owner');add('wd1',30000000,'withdrawal');add('ai2',1000000,'ai');
   assert.equal(M.agents().find(a=>a.agentId==='grok').spentTodayAtomic,'5000000','only the AI rows');
   assert.equal(M.agentCheck('grok',5000000n),null,'5 + 5 <= 10: the owner-approved 50 USDC does not use up the AI cap');

@@ -127,5 +127,15 @@ public enum PhoneTrust {
     let h = Hex.encode(Array(Keccak.hash(x + y).prefix(8))).dropFirst(2).uppercased(); var g = [String](); var s = Substring(h)
     while !s.isEmpty { g.append(String(s.prefix(4))); s = s.dropFirst(4) }; return g.joined(separator: "-")
   }
+  /// t1280 (Q4): the trust epoch the server put into a trust / signer-grant message must be the merchant's CURRENT epoch on chain:
+  /// trust.trustOf(wallet, merchant).epoch (first word of the record in every Kipurse trust version), read by the phone itself from two
+  /// agreeing public nodes. Any read failure, disagreement or different epoch = false (the phone refuses to sign).
+  public static func chainEpochMatches(account: String, merchant: String, epoch: String, trust: String = KipurseSuite.active.trust,
+                                       call: RequestVerify.ChainCall = { to, d in await ChainRPC.ethCall(to, d, agreed: true) }) async -> Bool {
+    guard let a = addr(account), let m = b32(merchant), let want = UInt64(epoch), String(want) == epoch else { return false }
+    let data = BatchVerify.sel("trustOf(address,bytes32)") + String(Hex.encode(a + m).dropFirst(2))
+    guard let v = await call(trust, data), let b = Hex.decode(v), b.count >= 32, b.count % 32 == 0, b.prefix(24).allSatisfy({ $0 == 0 }) else { return false }
+    return b[24..<32].reduce(UInt64(0)) { $0 << 8 | UInt64($1) } == want
+  }
   public static func rejectMessage(id: String, payee: String) -> String { "Kipurse: I reject trust request \(id) for payee \(payee). Nothing is trusted." }
 }

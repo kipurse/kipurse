@@ -40,6 +40,6 @@ export function createOwnerSurface({ownerSecret,jointTrust,ownerGuard,engine,log
       const s=sess(req);if(!s)return send(401,{},'仅限主人：请用登录文件里的一次性链接登录');
       if(req.method==='GET'&&u.pathname==='/')return send(200,{},page(s));
       if(req.method==='POST'&&u.pathname==='/act'){const o=req.headers.origin;if(o&&o!==`http://localhost:${port}`&&o!==`http://127.0.0.1:${port}`)return send(403,{},'bad origin');
-        const b=await body(req);if(!same(b.csrf,s.csrf))return send(403,{},'bad csrf');let msg;try{msg=await act(b.kind,b.id);}catch(e){msg='失败：'+e.message;}return send(200,{},page(s,msg));}
+        const b=await body(req);if(!same(b.csrf,s.csrf))return send(403,{},'bad csrf');let msg;try{msg=await act(b.kind,b.id);}catch(e){msg='失败：'+(typeof e?.code==='string'?e.code:'failed');}/* t1278 S6 */return send(200,{},page(s,msg));}
       return send(404,{},'not found');}catch(e){send(500,{},'error');}});
   return {server,listen:()=>new Promise(r=>server.listen(port,host,()=>r(server))),close:()=>server.close(),_newLoginForTests:()=>{login=randomBytes(24).toString('hex');return login;}};}

@@ -11,6 +11,8 @@
 // No timers, no jobs: everything is evaluated when a payment is attempted.
 import {createHash,randomBytes} from 'node:crypto';
 import {makeScope,scopeCheck} from './limit-scope.mjs';
+import {costOf,incomingCost,missingOk} from './spend-cost.mjs';
+const DEFAULT_MAX_NF=50_000n;   // t1281: the network fee cap every wallet signs (maxNetworkFee 0.05 USDC)
 const U=1000000n;
 const usd=a=>{const n=BigInt(a),w=n/U,f=(n%U).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
 const atom=v=>{if(v===undefined||v===null||v==='')return undefined;if(typeof v==='bigint')return v;const m=/^\s*\$?\s*([0-9]{1,12})(?:\.([0-9]{1,6}))?\s*(?:usdc|usd|u)?\s*$/i.exec(String(v));if(!m)return null;return BigInt(m[1])*U+BigInt((m[2]??'').padEnd(6,'0')||'0');};
@@ -61,14 +63,16 @@ export function normalizeItem(x={}){const kind=x.kind??(x.agentId&&!x.purpose?'a
   const single=atom(x.single),daily=atom(x.daily),monthly=atom(x.monthly);
   for(const v of [single,daily,monthly])if(v===null)bad('bad_amount','amounts are decimal USDC like "5" or "0.5"');
   if(single===undefined||single<=0n)bad('single_required','single = max USDC per payment');
-  const d=daily??single,mo=monthly??(d*30n);if(d<single||mo<d)bad('caps_order','need single <= daily <= monthly');
+  /* t1281 review: limits now count amount + fee (+ network fee at claim), so an omitted daily defaults to the per-payment cap PLUS the
+     highest fee the owner signed (0.1%) and the max network fee - one payment of exactly `single` still fits its own day */
+  const d=daily??(single+(single*1000n+999999n)/1000000n+DEFAULT_MAX_NF),mo=monthly??(d*30n);if(d<single||mo<d)bad('caps_order','need single <= daily <= monthly');
   const payees=[...new Set((x.payees??[]).map(String).filter(a=>ADDR.test(a)).map(lc))].slice(0,16);
   const hosts=[...new Set((x.hosts??[]).map(h=>lc(h).replace(/^https?:\/\//,'').replace(/\/.*$/,'')).filter(h=>/^[a-z0-9.-]{3,253}$/.test(h)))].slice(0,16);
   const agents=[...new Set((x.agents??[]).map(a=>cleanTxt(a,80)).filter(Boolean))].slice(0,8);
   let recurring=null;if(x.recurring){const r=x.recurring;const p=ADDR.test(String(r.payee??''))?lc(r.payee):bad('recurring_payee_required');const a=atom(r.amount);if(!a)bad('recurring_amount_required');
     const every=['day','week','month','year'].includes(r.every)?r.every:'month';recurring={payee:p,amount:a.toString(),every,name:cleanTxt(r.name,60)||null};}
   let oneOff=null;if(x.oneOff){const o=x.oneOff;const p=ADDR.test(String(o.payee??''))?lc(o.payee):(o.host?null:bad('one_off_payee_required'));
-    oneOff={payee:p,host:o.host?lc(o.host):null,amount:single.toString(),idem:cleanTxt(o.idem,128)||null,remember:o.remember!==false,aiName:cleanTxt(o.aiName,60)||null,...(o.ask===true?{ask:true,note:cleanTxt(o.note,80)||null}:{})};}/* t1170u: ask = 'do you know this payee?' card (trust | once | reject) */
+    oneOff={payee:p,host:o.host?lc(o.host):null,amount:single.toString(),idem:cleanTxt(o.idem,128)||null,remember:o.remember!==false,aiName:cleanTxt(o.aiName,60)||null,...(o.ask===true?{ask:true,note:cleanTxt(o.note,80)||null,...(o.dup===true?{dup:true}:{})}:{})};}/* t1280: dup = suspected duplicate purchase (part of what Face ID signs) *//* t1170u: ask = 'do you know this payee?' card (trust | once | reject) */
   const ttlDays=Number(x.expiresInDays??(oneOff?1:365));
   return {kind:oneOff?'one_off':recurring?'recurring':'allowance',purpose,label:cleanTxt(x.label,60)||null,single:single.toString(),daily:(recurring?BigInt(recurring.amount):d).toString(),monthly:(recurring?BigInt(recurring.amount)*(recurring.every==='day'?31n:recurring.every==='week'?5n:1n):mo).toString(),
     payees:recurring?[recurring.payee]:oneOff?.payee?[oneOff.payee]:payees,hosts:oneOff?.host?[oneOff.host]:hosts,agents,recurring,oneOff,expiresInDays:Math.max(1/24,Math.min(366,ttlDays||365)),replaces:x.replaces?cleanTxt(x.replaces,40):null};}
@@ -80,13 +84,19 @@ export const proposalDigest=(wallet,p)=>'0x'+createHash('sha256').update(proposa
 export const ASK_MODES=['trust','once'];
 export const askText=(wallet,p,mode)=>proposalText(wallet,p)+`\nmode:${mode}`;
 export const askDigest=(wallet,p,mode)=>'0x'+createHash('sha256').update(askText(wallet,p,mode)).digest('hex');
+/** t1280 (§6#140): a suspected-duplicate card offers only 'once' (the payee is already known; trusting it means nothing) */
+export const askModesFor=items=>items?.[0]?.oneOff?.dup===true?['once']:ASK_MODES;
 export const isAskItems=items=>Array.isArray(items)&&items.length===1&&items[0]?.kind==='one_off'&&items[0]?.oneOff?.ask===true&&!!items[0]?.oneOff?.payee;
 /** one-payment cards (one_off only) live 24 h (t1170u decision 3); other proposals keep 7 days */
 const proposalTtl=items=>Array.isArray(items)&&items.length&&items.every(i=>i?.kind==='one_off')?86400e3:7*86400e3;
 /** t1181u (§6#84): `scope` = {chainId, token} of the engine. Every mandate (json) and per-AI cap (side table limit_scope, so
  *  agent_cap keeps its 5 columns and older releases stay rollback-safe) is pinned to it; rows from before t1181u are migrated
  *  to it once (same limits, same behaviour). A record of another network / token never covers a payment. */
-export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,onProposal=()=>{},walletCaps=null,scope=null}){
+/* t1281 (§6#141): costParams() = {ppm, maxNetworkFee}: allowance / per-AI daily + monthly spend counts amount + protocol fee + network fee
+   (spend-cost.mjs), and so does the payment being checked; per-payment (single) caps compare the amount only. */
+export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,onProposal=()=>{},walletCaps=null,scope=null,costParams=()=>({ppm:0n,maxNetworkFee:0n})}){
+  const cp=()=>{try{return costParams()??{ppm:0n,maxNetworkFee:0n};}catch{return {ppm:0n,maxNetworkFee:0n};}};
+  const costIn=(amount,networkFee=0n)=>incomingCost(amount,{ppm:cp().ppm,networkFee});
   const SC=scope?makeScope(scope.chainId,scope.token):null;
   db.exec(`CREATE TABLE IF NOT EXISTS mandate(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, approved_at INTEGER, expires_at INTEGER, state TEXT NOT NULL, kind TEXT NOT NULL, purpose TEXT, json TEXT NOT NULL, proposal_id TEXT, uses INTEGER NOT NULL DEFAULT 0)`);
   db.exec(`CREATE TABLE IF NOT EXISTS mandate_proposal(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, state TEXT NOT NULL, by TEXT, reason TEXT, user_request TEXT, items_json TEXT NOT NULL, dedupe TEXT, decided_at INTEGER)`);
@@ -121,8 +131,8 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   const row2m=r=>{const j=JSON.parse(r.json);return {id:r.id,state:r.state,kind:r.kind,purpose:r.purpose,purposeName:{zh:purposeName(r.purpose,true),en:purposeName(r.purpose,false)},...j,createdAt:r.created_at,approvedAt:r.approved_at,expiresAt:r.expires_at,uses:r.uses};};
   const active=()=>{const t=now();return db.prepare(`SELECT * FROM mandate WHERE state='active'`).all().filter(r=>!r.expires_at||r.expires_at>t).filter(r=>!(r.kind==='allowance'&&r.purpose!=='all')).map(row2m);}; // ONE LIMIT: old per-purpose allowances are retired
   /** atomic spend inside one mandate in the window (paid / in-flight rows only). */
-  const spent=(mid,ms)=>{try{return db.prepare(`SELECT o.amount,o.order_json FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).all(now()-ms,'%"mandateId":"'+mid+'"%').reduce((a,x)=>a+BigInt(x.amount??0),0n);}catch{return 0n;}};
-  const countIn=(mid,ms)=>{try{return db.prepare(`SELECT count(*) AS n FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).get(now()-ms,'%"mandateId":"'+mid+'"%').n;}catch{return 0;}};
+  const spent=(mid,ms)=>{try{const c=cp();return db.prepare(`SELECT o.amount,o.order_json,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).all(now()-ms,'%"mandateId":"'+mid+'"%').reduce((a,x)=>a+costOf(x,c),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fees */
+  const countIn=(mid,ms)=>{try{return db.prepare(`SELECT count(*) AS n FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).get(now()-ms,'%"mandateId":"'+mid+'"%').n;}catch(e){return Number(missingOk(e,0n));}};
   const usage=m=>{const d=spent(m.id,86400e3),mo=spent(m.id,30*86400e3),lt=maxZ(BigInt(m.daily)-d),lm=maxZ(BigInt(m.monthly)-mo);/* t1166u: decimal USDC + base units side by side */return {today:usd(d),month:usd(mo),leftToday:usd(lt),leftMonth:usd(lm),todayAtomic:String(d),monthAtomic:String(mo),leftTodayAtomic:String(lt),leftMonthAtomic:String(lm)};};
   const maxZ=x=>x<0n?0n:x;
   /** The ONE overall limit: an explicit owner-approved 'all' item (if any) clamped to the wallet's on-chain caps, else the wallet caps. */
@@ -133,7 +143,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     if(ws===null)return [];const d=wd??ws,mo=wm??d*30n;
     return [{id:'wallet-limit',state:'active',kind:'allowance',purpose:OVERALL,purposeName:{zh:purposeName(OVERALL,true),en:purposeName(OVERALL,false)},label:null,single:ws.toString(),daily:(d<ws?ws:d).toString(),monthly:(mo<d?d:mo).toString(),payees:[],hosts:[],agents:[],recurring:null,oneOff:null,uses:0,virtual:true}];}
   /** Is this payment inside an owner allowance? Returns {ok:true, mandate} | {ok:false, why, mandate?, detail} | {ok:false, why:'no_mandate'}. */
-  function match({purpose,payee,host,amount,agentId,idem,chainId,token}){const pk=purposeKey(purpose);
+  function match({purpose,payee,host,amount,agentId,idem,chainId,token,networkFee=0n}){const pk=purposeKey(purpose);
     /* t1181u: mandates of another network / token never cover this payment */const ps=payScope({chainId,token});let dropped=false;
     const inScope=m=>{if(!ps)return true;const bad=scopeCheck('AI allowance',m,ps,SC);if(bad)dropped=true;return !bad;};
     const ms=active().filter(inScope);
@@ -152,23 +162,30 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
       if(m.kind==='recurring'){const per=PERIOD_MS[m.recurring.every];if(amount>BigInt(m.recurring.amount))return {ok:false,why:'recurring_price_up',mandate:m,detail:`${usd(amount)} > agreed ${usd(m.recurring.amount)}`};
         if(countIn(m.id,per*0.9)>=1)return {ok:false,why:'recurring_already_paid',mandate:m};return {ok:true,mandate:m};}
       if(amount>BigInt(m.single)){best={ok:false,why:'over_single',mandate:m,detail:`${usd(amount)} > ${usd(m.single)} per payment`};continue;}
-      const d=spent(m.id,86400e3);if(d+amount>BigInt(m.daily)){best={ok:false,why:'over_daily',mandate:m,detail:`today ${usd(d)} + ${usd(amount)} > ${usd(m.daily)}`};continue;}
-      const mo=spent(m.id,30*86400e3);if(mo+amount>BigInt(m.monthly)){best={ok:false,why:'over_monthly',mandate:m,detail:`30 days ${usd(mo)} + ${usd(amount)} > ${usd(m.monthly)}`};continue;}
+      const cost=costIn(amount,networkFee);/* t1281: day / month count amount + fee (+ the quoted network fee at claim time) */
+      const d=spent(m.id,86400e3);if(d+cost>BigInt(m.daily)){best={ok:false,why:'over_daily',mandate:m,detail:`today ${usd(d)} + ${usd(cost)} > ${usd(m.daily)} (fees included)`};continue;}
+      const mo=spent(m.id,30*86400e3);if(mo+cost>BigInt(m.monthly)){best={ok:false,why:'over_monthly',mandate:m,detail:`30 days ${usd(mo)} + ${usd(cost)} > ${usd(m.monthly)} (fees included)`};continue;}
       return {ok:true,mandate:m};}
     return best??{ok:false,why:dropped?'scope_mismatch':'no_mandate',purpose:pk};}
-  const used=mid=>{try{db.prepare(`UPDATE mandate SET uses=uses+1 WHERE id=?`).run(mid);const r=db.prepare(`SELECT * FROM mandate WHERE id=?`).get(mid);if(r?.kind==='one_off')db.prepare(`UPDATE mandate SET state='used' WHERE id=?`).run(mid);}catch{}};
+  /* t1278 S4: a one-off approval is consumed when the payment CLAIMS it (engine, inside the claim transaction: consume), so two concurrent
+     payments cannot both use it; release() gives it back after a definite failure; used(id,{consumed:true}) then only closes it. */
+  const consume=mid=>{try{return db.prepare(`UPDATE mandate SET uses=uses+1 WHERE id=? AND kind='one_off' AND uses<1 AND state='active'`).run(mid).changes>0;}catch{return false;}};
+  const release=mid=>{try{db.prepare(`UPDATE mandate SET uses=uses-1 WHERE id=? AND kind='one_off' AND uses>0 AND state='active'`).run(mid);}catch{}};
+  const used=(mid,{consumed=false}={})=>{try{if(!consumed)db.prepare(`UPDATE mandate SET uses=uses+1 WHERE id=?`).run(mid);const r=db.prepare(`SELECT * FROM mandate WHERE id=?`).get(mid);if(r?.kind==='one_off')db.prepare(`UPDATE mandate SET state='used' WHERE id=?`).run(mid);}catch{}};
   // ---- per-agent caps ----
   const agentRow=a=>{try{return db.prepare(`SELECT c.*,s.single AS single FROM agent_cap c LEFT JOIN agent_cap_single s ON s.agent_id=c.agent_id WHERE c.agent_id=?`).get(String(a));}catch{return null;}};
   /* t1264: per-AI caps count only the AI's own payments: not owner-approved asks, owner or withdrawal rows (purchase_origin, same rule as the AI total) */
   try{db.exec(`CREATE TABLE IF NOT EXISTS purchase_origin(purchase_key TEXT PRIMARY KEY, origin TEXT NOT NULL)`);}catch{}
-  const agentSpent=(a,ms)=>{try{return db.prepare(`SELECT o.amount FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key LEFT JOIN purchase_origin g ON g.purchase_key=o.purchase_key WHERE o.agent_id=? AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND (g.origin IS NULL OR g.origin='ai')`).all(String(a),now()-ms).reduce((s,x)=>s+BigInt(x.amount??0),0n);}catch{return 0n;}};
-  function agentCheck(agentId,amount,scope){if(!agentId||agentId==='owner')return null;const r=agentRow(agentId);if(!r)return null;
+  const agentSpent=(a,ms)=>{try{const c=cp();return db.prepare(`SELECT o.amount,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key LEFT JOIN purchase_origin g ON g.purchase_key=o.purchase_key WHERE o.agent_id=? AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND (g.origin IS NULL OR g.origin='ai')`).all(String(a),now()-ms).reduce((s,x)=>s+costOf(x,c),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fees */
+  /* t1278 S4: extra = atomic USDC of this AI not yet in purchase_order (its pending 10-minute holds), added to today's / this month's spend */
+  function agentCheck(agentId,amount,scope,extra=0n,{networkFee=0n}={}){if(!agentId||agentId==='owner')return null;const r=agentRow(agentId);if(!r)return null;
     {const ps=payScope(scope);if(ps&&!r.stopped){const bad=scopeCheck('per-AI limit',agentScopeRow(agentId),ps,SC);if(bad)return bad;}}/* t1181u */
     if(r.stopped)return {state:'rejected',reason:'AGENT_STOPPED',nothingPaid:true,decision:'refuse',fix:'The owner stopped payments for this AI in the Kipurse app. Do not retry; tell the user.',say_to_user:'没有付款：你已在 Kipurse 里停用了这个 AI 的付款权限。/ Not paid: you turned off payments for this AI in Kipurse.'};
     if(amount===undefined)return null;
     if(r.single&&amount>BigInt(r.single))return {state:'rejected',reason:'AGENT_SINGLE_CAP',nothingPaid:true,capHit:true,detail:`this AI: ${usd(amount)} > ${usd(r.single)} per payment`,say_to_user:`没有付款：这笔超过了这个 AI 的每笔额度（${usd(r.single)} USDC）。/ Not paid: over this AI's per-payment limit (${usd(r.single)} USDC).`};
-    if(r.daily&&agentSpent(agentId,86400e3)+amount>BigInt(r.daily))return {state:'rejected',reason:'AGENT_DAILY_CAP',nothingPaid:true,capHit:true,detail:`this AI: today ${usd(agentSpent(agentId,86400e3))} + ${usd(amount)} > ${usd(r.daily)}`,say_to_user:`没有付款：这个 AI 今天的额度（${usd(r.daily)} USDC）用完了。/ Not paid: this AI's daily limit (${usd(r.daily)} USDC) is used up.`};
-    if(r.monthly&&agentSpent(agentId,30*86400e3)+amount>BigInt(r.monthly))return {state:'rejected',reason:'AGENT_MONTHLY_CAP',nothingPaid:true,capHit:true,detail:`this AI: 30 days over ${usd(r.monthly)}`,say_to_user:`没有付款：这个 AI 本月的额度（${usd(r.monthly)} USDC）用完了。/ Not paid: this AI's monthly limit is used up.`};
+    const cost=costIn(amount,networkFee);/* t1281: day / month count amount + fee (+ the quoted network fee at claim time); single: the amount */
+    if(r.daily&&agentSpent(agentId,86400e3)+BigInt(extra)+cost>BigInt(r.daily))return {state:'rejected',reason:'AGENT_DAILY_CAP',nothingPaid:true,capHit:true,detail:`this AI: today ${usd(agentSpent(agentId,86400e3)+BigInt(extra))} + ${usd(cost)} > ${usd(r.daily)} (fees included)`,say_to_user:`没有付款：这个 AI 今天的额度（${usd(r.daily)} USDC）用完了。/ Not paid: this AI's daily limit (${usd(r.daily)} USDC) is used up.`};
+    if(r.monthly&&agentSpent(agentId,30*86400e3)+BigInt(extra)+cost>BigInt(r.monthly))return {state:'rejected',reason:'AGENT_MONTHLY_CAP',nothingPaid:true,capHit:true,detail:`this AI: 30 days over ${usd(r.monthly)}`,say_to_user:`没有付款：这个 AI 本月的额度（${usd(r.monthly)} USDC）用完了。/ Not paid: this AI's monthly limit is used up.`};
     return null;}
   const agentStop=(a,stop=true)=>{const r=agentRow(a);if(stop)scopeAgent(a);if(stop)db.prepare(`INSERT INTO agent_cap(agent_id,daily,monthly,stopped,updated_at) VALUES(?,?,?,1,?) ON CONFLICT(agent_id) DO UPDATE SET stopped=1,updated_at=excluded.updated_at`).run(String(a),r?.daily??null,r?.monthly??null,now());return {ok:true,agentId:a,stopped:!!stop};};
   const agents=()=>{try{return db.prepare(`SELECT c.*,s.single AS single FROM agent_cap c LEFT JOIN agent_cap_single s ON s.agent_id=c.agent_id`).all().map(r=>{const st=agentSpent(r.agent_id,86400e3),sm=agentSpent(r.agent_id,30*86400e3);return {agentId:r.agent_id,single:r.single?usd(r.single):null,daily:r.daily?usd(r.daily):null,monthly:r.monthly?usd(r.monthly):null,stopped:!!r.stopped,spentToday:usd(st),spentMonth:usd(sm),
@@ -187,10 +204,14 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     const p={id:id('apr'),items:its};db.prepare(`INSERT INTO mandate_proposal VALUES(?,?,?,?,?,?,?,?,NULL)`).run(p.id,now(),'pending',String(by).slice(0,80),cleanTxt(reason,300),cleanTxt(user_request,500),JSON.stringify(its),dedupe);
     const v=view(db.prepare(`SELECT * FROM mandate_proposal WHERE id=?`).get(p.id));if(by!=='owner')try{onProposal(v);}catch{}return v;}
   function view(r){if(!r)return null;const items=JSON.parse(r.items_json);return {id:r.id,state:r.state,by:r.by,reason:r.reason,user_request:r.user_request,createdAt:r.created_at,decidedAt:r.decided_at,
-    items:items.map(i=>({...i,purposeName:i.purpose?{zh:purposeName(i.purpose,true),en:purposeName(i.purpose,false)}:null,payeeNames:(i.payees??[]).map(a=>nameOf(a)),human:human(i)})),digest:proposalDigest(wallet,{id:r.id,items,scope:SC}),signText:proposalText(wallet,{id:r.id,items,scope:SC}),...(isAskItems(items)?{ask:{payee:items[0].oneOff.payee,amount:items[0].single,expiresAt:r.created_at+proposalTtl(items),modes:Object.fromEntries(ASK_MODES.map(m=>[m,{digest:askDigest(wallet,{id:r.id,items,scope:SC},m),signText:askText(wallet,{id:r.id,items,scope:SC},m)}]))}}:{})};}
+    items:items.map(i=>({...i,purposeName:i.purpose?{zh:purposeName(i.purpose,true),en:purposeName(i.purpose,false)}:null,payeeNames:(i.payees??[]).map(a=>nameOf(a)),human:human(i)})),digest:proposalDigest(wallet,{id:r.id,items,scope:SC}),signText:proposalText(wallet,{id:r.id,items,scope:SC}),...(isAskItems(items)?{ask:{payee:items[0].oneOff.payee,amount:items[0].single,expiresAt:r.created_at+proposalTtl(items),modes:Object.fromEntries(askModesFor(items).map(m=>[m,{digest:askDigest(wallet,{id:r.id,items,scope:SC},m),signText:askText(wallet,{id:r.id,items,scope:SC},m)}]))}}:{})};}
   function human(i){if(i.kind==='agent_limits')return {zh:`${i.agentId}：${i.single?`每笔最多 ${usd(i.single)}，`:''}每天最多 ${i.daily?usd(i.daily):'不限'}，每月最多 ${i.monthly?usd(i.monthly):'不限'} USDC${i.resume?'，并恢复付款':''}`,en:`${i.agentId}: ${i.single?`up to ${usd(i.single)} per payment, `:''}up to ${i.daily?usd(i.daily):'no limit'} a day, ${i.monthly?usd(i.monthly):'no limit'} a month${i.resume?', payments back on':''}`};
     const pn=purposeName(i.purpose,true),pe=purposeName(i.purpose,false);const who=(i.payees??[]).map(a=>nameOf(a)??'未核实的新收款方').join('、');
     if(i.kind==='recurring'){const known=nameOf(i.recurring.payee);const nm=known??(i.recurring.name?`“${i.recurring.name}”（AI 给的名字，收款方未核实）`:'未核实的新收款方');return {zh:`${pn}：每${({day:'天',week:'周',month:'月',year:'年'})[i.recurring.every]}自动付 ${nm}，最多 ${usd(i.recurring.amount)} USDC；涨价或换收款方会再问你`,en:`${pe}: pay ${i.recurring.name??'this payee'} up to ${usd(i.recurring.amount)} USDC every ${i.recurring.every}${known?'':' (name given by the AI, payee not verified)'}; a higher price or another payee asks you again`};}
+    if(i.kind==='one_off'&&i.oneOff?.ask&&i.oneOff?.dup===true){const pa=i.payees?.[0];const sh=pa?short(pa):'';const note=i.oneOff?.note;/* t1280: suspected duplicate card */
+      const zh=`⚠️ 疑似重复购买：10 分钟内已经给 ${sh} 付过同样的 ${usd(i.single)} USDC（用途：${note??pn}）。这次还没付。确实要再买一次才点「再付一次」，不需要就点「拒绝」`;
+      const en=`⚠️ Possible duplicate: ${usd(i.single)} USDC already went to ${sh} in the last 10 minutes (for: ${note??pe}). Nothing has been paid for this one. Tap "Pay again" only if you really want a second one; otherwise tap "Decline"`;
+      return {zh,en,newPayee:false,payeeSwap:false,ask:true,dup:true};}
     if(i.kind==='one_off'&&i.oneOff?.ask){const pa=i.payees?.[0];const sh=pa?short(pa):'';const ai=i.oneOff?.aiName;const note=i.oneOff?.note;const swap=ai&&pa?rememberedByName(ai).filter(x=>x!==lc(pa)):[];
       const who=ai?`“${ai}”`:'这个收款方',whoEn=ai?`"${ai}"`:'this payee';/* t1212 §6#97: say what ONE Face ID does */
       const zh=`⚠️ 新收款方 ${sh}，付 ${usd(i.single)} USDC（用途：${note??pn}）。认识这个收款方吗？超过了 AI 自动付款上限，AI 可能被骗，确认是你要付的人再批准。「认识并信任」：一次 Face ID 就信任${who}并付这笔 ${usd(i.single)} USDC；「只付这一次」：只付这笔，不加入信任`+(ai?`。AI 说它是“${ai}”，未核实`:'')+(swap.length?`。注意：你以前批准的「${ai}」不是这个地址，可能是冒充`:'');
@@ -221,7 +242,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   function approve(pid,verify,{mode,also}={}){const r=db.prepare(`SELECT * FROM mandate_proposal WHERE id=?`).get(String(pid));if(!r)return {ok:false,error:'unknown_proposal'};if(r.state!=='pending')return {ok:false,error:'not_pending',state:r.state};
     const items=JSON.parse(r.items_json);
     if(now()-r.created_at>proposalTtl(items)){db.prepare(`UPDATE mandate_proposal SET state='expired' WHERE id=?`).run(r.id);return {ok:false,error:'expired'};}
-    const ask=isAskItems(items);if(ask&&!ASK_MODES.includes(mode))return {ok:false,error:'mode_required',modes:ASK_MODES};if(!ask&&mode!==undefined&&mode!==null)return {ok:false,error:'mode_not_allowed'};
+    const ask=isAskItems(items);if(ask&&!askModesFor(items).includes(mode))return {ok:false,error:'mode_required',modes:askModesFor(items)};if(!ask&&mode!==undefined&&mode!==null)return {ok:false,error:'mode_not_allowed'};
     if(!verify(ask?askDigest(wallet,{id:r.id,items,scope:SC},mode):proposalDigest(wallet,{id:r.id,items,scope:SC})))return {ok:false,error:'not_owner'};
     if(ask){/* t1170u: the server pays this exact request itself (no reusable one_off allowance).
       t1264: 'trust' no longer remembers the payee here (that was BEFORE any payment); the approval flow remembers it only after the payment
@@ -248,4 +269,4 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   const expire=pid=>{const x=db.prepare(`UPDATE mandate_proposal SET state='expired',decided_at=? WHERE id=? AND state='pending'`).run(now(),String(pid));return {ok:x.changes>0};};
   const revoke=mid=>{const x=db.prepare(`UPDATE mandate SET state='revoked' WHERE id=? AND state='active'`).run(String(mid));return {ok:x.changes>0};};
   const list=()=>active().filter(m=>m.kind!=='one_off'||m.uses<1).map(m=>({...m,payeeNames:m.payees.map(a=>nameOf(a)),usage:usage(m),human:human({...m,expiresInDays:0})}));
-  return {OVERALL,CATEGORIES,classifyCategory,overall:()=>{const o=overallList()[0]??null;return o?{...o,total:o.monthly,usage:usage(o)}:null;},remember,remembered,isRemembered,rememberedByName,forget,match,used,agentCheck,agentStop,agents,propose,getProposal,remind,proposals,approve,reject,expire,revoke,list,usage,human,BEGINNER_DEFAULTS,PURPOSES};}
+  return {OVERALL,CATEGORIES,classifyCategory,overall:()=>{const o=overallList()[0]??null;return o?{...o,total:o.monthly,usage:usage(o)}:null;},remember,remembered,isRemembered,rememberedByName,forget,match,used,consume,release,agentCheck,agentStop,agents,propose,getProposal,remind,proposals,approve,reject,expire,revoke,list,usage,human,BEGINNER_DEFAULTS,PURPOSES};}

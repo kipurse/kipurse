@@ -81,7 +81,7 @@ final class T1238KeySeatTests: XCTestCase {
     // a V5.2 / old-style wallet (no seat call) still goes through the old checks: the legacy vectors pass exactly as before
     KipurseSuite.pin(nil)
     let v = (try? JSONSerialization.jsonObject(with: Data(BatchVectors.json.utf8))) as? [String: Any] ?? [:]
-    let r = BatchVerify.enroll(calls: (v["enroll"] as? [[String: Any]]) ?? [], wallet: v["wallet"] as! String, owner: v["owner"] as! String, x: Hex.decode(v["x"] as! String)!, y: Hex.decode(v["y"] as! String)!)
+    let r = BatchVerify.enroll(calls: (v["enroll"] as? [[String: Any]]) ?? [], wallet: v["wallet"] as! String, owner: v["owner"] as! String, x: Hex.decode(v["x"] as! String)!, y: Hex.decode(v["y"] as! String)!, replacing: v["revokeApprover"] as? String)
     XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
   }
 }

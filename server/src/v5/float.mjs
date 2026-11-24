@@ -13,7 +13,7 @@ import {feeFor} from './abi.mjs';
 const VOUCHER_T=parseAbiParameters('address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce,bytes sig');
 export const FLOAT_DEFAULTS={thresholdAtomic:1_000_000n,sessionHours:24,reconcileGas:120000n,fundGas:400000n};
 
-export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow,txLock,keyFile}){
+export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow,txLock,keyFile,isPaused=()=>{try{return !!cfg.isPaused?.();}catch{return true;}}}){
   const F={...FLOAT_DEFAULTS,...(cfg.float??{})};
   ledger.db.exec(`CREATE TABLE IF NOT EXISTS float_vouchers(nonce TEXT PRIMARY KEY, session TEXT NOT NULL, purchase_key TEXT, payee TEXT NOT NULL, amount INTEGER NOT NULL, valid_before INTEGER NOT NULL, state TEXT NOT NULL, at INTEGER NOT NULL)`);
   ledger.db.exec(`CREATE TABLE IF NOT EXISTS float_sessions(session TEXT PRIMARY KEY, float_vault TEXT, funded INTEGER, fee_reserve INTEGER, network_fee INTEGER, fund_tx TEXT, funded_at INTEGER,
@@ -26,6 +26,7 @@ export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow
 
   /** Fund today's float and open a session (executor tx). amount defaults to the owner's float cap. */
   async function fund({amount,hours=F.sessionHours}={}){
+    if(isPaused())return {state:'rejected',reason:'wallet_paused_for_safety',nothingPaid:true};   /* t1278 S10: never fund while AI payments are paused */
     const cap=BigInt(await rd('floatCap',[p.account]));if(cap===0n)return {state:'rejected',reason:'float_disabled_by_owner'};
     const amt=BigInt(amount??cap);if(amt>cap)return {state:'rejected',reason:'over_owner_float_cap',cap:cap.toString()};
     const now=await chainNow();let st=await onchain();
@@ -42,7 +43,7 @@ export function createFloat({cfg,rd,write,p,B,ledger,quote,estimate,fee,chainNow
     try{
       let ev=null;try{ev=cfg.everydayGet?.()??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true};}
       if(ev&&ev.authorized===false)return {state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true};
-      if(ev&&ev.authorized===true&&ev.term!=null){reserved='rsv-'+acct.address.toLowerCase();const gate=ledger.reserveFloat(reserved,amt,BigInt(ev.term));if(!gate.ok)return {state:'rejected',reason:gate.error==='reserve_failed'?'EVERYDAY_CHECK_FAILED':'EVERYDAY_TERM_LIMIT',nothingPaid:true};}
+      if(ev&&ev.authorized===true&&ev.term!=null){reserved='rsv-'+acct.address.toLowerCase();const gate=ledger.reserveFloat(reserved,amt,BigInt(ev.term),{feeReserve:feeFor(amt,await fee()),networkFee:BigInt(q.total)});/* t1281: what really leaves the wallet */if(!gate.ok)return {state:'rejected',reason:gate.error==='reserve_failed'?'EVERYDAY_CHECK_FAILED':'EVERYDAY_TERM_LIMIT',nothingPaid:true};}
       save({key:pk,address:acct.address,floatVault:fv,expiry:exp,funded:amt.toString(),pending:true}); // persisted BEFORE send: never lose a funded session key
       const tx=await write('fundFloat',[p,acct.address,amt,BigInt(exp),q.total,now+240],{label:'fundFloat'});
       q.applied?.(tx.hash);

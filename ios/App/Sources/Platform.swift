@@ -61,7 +61,7 @@ enum BiometricGate {
   static func unlockContext(reason: String) async -> LAContext? {
     if DemoGuard.active { DemoGuard.say(); return LAContext() }   // demo: no scan (the context is never used for a real key)
     await FaceIDUnlock.ensure()   // t1255 §6#124: passcode only unlocks a locked Face ID (approves nothing)
-    let ctx = LAContext(); ctx.localizedCancelTitle = L("取消"); ctx.touchIDAuthenticationAllowableReuseDuration = 10
+    let ctx = LAContext(); ctx.localizedCancelTitle = L("取消"); ctx.touchIDAuthenticationAllowableReuseDuration = 0
     var err: NSError?
     let policy: LAPolicy = .deviceOwnerAuthenticationWithBiometrics
     guard ctx.canEvaluatePolicy(policy, error: &err) else { return nil }
@@ -294,7 +294,9 @@ enum AuthLog {
     lock.lock(); defer { lock.unlock() }
     if let sz = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, sz + d.count > maxBytes {   // t1275: rotate, keep one old file
       try? fm.removeItem(at: oldURL); try? fm.moveItem(at: url, to: oldURL) }
-    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: url) }
+    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: url, options: .completeFileProtectionUntilFirstUserAuthentication) }
+    // t1280 (L3): the log (and its rotated copy) stays in Documents for the owner, but encrypted until the first unlock after boot
+    for f in [url, oldURL] where fm.fileExists(atPath: f.path) { try? fm.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: f.path) }
   }
   static func isUserCancel(_ e: Error) -> Bool {
     let n = e as NSError

@@ -32,7 +32,7 @@ test('STUDENT DAY: first payment to a new merchant = ONE Face ID (remembered), t
   const r3=await buy.buy({purpose:'study',item:'textbook',merchant:'PaperHub',to:P(1),amount:'6',idempotencyKey:'idem-st-0003'},'claude');assert.equal(r3.decision,'ask_owner','above the ONE overall per-payment limit asks');
   const f=await buy.buy({purpose:'transfer',item:'AA takeout',merchant:'小李',user_request:'给小李转 8 U',to:P(4),amount:'8',addressSource:'owner_chat',idempotencyKey:'idem-st-0005'},'claude');
   assert.equal(f.decision,'ask_owner');assert.equal(f.nothingPaid,true);assert.ok(f.approvalId);
-  const s=engine.spendingSummary({period:'today'});assert.equal(s.total,'1.7');assert.equal(spendingReport(engine,{period:'today'}).byPurpose[0].purposeName,'学习');});
+  const s=engine.spendingSummary({period:'today'});assert.equal(s.total,'1.7087');/* t1281: 0.2 + 1.5 + 0.1% fees 0.0017 + 2 network fees 0.007 */assert.equal(spendingReport(engine,{period:'today'}).byPurpose[0].purposeName,'学习');});
 
 test('WHITE-COLLAR DAY: x402 translation provider approved once then automatic; payTo swap asks; invoice to new payee asks; csv export',async()=>{
   let payTo=P(11);const f=x402(500000,null);const {engine,approveAll,buy}=mk({fetch:async(u,i)=>{const r=await x402(500000,payTo)(u,i);return r;}});const M=engine.mandates;M.propose({items:[...BEGINNER_DEFAULTS.map(d=>({...d})),{purpose:'promo',single:'20',daily:'50',monthly:'200'}]});approveAll();
@@ -58,12 +58,17 @@ test('GEEK DAY: approve an API provider once, then many x402 micro-payments in d
   const c2=await buy.buy({purpose:'daily',item:'snack 2',merchant:'Shop',to:P(24),amount:'0.8',idempotencyKey:'idem-ag-0002'},'codex');assert.equal(c2.decision,'ask_owner');
   M.agentStop('codex');const c3=await buy.buy({purpose:'daily',item:'snack 3',merchant:'Shop',to:P(24),amount:'0.1',idempotencyKey:'idem-ag-0003'},'codex');assert.equal(c3.reason,'AGENT_STOPPED');
   const other=await buy.buy({purpose:'daily',item:'tea',merchant:'Shop',to:P(24),amount:'0.5',idempotencyKey:'idem-ag-0004'},'claude');assert.equal(other.state,'paid');
-  let last;for(let i=1;i<=9;i++)last=await buy.buy({purpose:'daily',item:'loop',merchant:'Loop',to:P(25),amount:'4',idempotencyKey:'idem-lp-'+String(i).padStart(4,'0')},'claude');
-  assert.deepEqual(paused,['repeated_cap_hits']);assert.equal(last.decision,'refuse');});
+  /* t1280: an exact-repeat loop (same payee + amount) is stopped by the duplicate guard: one payment, ONE owner card, no wallet-wide pause */
+  const cards0=engine.mandates.proposals().filter(p=>p.state==='pending').length;let same=[];for(let i=1;i<=9;i++)same.push(await buy.buy({purpose:'daily',item:'loop',merchant:'Loop',to:P(25),amount:'4',idempotencyKey:'idem-lp-'+String(i).padStart(4,'0')},'claude'));
+  assert.equal(same.filter(r=>r.state==='paid').length,1,JSON.stringify(same.map(r=>[r.state,r.reason])));assert.ok(same.slice(1).every(r=>r.nothingPaid===true&&r.reason==='POSSIBLE_DUPLICATE_PURCHASE'));
+  assert.equal(engine.mandates.proposals().filter(p=>p.state==='pending').length-cards0,1,'one duplicate card, not nine');assert.deepEqual(paused,[]);
+  /* a runaway loop that keeps CHANGING the amount still hits the caps and auto-pauses (the original intent of this step) */
+  let last;for(let i=1;i<=9;i++)last=await buy.buy({purpose:'daily',item:'loop',merchant:'Loop',to:P(25),amount:(4+i/100).toFixed(2),idempotencyKey:'idem-lq-'+String(i).padStart(4,'0')},'claude');
+  assert.deepEqual(paused,['repeated_cap_hits'],JSON.stringify(last).slice(0,300));assert.equal(last.decision,'refuse');});
 
 test('ONE-SENTENCE PROMOTION: merchant order -> paid -> follows status until fulfilled -> "done, rank 2"; failed order -> refund requested',async()=>{
   const {engine,approveAll}=mk();defaults(engine);approveAll();engine.mandates.remember(P(31),'ExampleShop');/* approved once before */let n=0;
-  const fakeE=new Proxy(engine,{get(t,k){if(k==='payMerchantOrder')return async o=>({...(await t.payAny({agentId:o.agentId,payment:{to:P(31),amount:'3'},merchant:'ExampleShop',orderRef:o.merchantPurchaseId,order:o.order,purpose:o.purpose,idempotencyKey:o.idempotencyKey})),statusUrl:'https://merchant.example/status/1'});
+  const fakeE=new Proxy(engine,{get(t,k){if(k==='payMerchantOrder')return async o=>({...(await t.payAny({agentId:o.agentId,payment:{to:P(31),amount:o.merchantPurchaseId==='idem-pr-0002'?'2.5':'3'},merchant:'ExampleShop',orderRef:o.merchantPurchaseId/* t1280: the second order is a different purchase (same amount inside 10 min = duplicate guard) */,order:o.order,purpose:o.purpose,idempotencyKey:o.idempotencyKey})),statusUrl:'https://merchant.example/status/1'});
     if(k==='merchantStatus')return async()=>({ok:true,body:++n<3?{status:'processing'}:{status:'fulfilled',rank:2}});return t[k];}});
   const B=createBuy(fakeE,{sleep:async()=>{},waitMs:60000});
   const r=await B.buy({purpose:'推广',item:'bid for promotion of my new game',merchant:'ExampleShop',user_request:'把我的新游戏拿去竞价宣传',origin:'https://merchant.example',orderParams:{},budget:'5',idempotencyKey:'idem-pr-0001'},'grok');
@@ -71,7 +76,7 @@ test('ONE-SENTENCE PROMOTION: merchant order -> paid -> follows status until ful
   assert.equal(engine.orderFor(r.purchaseKey).fulfillment,'fulfilled');
   let refunds=[];const failE=new Proxy(fakeE,{get(t,k){if(k==='merchantStatus')return async()=>({ok:true,body:{status:'failed'}});if(k==='requestRefund')return async(a)=>{refunds.push(a);return {caseId:'c1'};};return t[k];}});
   const B2=createBuy(failE,{sleep:async()=>{},waitMs:0});const f=await B2.buy({purpose:'promo',item:'bid 2',merchant:'ExampleShop',origin:'https://merchant.example',orderParams:{},idempotencyKey:'idem-pr-0002'},'grok');
-  assert.equal(f.fulfillment,'failed');assert.equal(refunds.length,1);assert.match(f.say_to_user,/自动申请退款/);assert.equal(f.next_step,'tell_user_refund_requested');
+  assert.equal(f.fulfillment,'failed',JSON.stringify(f).slice(0,600));assert.equal(refunds.length,1);assert.match(f.say_to_user,/自动申请退款/);assert.equal(f.next_step,'tell_user_refund_requested');
   assert.deepEqual(readMerchantStatus({order:{state:'expired'}}).status,'failed');assert.equal(readMerchantStatus({status:'pending'}).status,'pending');});
 test('SCAM ATTEMPTS: blacklist / lookalike refused even inside an allowance; big payment outside allowance is held and cancelable; plain-language errors',async()=>{
   const {engine,approveAll,buy}=mk({tierLimits:{newPayees1h:99,holdMs:60000,unattendedDaily:5000000000n,unattendedMonthly:9000000000n,balanceOutPct:100}});defaults(engine);approveAll();

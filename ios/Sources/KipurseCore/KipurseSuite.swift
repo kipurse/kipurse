@@ -67,7 +67,10 @@ public struct KipurseSuite: Equatable, Sendable {
     if cur == .v52 || cur == nil, let v = sv, v == v54.vault(wallet: w) {
       let c = await (code ?? agreedCode)(v)
       if let c, c.count > 2 { remember(.v54, wallet: w); return .v54 } }
-    if cur == .v54, let v = sv, v == v52.vault(wallet: w) { remember(.v52, wallet: w); return .v52 }
+    // t1278 (A7): the rollback V5.4 -> V5.2 also needs the V5.2 vault's code on chain, confirmed by two agreeing public nodes (never the server's word alone)
+    if cur == .v54, let v = sv, v == v52.vault(wallet: w) {
+      let c = await (code ?? agreedCode)(v)
+      if let c, c.count > 2 { remember(.v52, wallet: w); return .v52 } }
     if let s = stored(wallet: w) { return s }
     guard let v = serverVault?.lowercased(), forVault(v, wallet: w) == .v53 else { return .v52 }
     let c = await (code ?? agreedCode)(v)

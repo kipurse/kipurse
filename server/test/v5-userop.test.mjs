@@ -66,7 +66,7 @@ test('engine userop mode: networkFee = exactly the previous actual Circle charge
   const {engine,writes}=zrEngine();
   const r1=await engine.pay({...ORD,request:direct('20000','zr-1'),idempotencyKey:'idem-zr-0001'});assert.equal(r1.state,'paid');assert.equal(r1.networkFee,'0');
   assert.equal(engine.gasBook.pendingTopUp(WALLET),1517n);
-  const r2=await engine.pay({...ORD,request:direct('20000','zr-2'),idempotencyKey:'idem-zr-0002'});assert.equal(r2.state,'paid');assert.equal(r2.networkFee,'1517');
+  const r2=await engine.pay({...ORD,request:direct('20001','zr-2'),idempotencyKey:'idem-zr-0002'});/* t1280: a second purchase, not a same-amount duplicate */assert.equal(r2.state,'paid');assert.equal(r2.networkFee,'1517');
   assert.equal(writes[1].args.at(-2),1517n);assert.equal(engine.gasBook.pendingTopUp(WALLET),1517n); // op2's own charge waits for op3
   assert.equal(engine.gasBook.outstanding(WALLET),0n);});
 test('engine gas modes: executor-pays legacy refused on Base mainnet; F2 degraded mode sends nothing on chain',async()=>{

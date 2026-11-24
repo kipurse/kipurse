@@ -8,7 +8,7 @@
 // Nothing changes unless the whole batch lands. confirm() then checks everything ON CHAIN before switching the runtime.
 // Siri needs no extra on-chain step: it is enabled by the V2 approver (+ the operator's owner-pay flag).
 import {langOf,X} from './i18n.mjs';import {randomBytes} from 'node:crypto';import {getAddress,encodeFunctionData,parseAbi} from 'viem';
-import {approverInit,DETERMINISTIC_DEPLOYER,WALLET_ABI,fingerprint,ETH_USD_FEED,L1_ALLOWANCE_WEI} from './phone-signer.mjs';import {checkLimits} from './limits-public.mjs';
+import {approverInit,DETERMINISTIC_DEPLOYER,WALLET_ABI,fingerprint,ETH_USD_FEED,L1_ALLOWANCE_WEI} from './phone-signer.mjs';import {checkLimits,STRANGER_CAPS_API} from './limits-public.mjs';
 import {ownAddrHtml} from './addr-display.mjs';import {scrubUrls} from './store.mjs';import {selfCall,assertNoTopLevelOwnerCall} from './owner-selfcall.mjs';
 export const ONBOARD_GAS=2_300_000n;  // measured on a Base fork, see test/fork/onboard-fork.e2e.mjs (re-setup ~2.0M; new wallet incl. vault ~2.2M)
 const FEED_ABI=parseAbi(['function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)']);
@@ -36,13 +36,13 @@ export function createOnboarding({verified=null,S,save,pub,wallet,owner,trust,ch
     ...remove.map(r=>({...phone.removeCall(r),label:'remove dead approver '+r.approver}))]);}
   // t1109u (0A/0B/t763u): every (re)opening needs the owner's Coinbase Verified Account attestation; fails closed, nothing charged.
   async function cbvOk(){if(typeof verified!=='function')return {verified:false,reason:'unavailable'};try{return await verified(OWNER);}catch{return {verified:false,reason:'unavailable'};}}
-  async function start({x,y,single,daily,term,days}){gc();
+  async function start({x,y,single,daily,term,days,openSingle,openDaily}){gc();
     {const v=await cbvOk();if(!v?.verified)throw Object.assign(Error(v?.reason==='unavailable'?'Coinbase verification check is unavailable; nothing was charged. Try again.':'This Base Account has no Coinbase Verified Account attestation yet. Nothing was charged.'),{code:v?.reason==='unavailable'?'verify_unavailable':'not_verified'});}
     /* t1265: the pending cap counts per requester (the proven phone key): at most 2 open setups per key (the oldest is replaced), and the
        wallet-wide cap (20) only holds proven requesters, so nobody without the owner's proof can fill it and block the owner. */
     {const fp=fingerprint(x,y);const mine=Object.entries(O()).filter(([,v])=>v.fingerprint===fp).sort((a,b)=>a[1].exp-b[1].exp);
       while(mine.length>=2){delete O()[mine.shift()[0]];}if(Object.keys(O()).length>=20)throw Object.assign(Error('too many pending setups'),{code:'busy'});}
-    const c=checkLimits({single,daily,term,days:days??90});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});
+    const c=checkLimits({single,daily,term,days:days??90,openSingle,openDaily});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});/* t1281: owner's stranger limits ride to plan() */
     const quoted=await quote();if(quoted.payerCanPayUSDC===false)throw Object.assign(Error('USDC 不够付开户和这台手机钥匙这一笔，已停止，没有扣钱。'),{code:'needs_usdc'});
     const pl=await plan(c);const a=approverInit({wallet:W,trust,x,y,maxSingle:c.single,maxDaily:c.daily,version:approverVersion});
     // dead approvers + the current/retiring approver (a new key replaces it), never the new one
@@ -71,14 +71,14 @@ export function createOnboarding({verified=null,S,save,pub,wallet,owner,trust,ch
     if(!enabled){json(404,{error:'onboard_disabled'});return true;}
     const nonce=randomBytes(12).toString('base64url');
     try{if(p==='/onboard.js'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end(script());return true;}
-      if(p==='/onboard/quote'&&req.method==='GET'){json(200,await quote());return true;}
+      if(p==='/onboard/quote'&&req.method==='GET'){json(200,{...await quote(),strangerCaps:STRANGER_CAPS_API/* t1281 */});return true;}
       /* t1265 (same rule as /phone/enroll, t1240 F1): a re-setup link carrying a phone key is created ONLY for a requester who proves the owner -
          a live phone session of this wallet, or this exact key was just signed in with the owner's Coinbase account (sign-in read grant).
          Without it anyone could mint a real-domain "set up Kipurse" page that adds THEIR key to someone else's wallet (phishing). */
       if(p==='/onboard/start'&&req.method==='POST'){const b=await readBody(req);
         let proven=false;try{proven=typeof keyProof==='function'&&!!(await keyProof(req,{x:String(b.x),y:String(b.y)}));}catch{proven=false;}
         if(!proven){json(401,{error:'sign_in_first'});return true;}
-        json(200,await start({x:String(b.x),y:String(b.y),single:b.single,daily:b.daily,term:b.term,days:b.days}));return true;}
+        json(200,await start({x:String(b.x),y:String(b.y),single:b.single,daily:b.daily,term:b.term,days:b.days,openSingle:b.openSingle,openDaily:b.openDaily}));return true;}
       if(p==='/onboard/confirm'&&req.method==='POST'){const b=await readBody(req);json(200,await confirm(String(b.id??'')));return true;}
       if(p==='/onboard'&&req.method==='GET'){gc();const id=String(u.searchParams.get('id')??'');const o=O()[id];
         res.writeHead(o?200:404,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-frame-options':'DENY','referrer-policy':'no-referrer',

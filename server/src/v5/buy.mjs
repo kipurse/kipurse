@@ -5,7 +5,7 @@
 // "done" only when the merchant confirmed (order status fulfilled, or an x402 resource was delivered). A failed order after payment
 // opens a refund request automatically. No timers / jobs: status is followed inside the call (bounded) or by kipurse_order_status.
 import {purposeKey,purposeName,PURPOSES,BEGINNER_DEFAULTS,usdcAtomic,fmtUsdc,classifyCategory,CATEGORIES} from './mandates.mjs';
-import {createAskFlow,askView} from './owner-ask.mjs';
+import {createAskFlow,askView} from './owner-ask.mjs';import {costOf} from './spend-cost.mjs';import {scrubUrls} from './store.mjs';
 const FULFILLED=/^(fulfilled|complete|completed|done|success|succeeded|delivered|active|live|confirmed|placed|won|ranked)$/i;
 const FAILED=/^(failed|failure|canceled|cancelled|expired|rejected|refunded|declined|error|lost)$/i;
 const PAIDLIKE=/^(paid|payment_received|processing|pending|in_progress|queued|created|awaiting_fulfillment|open|submitted)$/i;
@@ -106,7 +106,7 @@ export function createBuy(E,{now=()=>Date.now(),sleep=ms=>new Promise(z=>setTime
     recurring:x.recurring?{payee:x.recurring.payee??x.recurring.to,amount:x.recurring.amount,every:x.recurring.every,name:x.recurring.name}:undefined,expiresInDays:x.expiresInDays}));
     try{const p=MD.propose({items,by:'agent:'+agentId,reason:a.reason??'',user_request:a.user_request??''});return {approvalId:p.id,state:p.state,items:p.items.map(i=>i.human),decision:'ask_owner',next_step:'tell_user_then_poll_kipurse_approval_status',
       say_to_user:'我已把额度申请发到你手机：'+p.items.map(i=>i.human.zh).join('；')+'。用 Face ID 同意就生效。/ I sent the allowance request to your phone; approve with Face ID.'};}
-    catch(e){return {state:'rejected',reason:e.code??'bad_request',detail:String(e.message).slice(0,200),fix:'per_payment (+ per_day, total) in decimal USDC; recurring {payee (0x), amount, every: week|month|year, name}'};}}
+    catch(e){return {state:'rejected',reason:e.code??'bad_request',detail:scrubUrls(e.message).slice(0,200),fix:'per_payment (+ per_day, total) in decimal USDC; recurring {payee (0x), amount, every: week|month|year, name}'};}}
   /** t1170u: the AI may only ask the server to push the owner's card again (never approve it) */
   const remindOwner=({approvalId,lang},agentId)=>{const r=E.ownerAsks?.remind(approvalId,agentId);if(!r)return {error:'not_supported'};
     if(r.ok){try{MD.remind(approvalId,'agent:'+agentId,{force:true});}catch{}return {...askView(r.ask,{lang}),reminded:true};}   // t1170u card: its own 5-min gate (owner_ask.reminded_at); push + note the time for the shared gate
@@ -126,14 +126,17 @@ export function spendingReport(E,{period='month',from,to,purpose,agent,format='s
   else {const d=new Date(new Date(now).toLocaleString('en-US',{timeZone:tz}));const off=now-d.getTime();d.setHours(0,0,0,0);d.setDate(1);since=d.getTime()+off;}
   if(!Number.isFinite(since))since=now-30*86400e3;if(!Number.isFinite(until))until=now;
   const pk=purpose?purposeKey(purpose):null;
+  /* t1281 (§6#141 ②): each row also says what really left the wallet (amount + 0.1% fee + network fee), same formula as the limits */
+  const cp=E.ledger?.costParams?.()??null;
   const rows=E.ledger.listFiltered({since,state:'paid',limit:5000}).filter(r=>Number(r.created_at??r.createdAt??0)<=until).map(r=>{const o=E.orderFor(r.purchase_key)??{};
     const cat=o.purpose&&CATEGORIES.includes(o.purpose)?o.purpose:classifyCategory({purpose:o.purpose,item:o.item,merchant:o.merchant});return {date:new Date(Number(r.created_at??r.createdAt??now)).toISOString(),purpose:cat,purposeName:purposeName(cat,true),purposeNameEn:purposeName(cat,false),item:o.item??null,user_request:o.user_request??null,payee:o.payeeName??r.label??null,
-      amount:fmtUsdc(BigInt(r.amount??0)),amountAtomic:String(BigInt(r.amount??0)),agent:o.agent??r.origin_agent??null,purchaseKey:r.purchase_key,tx:r.tx_hash??null,fulfillment:o.fulfillment??null};})
+      amount:fmtUsdc(BigInt(r.amount??0)),amountAtomic:String(BigInt(r.amount??0)),chargedAtomic:String(cp?costOf(r,cp):BigInt(r.amount??0)),agent:o.agent??r.origin_agent??null,purchaseKey:r.purchase_key,tx:r.tx_hash??null,fulfillment:o.fulfillment??null};})
     .filter(x=>(!pk||x.purpose===pk)&&(!agent||x.agent===agent));
   const sum=(arr)=>fmtUsdc(arr.reduce((a,x)=>a+usdcAtomic(x.amount),0n));const group=k=>{const m=new Map();for(const x of rows){const g=x[k]??'—';m.set(g,[...(m.get(g)??[]),x]);}return [...m].map(([g,l])=>({[k]:g,count:l.length,amount:sum(l),amountAtomic:String(usdcAtomic(sum(l)))})).sort((a,b)=>Number(b.amount)-Number(a.amount));};
   const byPurpose=group('purposeName'),byCategory=group('purpose'),byAgent=group('agent'),byPayee=group('payee');
-  const out={period:from?{from,to:to??null}:period,since:new Date(since).toISOString(),total:sum(rows),totalAtomic:String(usdcAtomic(sum(rows))),count:rows.length,byPurpose,byCategory,byAgent,byPayee,rows:rows.slice(0,200),
-    say_to_user:`${rows.length} 笔，共 ${sum(rows)} USDC`+(byPurpose.length?`；最多的是「${byPurpose[0].purposeName}」${byPurpose[0].amount}`:'')+'。'};
+  const charged=rows.reduce((a,x)=>a+BigInt(x.chargedAtomic),0n);
+  const out={period:from?{from,to:to??null}:period,since:new Date(since).toISOString(),total:sum(rows),totalAtomic:String(usdcAtomic(sum(rows))),totalWithFees:fmtUsdc(charged),totalWithFeesAtomic:String(charged),count:rows.length,byPurpose,byCategory,byAgent,byPayee,rows:rows.slice(0,200),
+    say_to_user:`${rows.length} 笔，共 ${sum(rows)} USDC（含全部手续费共 ${fmtUsdc(charged)} USDC）`+(byPurpose.length?`；最多的是「${byPurpose[0].purposeName}」${byPurpose[0].amount}`:'')+'。'};
   if(format==='csv'){const esc=v=>{const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
-    out.csv=['date,purpose,item,user_request,payee,amount_usdc,agent,receipt_purchase_key,tx,fulfillment',...rows.map(x=>[x.date,x.purposeName,x.item,x.user_request,x.payee,x.amount,x.agent,x.purchaseKey,x.tx,x.fulfillment].map(esc).join(','))].join('\n');}
+    out.csv=['date,purpose,item,user_request,payee,amount_usdc,agent,receipt_purchase_key,tx,fulfillment,charged_usdc_with_fees',...rows.map(x=>[x.date,x.purposeName,x.item,x.user_request,x.payee,x.amount,x.agent,x.purchaseKey,x.tx,x.fulfillment,fmtUsdc(BigInt(x.chargedAtomic))].map(esc).join(','))].join('\n');}
   return out;}

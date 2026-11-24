@@ -12,7 +12,7 @@ import {applyOwnerRulesConfig} from '../src/v5/owner-wiring.mjs';import {ownerMa
 import {CATALOG,findBin,applyLocal,removeLocal,remoteInfo,kindOf} from './agents.mjs';
 import {createOAuth} from './oauth.mjs';import {pausedEngine,liveAgentEngine} from './pause.mjs';import {encryptedStore} from '../src/v5/at-rest.mjs';import {createCardRail,createMockCardProvider} from '../src/v5/cards.mjs';
 import {openVault,assertBoundary,defaultKeyFile} from './vault.mjs';import {scrubAgentBackups} from './agents.mjs';import {loadKitConfig} from './config.mjs';
-import {changeMessage,withdrawalMessage,releaseMessage,depositInfo} from '../src/v5/owner-guard.mjs';
+import {changeMessage,withdrawalMessage,releaseMessage,depositInfo} from '../src/v5/owner-guard.mjs';import {scrubUrls} from '../src/v5/store.mjs';
 import {checkLimitChangeZh,usdcErrorZh,parseUsdc} from '../src/v5/answer-rules.mjs';
 import {loadOperatorConfig,operatorRuntime} from './operator.mjs';
 import {createCoinbaseOnramp,createMockOnramp,loadCdpKey,mockPage,PRESETS as ONRAMP_PRESETS} from '../src/v5/onramp.mjs';
@@ -48,7 +48,9 @@ const send=(res,code,body,h={})=>{res.writeHead(code,{'content-type':'applicatio
 const readBody=async req=>{let b='';for await(const c of req){b+=c;if(b.length>200000)throw Error('too big');}if(!b)return {};
   if(/application\/x-www-form-urlencoded/.test(req.headers['content-type']??''))return Object.fromEntries(new URLSearchParams(b));return JSON.parse(b);};
 const cookieOf=req=>/(?:^|; )kp=([0-9a-f]{64})/.exec(req.headers.cookie??'')?.[1];
-const isOwner=req=>{const c=cookieOf(req);const s=c&&S.sessions[sha(c)];return s&&req.headers['x-kp-csrf']===s.csrf?s:null;};
+const OWNER_SESSION_MS=30*86400e3;/* t1280 (§6#140): the server ends a session at the cookie's longest lifetime too (Max-Age is only a hint to the browser) */
+const liveSession=c=>{const k=c&&sha(c);const s=k&&S.sessions[k];if(!s)return null;if(!(Number(s.at)>0)||Date.now()-Number(s.at)>(s.via==='webLink'?86400e3:OWNER_SESSION_MS)){delete S.sessions[k];try{save();}catch{}return null;}return s;};
+const isOwner=req=>{const s=liveSession(cookieOf(req));return s&&req.headers['x-kp-csrf']===s.csrf?s:null;};
 const usd=x=>(Number(BigInt(x))/1e6).toString();const atomic=s=>{const e=usdcErrorZh('withdraw',s);if(e)throw Error(e.replace('withdraw','取回金额'));return parseUsdc(s).toString();};
 // ---- deposits: scan USDC Transfer logs into the wallet (idempotent by tx:logIndex) ----
 async function scanDeposits(){if(!engine)return;const W=S.setup.wallet;const latest=await pub.getBlockNumber();let from=BigInt(S.scanFrom??S.setup.block);
@@ -59,7 +61,7 @@ async function scanDeposits(){if(!engine)return;const W=S.setup.wallet;const lat
 // ---- MCP (Streamable HTTP, stateless): /mcp/<agentToken> ----
 const agentByKey=token=>token?Object.values(S.agents).find(x=>{const h=Buffer.from(x.tokenHash,'hex'),t=Buffer.from(sha(token),'hex');return h.length===t.length&&timingSafeEqual(h,t)&&!x.revoked;}):null;
 // ---- MCP authorization (OAuth 2.1 + PKCE, dynamic registration) for /mcp; legacy /mcp/<key> and Bearer <agent key> still work ----
-const OA=createOAuth({S,save,base:()=>BASE,caps:()=>S.setup?.human??null,ownerSession:req=>{const c=cookieOf(req);return c&&S.sessions[sha(c)]||null;},
+const OA=createOAuth({S,save,base:()=>BASE,caps:()=>S.setup?.human??null,ownerSession:req=>liveSession(cookieOf(req)),
   isAgentLive:id=>!!S.agents[id]&&!S.agents[id].revoked,
   createAgentKey:(name,kind,clientId)=>{for(const x of Object.values(S.agents))if(x.kind===kind&&x.via==='oauth'&&x.clientName===name&&!x.revoked){x.revoked=true;OA.revokeAgent(x.id);delete S.agents[x.id];}
     const id='agent-'+randomBytes(4).toString('hex');S.agents[id]={id,name,kind,via:'oauth',clientId,clientName:name,tokenHash:sha(randomBytes(32).toString('hex')),created:new Date().toISOString()};save();return id;}});
@@ -77,7 +79,7 @@ async function mcpSse(req,res,token,u){const a=agentFromRequest(req,u,token);
   if(!engine)return send(res,503,{error:'wallet not set up yet'});
   const {server}=createV5Mcp(liveAgentEngine(engine,()=>S.agents[a.id]),{agentId:a.id});const t=new SSEServerTransport('/messages',res);
   SSE.set(t.sessionId,{t,agentId:a.id});res.on('close',()=>{SSE.delete(t.sessionId);server.close();});await server.connect(t);}
-async function mcpSseMessage(req,res,u){const s=SSE.get(u.searchParams.get('sessionId')??'');if(!s||S.agents[s.agentId]?.revoked)return send(res,404,{error:'unknown or expired SSE session'});
+async function mcpSseMessage(req,res,u){const s=SSE.get(u.searchParams.get('sessionId')??'');if(!s||!S.agents[s.agentId]||S.agents[s.agentId].revoked){if(s){SSE.delete(u.searchParams.get('sessionId')??'');try{s.t.close?.();}catch{}}return send(res,404,{error:'unknown or expired SSE session'});}/* t1280 (§6#140): a DELETED agent (row gone) is revoked too */
   await s.t.handlePostMessage(req,res,await readBody(req));}
 // ---- per-agent pause: a paused agent can still READ (status, limits, history) but every spending / changing call is refused ----
 // receipts: who was paid, in plain words, with a trust badge (trusted by you / registered merchant / new shop)
@@ -246,9 +248,9 @@ const API={
     // 2. stop payments: on-chain executor pause (24 h) when the wallet is live; the executor key is destroyed in step 4 anyway
     let recovery=null;if(S.setup){const live=await pub.readContract({address:NET.spm,abi:SPMR,functionName:'isValid',args:[permObj()]}).catch(()=>null);
       if(live===false)step('pause',true,{info:'permission already revoked on chain: nothing left to pause'});
-      else if(engine){try{const r=await engine.pause();step('pause',true,{txHash:r.txHash});}catch(e){step('pause',false,{error:String(e.shortMessage??e.message).slice(0,200)});}}else step('pause',true,{info:'wallet was not active'});
+      else if(engine){try{const r=await engine.pause();step('pause',true,{txHash:r.txHash});}catch(e){step('pause',false,{error:typeof e?.code==='string'?e.code:'pause_failed'});}}else step('pause',true,{info:'wallet was not active'});
       // 3. on-chain revocation package for the owner (also needed if he skips signing it now)
-      try{recovery=await recoveryInfo();}catch(e){recovery=baseRecovery();recovery.revokeError=String(e.shortMessage??e.message).slice(0,200);}
+      try{recovery=await recoveryInfo();}catch(e){recovery=baseRecovery();recovery.revokeError=typeof e?.code==='string'?e.code:'revoke_info_failed';}
       recovery.revokeSkipped=!!skippedRevoke;step('prepareRevocation',!!recovery.revoke,{permissionValid:recovery.permissionValid});}
     // 4. delete every server-side file (state, ledger, owner rules, executor session key, OAuth) and end all sessions
     engine=null;cfg=null;let removed=0;for(const f of fs.readdirSync(DIR)){if(f==='config.json')continue;fs.rmSync(join(DIR,f),{recursive:true,force:true});removed++;}
@@ -285,11 +287,11 @@ http.createServer(async(req,res)=>{try{const u=new URL(req.url,'http://localhost
     res.writeHead(303,{location:'/','set-cookie':`kp=${ck}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${SEC}`});return res.end();}
   if(u.pathname==='/api/logout'&&req.method==='POST'){const c=cookieOf(req);const s0=isOwner(req);if(!s0)return send(res,401,{error:'login'});delete S.sessions[sha(c)];save();
     return send(res,200,{ok:true,loggedOut:true},{'set-cookie':`kp=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${SEC}`});}
-  if(u.pathname==='/api/csrf'){const c=cookieOf(req);const s=c&&S.sessions[sha(c)];return s?send(res,200,{csrf:s.csrf}):send(res,401,{error:'login'});}
+  if(u.pathname==='/api/csrf'){const s=liveSession(cookieOf(req));/* t1280: same server-side expiry */return s?send(res,200,{csrf:s.csrf}):send(res,401,{error:'login'});}
   if(u.pathname.startsWith('/api/')){if(req.headers.origin&&req.headers.origin!==`http://localhost:${PORT}`&&req.headers.origin!==`http://127.0.0.1:${PORT}`&&!(PUB&&req.headers.origin===PUB))return send(res,403,{error:'origin'});
     if(!isOwner(req))return send(res,401,{error:'login'});const fn=API[u.pathname.slice(5)];if(!fn)return send(res,404,{error:'no'});
     if(!['state','prepare','newAgent','revokeAgent','webLink','agentCatalog','connectAgent','deleteAgent','oauthPending','oauthDecide','deletePreview','exportLedger','deleteStart','deleteAccount','depositOptions','onrampSession','rescueLink','agentPause','disputes'].includes(u.pathname.slice(5))&&!engine)return send(res,409,{error:'not set up'});
-    try{const b=req.method==='POST'?await readBody(req):{};if(b&&typeof b==='object'&&!Array.isArray(b))Object.defineProperty(b,'__lang',{value:res.__lang,enumerable:false});return send(res,200,await fn(b));}catch(e){return send(res,400,{error:e.errors?e.errors.join('; '):(e.shortMessage??e.message)});}}
+    try{const b=req.method==='POST'?await readBody(req):{};if(b&&typeof b==='object'&&!Array.isArray(b))Object.defineProperty(b,'__lang',{value:res.__lang,enumerable:false});return send(res,200,await fn(b));}catch(e){/* t1279 R6 (§6#139): never a raw upstream message (RPC URLs with keys); validation texts are ours, still scrubbed */const msg=e.errors?e.errors.join('; '):(typeof e?.code==='string'&&/^[A-Za-z0-9_:.-]{1,60}$/.test(e.code)?e.code:(e?.shortMessage??e?.message??'error'));return send(res,400,{error:scrubUrls(msg).slice(0,200)});}}
   if(u.pathname==='/rescue'){res.writeHead(301,{location:'/rescue/'});return res.end();}
   if(u.pathname.startsWith('/rescue/')){const rf=u.pathname==='/rescue/'?'index.html':u.pathname.slice(8);if(!['index.html','rescue.js','rescue-config.json'].includes(rf)){res.writeHead(404);return res.end();}
     res.writeHead(200,{'content-type':rf.endsWith('.js')?'text/javascript; charset=utf-8':rf.endsWith('.json')?'application/json':'text/html; charset=utf-8','cache-control':'no-store','cross-origin-opener-policy':'same-origin-allow-popups','referrer-policy':'no-referrer',

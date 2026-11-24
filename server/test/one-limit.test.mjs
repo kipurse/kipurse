@@ -34,7 +34,7 @@ test('pay without a category inside the ONE limit; over it -> one Face ID; summa
   await E.pay({request:direct('1000000','own-1',P(1)),idempotencyKey:'idem-own-0001',agentId:'owner'});
   const r=await buy.buy({item:'OpenAI API credits',merchant:'OpenAI',to:P(1),amount:'2',idempotencyKey:'idem-ol-0001'},'claude');assert.equal(r.state,'paid',JSON.stringify(r));
   const r2=await buy.buy({item:'coffee',merchant:'Cafe',to:P(1),amount:'6',idempotencyKey:'idem-ol-0002'},'claude');assert.equal(r2.decision,'ask_owner');assert.equal(r2.nothingPaid,true);
-  const s=E.spendingSummary({period:'today'});const dev=s.categories.find(c=>c.key==='dev');assert.ok(dev,JSON.stringify(s.categories));assert.equal(dev.zh,'开发');assert.equal(dev.amount,'2');
+  const s=E.spendingSummary({period:'today'});const dev=s.categories.find(c=>c.key==='dev');assert.ok(dev,JSON.stringify(s.categories));assert.equal(dev.zh,'开发');assert.equal(dev.amount,'2.0055');/* t1281: 2 + 0.1% fee 0.002 + network fee 0.0035 */
   E.mandates.propose({items:[{purpose:'subscription',single:'3',recurring:{payee:P(2),amount:'3',every:'month',name:'Server'}}],by:'owner'});approveAll();
   assert.equal((await buy.buy({item:'server',merchant:'Server',to:P(2),amount:'3',idempotencyKey:'idem-ol-0003'},'claude')).state,'paid');
   const again=await buy.buy({item:'server',merchant:'Server',to:P(2),amount:'3',idempotencyKey:'idem-ol-0004'},'claude');assert.equal(again.decision,'ask_owner');assert.equal(again.reason,'MANDATE_RECURRING_ALREADY_PAID');});

@@ -3,15 +3,17 @@
 // No merchant-specific constants: create/status endpoints, auth placement, chain, token, payable statuses, TTL, amount cap and the
 // optional signed-order offer are read from the merchant's own descriptions. The pay-to address, amount and expiry are taken ONLY
 // from each order's API response and are re-checked here (same origin, chain, token contract, exact atomic amount, short expiry).
-import {getAddress,isAddress} from 'viem';
+import {getAddress,isAddress} from 'viem';import {readCapped,FETCH_LIMITS} from './ssrf.mjs';
 const lc=s=>String(s??'').toLowerCase();
 const ORDER_FIELDS=['depositAddress','amountAtomic','expiresAt'];
 export class DiscoveryError extends Error{constructor(code,detail){super(code+(detail?': '+detail:''));this.code=code;this.detail=detail;}}
 function originOf(o,{allowHttp=false}={}){let u;try{u=new URL(String(o));}catch{throw new DiscoveryError('bad_merchant_origin');}
   const local=['127.0.0.1','localhost'].includes(u.hostname);if(u.protocol!=='https:'&&!(allowHttp&&local))throw new DiscoveryError('merchant_origin_not_https');return u.origin;}
 const sameOrigin=(origin,ref)=>{try{const u=new URL(ref,origin);return u.origin===origin?u.pathname:null;}catch{return null;}};
-async function get(f,url,kind,timeoutMs){const r=await f(url,{headers:{accept:kind==='json'?'application/json':'text/plain'},redirect:'error',signal:AbortSignal.timeout(timeoutMs)});
-  if(!r.ok)throw new DiscoveryError('doc_unavailable',`${new URL(url).pathname} HTTP ${r.status}`);return kind==='json'?r.json():r.text();}
+async function get(f,url,kind,timeoutMs){const r=await f(url,{headers:{accept:kind==='json'?'application/json':'text/plain'},redirect:'error',signal:AbortSignal.timeout(timeoutMs??FETCH_LIMITS.timeoutMs)});
+  if(!r.ok)throw new DiscoveryError('doc_unavailable',`${new URL(url).pathname} HTTP ${r.status}`);
+  /* t1278 S5: at most 256 KB of (decompressed) body per public doc */const b=await readCapped(r,{prefer:kind==='json'?'json':'text'});if(b.truncated)throw new DiscoveryError('doc_too_large',new URL(url).pathname);if(b.error)throw new DiscoveryError('doc_unavailable',new URL(url).pathname);
+  if(kind!=='json')return b.text;try{return JSON.parse(b.text);}catch{throw new DiscoveryError('doc_unavailable',`${new URL(url).pathname} bad json`);}}
 const fieldName=s=>String(s).trim().split(/[\s(]/)[0];
 const deref=(oa,s)=>{let x=s,i=0;while(x?.$ref&&i++<10)x=x.$ref.replace(/^#\//,'').split('/').reduce((a,k)=>a?.[k],oa);return x;};
 const hasOrderFields=a=>ORDER_FIELDS.every(k=>a.includes(k));

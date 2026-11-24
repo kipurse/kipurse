@@ -15,7 +15,7 @@ export function createOwnerSignSurface({owner,wallet,chainId,trustRequests,planC
   const newLogin=()=>{login=randomBytes(24).toString('hex');const u=`${publicOrigin??`http://localhost:${port}`}/login?code=${login}`;if(loginFile)fs.writeFileSync(loginFile,u+'\n',{mode:0o600});return u;};newLogin();
   const sess=req=>{const m=/(?:^|;\s*)kp_os=([0-9a-f]{48})/.exec(String(req.headers.cookie??''));return m&&sessions.get(m[1]);};
   const api={
-    async state(){const tr=trustRequests.api.list(trustRequests.cap);return {chainId,owner:OWNER,wallet:WALLET,status:await status?.().catch(e=>({error:e.message})),trustRequests:tr};},
+    async state(){const tr=trustRequests.api.list(trustRequests.cap);return {chainId,owner:OWNER,wallet:WALLET,status:await status?.().catch(e=>({error:typeof e?.code==='string'?e.code:'status_failed'})),trustRequests:tr};},
     async capPrepare(){const p=await planCapChange();pendingPlan=p;return {human:p.human,policy:p.policy,labels:p.calls.map(c=>c.label),
       send:{method:'wallet_sendCalls',params:[{version:'2.0.0',chainId:'0x'+Number(chainId).toString(16),from:OWNER,atomicRequired:true,calls:[{to:WALLET,value:'0x0',data:p.walletExecuteBatch.data}]}]}};},
     async capConfirm(){if(!pendingPlan)throw Error('prepare first');const r=await confirmCapChange(pendingPlan);if(!r?.valid)return {ok:false,detail:'the new permission is not valid on chain yet; wait for the transaction, then tap again'};pendingPlan=null;return {ok:true,...r};},
@@ -36,7 +36,7 @@ export function createOwnerSignSurface({owner,wallet,chainId,trustRequests,planC
       if(req.method==='GET'&&u.pathname==='/api/state')return js(200,await api.state());
       if(req.method==='POST'&&u.pathname.startsWith('/api/')){const o=req.headers.origin;if(o&&!origins.has(o))return js(403,{error:'bad_origin'});if(!same(req.headers['x-kp-csrf'],s.csrf))return js(403,{error:'bad_csrf'});
         const fn=u.pathname.slice(5);if(!Object.hasOwn(api,fn))return js(404,{error:'not_found'});let b='';for await(const c of req){b+=c;if(b.length>65536)return js(413,{error:'too_large'});}
-        try{return js(200,await api[fn](b?JSON.parse(b):{}));}catch(e){return js(400,{error:e.code??'failed',detail:e.message});}}
+        try{return js(200,await api[fn](b?JSON.parse(b):{}));}catch(e){return js(400,{error:typeof e?.code==='string'?e.code:'failed'});}/* t1278 S6: error code only, never the raw message */}
       if(u.pathname.startsWith('/api/'))return js(404,{error:'not_found'});
       return send(404,'text/plain','not found');}catch(e){try{send(500,'text/plain','error');}catch{}}});
   return {server,newLogin,listen:()=>new Promise(r=>server.listen(port,host,()=>r(server))),close:()=>server.close()};}

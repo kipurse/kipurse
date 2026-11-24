@@ -8,6 +8,10 @@ import CoreImage.CIFilterBuiltins
 struct Tx: Identifiable {
   let id: String, amount: Int64, payee: String, agent: String, state: String, txHash: String?, date: Date?
   var merchantRaw: String? = nil, badge = "new", contact: String? = nil, website: String? = nil
+  /// t1281: protocol fee + network fee the server reports for this row (atomic; nil from an older server)
+  var fee: Int64? = nil, networkFee: Int64? = nil
+  /// t1281 (§6#141): what this payment took from the wallet = amount + fee + network fee (KipurseCore SpendCost, same formula as the gateway)
+  func cost(ppm: Int64, maxNetworkFee: Int64 = 0) -> Int64 { SpendCost.cost(amount: amount, fee: fee, networkFee: networkFee, ppm: ppm, inFlight: SpendCost.inFlight(state), maxNetworkFee: maxNetworkFee) }
   /// Plain merchant name: registered name, "Card · <shop>" for real-world card payments, else a short address.
   var merchantName: String { if let r = merchantRaw, !r.isEmpty { let m = DisplaySafe.merchant(r); if m.isEmpty { return shortAddr(payee) }; return m.hasPrefix("card:") ? T("实体店 · ", "In store · ") + m.dropFirst(5) : m }; return shortAddr(payee) }  // t690: display-safe (no bidi / fake address / fake ✅)
   /// t691: no usable name from the agent/merchant -> a friendly title; the short address moves to the secondary line.
@@ -20,6 +24,7 @@ struct Tx: Identifiable {
     id = j["purchaseKey"]?.string ?? "p\(i)"; amount = j["amount"]?.atomic ?? 0; payee = j["payee"]?.string ?? ""
     agent = j["agent"]?.string ?? "AI"; state = j["state"]?.string ?? ""; txHash = j["txHash"]?.string
     date = Tx.parseDate(j["createdAt"])
+    fee = j["fee"]?.atomic; networkFee = j["networkFee"]?.atomic
   }
   static func parseDate(_ v: JSONValue?) -> Date? {
     switch v {
@@ -36,8 +41,9 @@ struct Tx: Identifiable {
 }
 extension WalletState {
   var txs: [Tx] { purchases.enumerated().map { Tx($1, $0) } }
-  var spentToday: Int64 { if let v = serverSpentToday { return v }; return txs.filter { !$0.failed && ($0.date.map(Calendar.current.isDateInToday) ?? false) }.reduce(0) { $0 + $1.amount } }
-  var spentTerm: Int64 { if let v = serverSpentTerm { return v }; return txs.filter { !$0.failed }.reduce(0) { $0 + $1.amount } }
+  /// t1281: local fallbacks count amount + fee + network fee, like the server and the on-chain caps
+  var spentToday: Int64 { if let v = serverSpentToday { return v }; return txs.filter { !$0.failed && ($0.date.map(Calendar.current.isDateInToday) ?? false) }.reduce(0) { $0 + $1.cost(ppm: capFeePpm ?? 1000, maxNetworkFee: capMaxNetworkFee ?? 0) } }
+  var spentTerm: Int64 { if let v = serverSpentTerm { return v }; return txs.filter { !$0.failed }.reduce(0) { $0 + $1.cost(ppm: capFeePpm ?? 1000, maxNetworkFee: capMaxNetworkFee ?? 0) } }
   var termTotal: Int64 { if let v = capTerm { return v }; return AnswerRules.parseUSDC(raw["setup"]?["human"]?["termTotal"]?.string ?? "") ?? 0 }
   var explorer: String { raw["explorer"]?.string ?? "https://basescan.org" }
   var liveAgents: [JSONValue] { agents.filter { !($0["revoked"]?.bool ?? false) } }
@@ -1451,11 +1457,13 @@ struct CoinbaseDepositView: View {
     return c?.url.map { BatchVerify.depositURL($0, wallet: wallet) }
   }
   /// t888: open the transfer page with nothing stacked under it (closes the local Coinbase 充值 sheet first), then watch for arrival.
-  @MainActor static func openTransfer(_ m: AppModel, _ u: URL, baseline: Int64) {
+  /// t1279 (R15): `baseline` and "now" are two-node agreed chain balances (AppModel.agreedBalanceNow), never the server's number;
+  /// no agreed baseline -> no toast (the deposit view's own watcher still reads the chain).
+  @MainActor static func openTransfer(_ m: AppModel, _ u: URL, baseline: Int64?) {
     m.afterMuse {
       m.openFreePage(u) { mm in
-        await mm.refresh(); let now = mm.state?.balance ?? 0
-        if now > baseline { mm.toast = T("已到账 +\(MoneyText.usdc(now - baseline))", "Arrived +\(MoneyText.usdc(now - baseline))"); Haptics.success(); return true }
+        await mm.refresh()
+        if let plus = DepositArrival.plus(baseline: baseline, now: mm.agreedBalanceNow) { mm.toast = T("已到账 +\(MoneyText.usdc(plus))", "Arrived +\(MoneyText.usdc(plus))"); Haptics.success(); return true }
         return false
       }
     }
@@ -1518,7 +1526,7 @@ struct CoinbaseDepositView: View {
             BigButton(T("从 Coinbase 钱包转入", "Move in from Coinbase Wallet"), icon: "arrow.down.circle.fill", disabled: n == nil || over) {
               guard let a = n, a <= b, let u = Self.transferURL(wallet: w, amount: a) else { return }
               Haptics.tap(); waiting = true
-              if m.demo != nil { m.lastLaunch = u.absoluteString } else { Self.openTransfer(m, u, baseline: m.state?.balance ?? s.balance) }
+              if m.demo != nil { m.lastLaunch = u.absoluteString } else { Self.openTransfer(m, u, baseline: baseline ?? m.agreedBalanceNow) }
             }.accessibilityIdentifier("cbdep.go")
             Text(T("收款方固定是你自己的启付钱包，不能改。网络手续费很少，在 Coinbase 弹窗里付（可以用 USDC），启付不收费。", "The recipient is always your own Kipurse wallet and can’t be changed. The tiny network fee is paid in the Coinbase popup (USDC works); Kipurse charges nothing."))
               .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("cbdep.fee")
@@ -1539,10 +1547,11 @@ struct CoinbaseDepositView: View {
         }
       } else { Text(L("还没有钱包地址")).foregroundStyle(.secondary) }
     }
-    .onAppear { if baseline == nil { baseline = m.state?.balance ?? s.balance } }
+    .onAppear { if baseline == nil { baseline = m.agreedBalanceNow } }   // t1279 (R15): two-node agreed balance only, never the server's
     .task { await readBalance() }
+    .task { if m.demo == nil, let w = s.wallet, let b = await VaultCheck.usdcBalanceAgreed(w), !waiting, arrived == nil { baseline = b } }   // t1279 (R15): a fresh agreed read before any transfer starts
     .task { while !Task.isCancelled { try? await Task.sleep(nanoseconds: 6_000_000_000); guard waiting, arrived == nil, m.demo == nil else { continue }
-      await m.refresh(); let now = m.state?.balance ?? 0; if let b = baseline, now > b { arrived = now - b; Haptics.success(); await readBalance() } } }
+      await m.refresh(); if let plus = DepositArrival.plus(baseline: baseline, now: m.agreedBalanceNow) { arrived = plus; Haptics.success(); await readBalance() } } }
   }
 }
 

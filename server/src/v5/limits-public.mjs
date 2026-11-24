@@ -2,7 +2,7 @@
 // PUBLIC, SIGNATURE-GATED LIMITS PAGE (mainnet). The owner picks per-payment / daily / total caps in the app; this page builds the ONE
 // wallet batch for exactly those numbers and the owner sends it from HIS Base Account. Nothing changes unless that batch lands on chain:
 // confirm only swaps the runtime to the new permission once it is valid ON CHAIN. No key here; anyone can open the page, only the owner can sign.
-import {langOf,X,en} from './i18n.mjs';import {randomBytes} from 'node:crypto';
+import {langOf,X,en,zhOnly} from './i18n.mjs';import {randomBytes} from 'node:crypto';
 import {rewritePaymasterBody,sanitizePaymasterResponse,erc20PaymasterURL,paymasterCorsHeaders,LIMITS_RELAY_FEE_FROM,LIMITS_WALLET_FEE_FROM,LIMITS_WALLET_FEE_CAP,limitsWalletFeeCalls,checkLimitsWalletFeeCalls} from './limits-fee.mjs';
 const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10,14 +10,59 @@ const usd=a=>{const n=BigInt(a),w=n/1000000n,f=(n%1000000n).toString().padStart(
 /** "12.5" -> 12500000n ; null if not a positive USDC amount with <= 6 decimals. */
 export const parseUsdc=v=>{const s=String(v??'').trim();if(!/^\d{1,7}(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');const n=BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));return n>0n?n:null;};
 export const LIMITS_MAX_TERM=1000000n*1000000n;
+/** t1281: this server takes the owner's own stranger limits (openSingle/openDaily). The app shows the 付给陌生收款方 block and sends
+ *  explicit values ONLY when the server says so (limits fee + onboarding quote), so a new app on an older server stays on the legacy path. */
+export const STRANGER_CAPS_API=1;
 /** Validates the owner's choice. days: 1..365 (new end = now + days) or undefined (keep the current end). */
-export function checkLimits({single,daily,term,days,opsPerDay}){const s=parseUsdc(single),d=parseUsdc(daily),t=parseUsdc(term);
+export function checkLimits({single,daily,term,days,opsPerDay,openSingle,openDaily}){const s=parseUsdc(single),d=parseUsdc(daily),t=parseUsdc(term);
   /* t1185u §6#85: optional owner-set daily on-chain operations (whole number 1..100000) */let ops;if(opsPerDay!==undefined&&opsPerDay!==''&&opsPerDay!==null){ops=Number(opsPerDay);if(!/^\d{1,6}$/.test(String(opsPerDay).trim())||!Number.isInteger(ops)||ops<1||ops>100000)return {error:'bad_ops_per_day',detail:'每天链上操作次数：1–100000 的整数'};}
   if(s===null||d===null||t===null)return {error:'bad_amount',detail:'每笔、每天、总额都要是正数（最多 6 位小数）'};
   if(s>d)return {error:'single_above_daily',detail:'每笔不能大于每天'};if(d>t)return {error:'daily_above_term',detail:'每天不能大于总额'};
   if(t>LIMITS_MAX_TERM)return {error:'term_too_high',detail:'总额最多 1,000,000 USDC（一百万）'};
   let dd;if(days!==undefined&&days!==''&&days!==null){dd=Number(days);if(!Number.isInteger(dd)||dd<1||dd>365)return {error:'bad_days',detail:'期限 1–365 天'};}
-  return {single:s,daily:d,term:t,days:dd,...(ops!==undefined?{opsPerDay:ops}:{})};}
+  /* t1281 (§6#141 ①): optional owner-chosen stranger limits (USDC amounts like single/daily). Absent = an older app (legacy formula). */
+  const has=v=>v!==undefined&&v!==null&&String(v).trim()!=='';let open={};
+  if(has(openSingle)||has(openDaily)){const a=parseUsdc0(openSingle),b=parseUsdc0(openDaily);
+    const e=strangerChoiceError({single:s,daily:d,openSingle:has(openSingle)?(a??'x'):undefined,openDaily:has(openDaily)?(b??'x'):undefined});if(e)return e;open={openSingle:a,openDaily:b};}
+  return {single:s,daily:d,term:t,days:dd,...(ops!==undefined?{opsPerDay:ops}:{}),...open};}
+/** Like parseUsdc but 0 is allowed (so a stranger limit of 0 gets its own clear refusal). */
+const parseUsdc0=v=>{const s=String(v??'').trim();if(!/^\d{1,7}(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));};
+/* ---- t1281 (owner decision §6#141 ①): THE stranger sub-limit formula. Phone mirror: RequestVerify.subCaps / strangerChoiceError
+   (Kipurse iOS); cross-test vectors test/t1281-stranger-cap.test.mjs -> IOS Tests/KipurseCoreTests/t1281-stranger-caps.json.txt.
+   "Stranger" = a payee the owner has not trusted and that is not registry-listed. Policy word [5] openSingle = per payment (amount only;
+   0 would disable strangers and the float); [6] openDaily = per day INCLUDING fees, ONE counter shared by all strangers.
+   - explicit (the app sent openSingle + openDaily, atomic USDC): open = EXACTLY the owner's numbers, and they must satisfy
+       0 < openSingle <= single, 0 < openDaily <= daily, openSingle <= openDaily.  Anything else is REFUSED (never clamped).
+   - legacy (an older app sent neither): open = min(base, choice), exactly as before (old phones still verify).
+   - verified (registry) sub-limits: always min(base, choice), unchanged.
+   base = the onboarding template policy (opening) or the current on-chain policy (limit change).
+   FEE HEADROOM RULE: none is added here. Every owner-facing plan (opening prepare, planCapChange) is built with headroom:false, so the
+   on-chain daily word IS the owner's daily number (fees count inside it). The stranger daily gets the same treatment: the owner's number
+   verbatim. So "same as my normal limits" gives openDaily == policy daily exactly (the contract requires openDaily <= daily). ---- */
+const STRANGER_ERR={
+  stranger_incomplete:'陌生收款方的每笔和每天要一起填 / Set both the per-payment and the per-day limit for new payees',
+  bad_stranger_amount:'付给陌生收款方的每笔、每天要是金额（最多 6 位小数） / Limits for new payees must be amounts (up to 6 decimals)',
+  stranger_single_zero:'付给陌生收款方的每笔不能是 0 / The per-payment limit for new payees can\'t be 0',
+  stranger_daily_zero:'付给陌生收款方的每天不能是 0 / The per-day limit for new payees can\'t be 0',
+  stranger_single_above_single:'付给陌生收款方的每笔不能大于普通的每笔 / Per payment to new payees can\'t be more than your normal per-payment limit',
+  stranger_daily_above_daily:'付给陌生收款方的每天不能大于普通的每天 / Per day to new payees can\'t be more than your normal per-day limit',
+  stranger_single_above_stranger_daily:'付给陌生收款方的每笔不能大于它的每天 / Per payment to new payees can\'t be more than their per-day limit'};
+const big=v=>{if(typeof v==='bigint')return v;const s=String(v??'');return /^\d{1,30}$/.test(s)?BigInt(s):null;};
+/** Explicit stranger choice check (atomic). Both undefined = legacy (null). Returns {error,detail} or null. Check order is part of the
+ *  cross-test: incomplete, bad amount, zero single, zero daily, single > single, daily > daily, single > stranger daily. */
+export function strangerChoiceError({single,daily,openSingle,openDaily}){const E=k=>({error:k,detail:STRANGER_ERR[k]});
+  const u=v=>v===undefined||v===null;if(u(openSingle)&&u(openDaily))return null;if(u(openSingle)||u(openDaily))return E('stranger_incomplete');
+  const os=big(openSingle),od=big(openDaily),s=big(single),d=big(daily);if(os===null||od===null||s===null||d===null)return E('bad_stranger_amount');
+  if(os===0n)return E('stranger_single_zero');if(od===0n)return E('stranger_daily_zero');
+  if(os>s)return E('stranger_single_above_single');if(od>d)return E('stranger_daily_above_daily');if(os>od)return E('stranger_single_above_stranger_daily');return null;}
+/** The four sub-limit words for a plan's `stated` (atomic strings), or {error,detail}. choice: {single,daily[,openSingle,openDaily]};
+ *  base: {openSingle,openDaily,verifiedSingle,verifiedDaily} (template or current policy). */
+export function subCaps(choice,base){const mn=(a,b)=>(BigInt(a)<BigInt(b)?BigInt(a):BigInt(b)).toString();
+  const e=strangerChoiceError(choice);if(e)return e;const explicit=choice.openSingle!==undefined&&choice.openSingle!==null;
+  return {openSingle:explicit?BigInt(choice.openSingle).toString():mn(base.openSingle,choice.single),openDaily:explicit?BigInt(choice.openDaily).toString():mn(base.openDaily,choice.daily),
+    verifiedSingle:mn(base.verifiedSingle,choice.single),verifiedDaily:mn(base.verifiedDaily,choice.daily)};}
+/** subCaps, throwing the refusal (code + bilingual detail) for plan builders. */
+export function subCapsOrThrow(choice,base){const r=subCaps(choice,base);if(r.error)throw Object.assign(Error(r.detail),{code:r.error});return r;}
 /** Permission window for a limits change: start a little in the past (clock skew), end = start + days (NOT now + days), so period <= 365 days exactly. */
 export const LIMITS_START_SKEW=30;
 export function limitsWindow(chainNowSec,days,curEnd){const start=Number(chainNowSec)-LIMITS_START_SKEW;const end=days?start+Number(days)*86400:Number(curEnd);return {start,end};}
@@ -73,18 +118,18 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
     if(p==='/owner/limits'&&req.method==='GET'){const lang=langOf(req,u),t=X(lang);const q=Object.fromEntries(u.searchParams);const c=checkLimits(q);const nonce=randomBytes(12).toString('base64url');
       res.writeHead(c.error?400:200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-frame-options':'DENY','referrer-policy':'no-referrer','x-content-type-options':'nosniff',
         'content-security-policy':`default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src 'self' https://*.coinbase.com https://mainnet.base.org https://mainnet-preconf.base.org; frame-src https://keys.coinbase.com; img-src data:; form-action 'none'; frame-ancestors 'none'`});
-      if(c.error){res.end(shell(`<div class=t>${t('上限不对','These limits aren’t valid')}</div><p class=e>${esc(lang==='zh'?c.detail:(en(c.detail)??'Please check the numbers.'))}</p><a class="b g" href="kipurse://done">${t('回到 Kipurse','Back to Kipurse')}</a>`,null,null,lang));return true;}
+      if(c.error){res.end(shell(`<div class=t>${t('上限不对','These limits aren’t valid')}</div><p class=e>${esc(lang==='zh'?zhOnly(c.detail):(en(c.detail)??'Please check the numbers.'))}</p><a class="b g" href="kipurse://done">${t('回到 Kipurse','Back to Kipurse')}</a>`,null,null,lang));return true;}
       let cur=null;try{cur=await current();}catch{}let fq=null;try{fq=await feeQuote?.();}catch{}
       const feeLine=fq?(fq.fromWallet?t(`修改钱包安全上限需要一点手续费（约 ${fmtUsdc(fq.usdc)} USDC），从启付余额里扣`,`Changing the wallet safety limit needs a small network fee (about ${fmtUsdc(fq.usdc)} USDC), taken from your Kipurse balance.`):(fq.firstFree?t(`这是你第一次设置上限：手续费由 Kipurse 代付，你付 $0。以后每次修改上限，手续费按实际成本约 ${fmtUsdc(fq.usdc)} USDC，从你的启付钱包里用 USDC 扣，0 加价，永远不用 ETH。`,`This is your first limit setup: Kipurse pays the network fee, you pay $0. Each later change costs the actual network fee, about ${fmtUsdc(fq.usdc)} USDC, taken in USDC from your Kipurse wallet at 0% markup. Never ETH.`):t(`手续费按实际成本约 ${fmtUsdc(fq.usdc)} USDC，从你的启付钱包里用 USDC 扣，0 加价，永远不用 ETH。`,`Network fee: about ${fmtUsdc(fq.usdc)} USDC at actual cost, taken in USDC from your Kipurse wallet, 0% markup. Never ETH.`))):t('手续费只用 USDC 付，永远不用 ETH。','The network fee is paid in USDC only, never ETH.');
       const end=c.days?new Date((limitsWindow(Math.floor(now()/1000),c.days).end)*1000):cur?.end?new Date(Number(cur.end)*1000):null;
       const row=(k,o,n)=>`<div class=row><span>${k}</span><span class=n>${o&&o!==n?`<span class=o>${esc(o)}</span>`:''}${esc(n)}</span></div>`;
       res.end(shell(`<div class=t>${t('修改钱包安全上限','Change wallet safety limits')}</div><p class=s>${t('用你的 Base Account 确认一次，链上生效。','Sign once with your Base Account; it takes effect on chain.')}</p>
-<div class=c>${row(t('每笔最多','Max per payment'),cur?usd(cur.single)+' USDC':'',usd(c.single)+' USDC')}${row(t('每天最多','Max per day'),cur?usd(cur.daily)+' USDC':'',usd(c.daily)+' USDC')}${row(t('总额最多','Max total'),cur?usd(cur.term)+' USDC':'',usd(c.term)+' USDC')}${row(t('到期','Ends'),null,end?end.toISOString().slice(0,10):t('不变','Unchanged'))}</div>
+<div class=c>${row(t('每笔最多','Max per payment'),cur?usd(cur.single)+' USDC':'',usd(c.single)+' USDC')}${row(t('每天最多','Max per day'),cur?usd(cur.daily)+' USDC':'',usd(c.daily)+' USDC')}${row(t('总额最多','Max total'),cur?usd(cur.term)+' USDC':'',usd(c.term)+' USDC')}${c.openSingle!==undefined?row(t('付给陌生收款方','To new payees'),cur?.openSingle!=null?t(`每笔 ${usd(cur.openSingle)} · 每天 ${usd(cur.openDaily)}`,`${usd(cur.openSingle)}/payment · ${usd(cur.openDaily)}/day`):'',t(`每笔 ${usd(c.openSingle)} · 每天 ${usd(c.openDaily)}`,`${usd(c.openSingle)}/payment · ${usd(c.openDaily)}/day`)):''}${row(t('到期','Ends'),null,end?end.toISOString().slice(0,10):t('不变','Unchanged'))}</div>
 <p class=m>${t('确认后：旧授权作废，新授权生效（新总额从 0 开始算）。不会转走任何钱。','After signing, the old authorization ends and the new one starts (the new total counts from 0). No money moves.')}</p>
 <p class=m id=fee>${feeLine}</p><p class=m id=why>${t(WHY_FEE.zh,WHY_FEE.en)}</p>
 <button class=p id=go>${t('用 Base Account 确认','Sign with Base Account')}</button><a class="b g" href="kipurse://done">${t('取消','Cancel')}</a><p class=m id=st></p>`,nonce,{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),days:c.days??null,plan:/^[0-9a-f]{32}$/.test(String(q.plan??''))?String(q.plan):null},lang));return true;}
     if(p==='/owner/limits/fee'&&req.method==='GET'){let fq=null;try{fq=await feeQuote?.();}catch{}if(!fq){json(503,{error:'fee_unavailable'});return true;}
-      const out={usdc:String(fq.usdc),usdcText:fmtUsdc(fq.usdc),firstFree:!!fq.firstFree,gasToken:'USDC',markupBps:0,paidFrom:fq.fromWallet?'kipurse_wallet_usdc':'kipurse_wallet',why:WHY_FEE};
+      const out={usdc:String(fq.usdc),usdcText:fmtUsdc(fq.usdc),firstFree:!!fq.firstFree,gasToken:'USDC',markupBps:0,paidFrom:fq.fromWallet?'kipurse_wallet_usdc':'kipurse_wallet',why:WHY_FEE,strangerCaps:STRANGER_CAPS_API};
       if(fq.fromWallet){out.feeFrom='kipurse_wallet';out.fromWallet=true;}
       json(200,out);return true;}
     if(p==='/owner/limits/paymaster'){const cors=paymasterCorsHeaders(req.headers?.origin);
@@ -103,8 +148,9 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
           // the app already decoded and checked THIS plan on the phone; the page signs exactly it (no new plan)
           const extra=e.feeFrom===LIMITS_WALLET_FEE_FROM||e.feeFrom===LIMITS_RELAY_FEE_FROM?{feeFrom:e.feeFrom,wallet:e.plan.wallet,from:e.plan.owner,sponsored:false,...(e.feeTo?{feeTo:e.feeTo}:{})}:{};
           json(200,{id,owner:e.plan.owner,chainId:e.plan.chainId,human:e.plan.human,labels:e.plan.labels,calls:e.plan.calls,pm:e.pm??null,sponsored:!!e.pm,fee:e.fee??null,gasToken:'USDC',...extra});return true;}
-      if(p==='/owner/limits/prepare'){const c=checkLimits({single:usd(String(b.single??'0')||'0'),daily:usd(String(b.daily??'0')||'0'),term:usd(String(b.term??'0')||'0'),days:b.days??undefined,opsPerDay:b.opsPerDay??undefined});
-        if(c.error){json(400,c);return true;}if(prepared.size>50){json(429,{error:'slow_down'});return true;}
+      if(p==='/owner/limits/prepare'){/* t1281: optional stranger limits, atomic like single/daily; absent = older app (legacy formula) */const at=v=>v===undefined||v===null||v===''?undefined:/^\d{1,13}$/.test(String(v))?usd(String(v)):'x';
+        const c=checkLimits({single:usd(String(b.single??'0')||'0'),daily:usd(String(b.daily??'0')||'0'),term:usd(String(b.term??'0')||'0'),days:b.days??undefined,opsPerDay:b.opsPerDay??undefined,openSingle:at(b.openSingle),openDaily:at(b.openDaily)});
+        if(c.error){json(400,{...c,detail:{zh:zhOnly(c.detail),en:en(c.detail)??'Please check the numbers.'}});return true;}if(prepared.size>50){json(429,{error:'slow_down'});return true;}
         let pl=await plan(c);const id=randomBytes(16).toString('hex');
         if(pl?.fromWallet){let f=null;try{f=await fee(pl);}catch{f=null;}
           // t1123u (§6#63): fee from the Kipurse wallet's USDC in the SAME batch, t752 withdraw shape. Sent FROM the owner's Base Account
@@ -142,7 +188,7 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
         e.submittedAt=now();e.at=now();const c=e.choice??{};pend={id,since:Math.floor(now()/1000),single:String(c.single??''),daily:String(c.daily??''),term:String(c.term??''),days:c.days??null,failed:false};
         (async()=>{for(let i=0;i<pollTries;i++){await sleep(pollMs);try{if(await finish(id))return;}catch{}}if(pend?.id===id)pend.failed=true;})();json(200,{ok:true});return true;}
       json(404,{error:'not_found'});return true;
-    }catch(e){json(400,{error:e.code??'failed',detail:String(e.message).slice(0,300)});return true;}}
+    }catch(e){json(400,{error:typeof e?.code==='string'?e.code:'failed'});return true;}}/* t1278 S6: error code only, never the raw message */
   /** For the app's read-only state: a signed-and-submitted change that is not on chain yet (or failed to land in ~3 min). */
   const pending=()=>pend&&(now()/1000-pend.since<1800)?{...pend}:null;
   // delete-everything: forget finished-change history and the progress banner. In-flight prepared plans are KEPT: a change the owner

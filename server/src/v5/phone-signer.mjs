@@ -202,7 +202,7 @@ ${e.paymaster?`<p class=m>${t(`手续费细节：同一笔交易里，启付钱�
       if(p==='/phone/revoke/plan'&&req.method==='GET'){const a=P().active;const c=a?await revokeCalls():null;json(200,{calls:c??[],owner:OWNER,wallet:W,chainId,approver:a?.approver??null});return true;}/* t621 #1: app checks before the page */
       if(p==='/phone/revoke/confirm'&&req.method==='POST'){json(200,await revokeConfirm());return true;}
       json(404,{error:'not_found'});return true;
-    }catch(e){json(400,{error:e.code??'failed',detail:String(e.message).slice(0,200)});return true;}}
+    }catch(e){json(400,{error:typeof e?.code==='string'?e.code:'failed'});return true;}}/* t1278 S6: error code only, never the raw message */
   return {handle,quote,active:()=>P().active,retiring:()=>P().retiring??null,enroll,confirm,calls,revokeCalls,revokeConfirm,retiringCalls,retiringConfirm,payCapable,forget,findIndex,deadOwners,pruneDead,removeCall,dead:()=>P().dead??[],
     /** One-time setup (onboard.mjs) registers its approver here so the normal confirm() path verifies and activates it. */
     addPending:e=>{gc();const id=randomBytes(12).toString('hex');P().pending[id]={...e,fee:'0',exp:Date.now()+30*60e3};save();return id;}};}

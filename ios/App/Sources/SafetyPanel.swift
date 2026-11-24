@@ -11,7 +11,7 @@ struct SafetyPanel: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
   /// .actions = pause + withdraw tiles; .delete = the danger-zone row (shown in its own section, far below); .all = both (simple mode).
-  enum Part { case all, actions, delete }
+  enum Part { case all, actions, delete, chip }   // t1277d: .chip = the one capsule next to the AI 生活 title
   var part: Part = .all
   @State private var askPause = false
   @State private var askResume = false
@@ -27,23 +27,16 @@ struct SafetyPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       if part != .delete {
-      // t1245 (§6#115 U24): the state first, clearly (green dot = on, red dot = paused, white text), then ONE glass button card.
-      HStack(alignment: .firstTextBaseline, spacing: 8) {
-        Circle().fill(pause == nil && busy == nil ? MK.green : Brand.negative).frame(width: 8, height: 8).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-        Text(statusLine).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("safety.status")
-      }.padding(.horizontal, 2)
-      HStack(spacing: 10) {
-        tile(pause == nil ? T("暂停 AI 付款", "Pause AI payments") : T("恢复 AI 付款", "Resume AI payments"),
-             pause == nil ? "pause.circle.fill" : "play.circle.fill", pause == nil ? Brand.negative : Brand.positive, "safety.pause") { if pause == nil { askPause = true } else { askResume = true } }
-      }
+      // t1277 (§6#137): one glass row like LimitEntryRow (icon · "AI 付款" · status) + a small capsule action (暂停 red / 恢复 green). Whole row taps.
+      if part == .chip { pauseChip } else { pauseRow }
       // #9: delete is far from pause / withdraw, at the bottom, and asks twice (dialog, then "type-free" second alert, then Face ID)
       }
       if part == .all { Divider().padding(.top, 18) }
-      if part != .actions {
+      if part == .all || part == .delete {   // t1277d: the top chip never carries delete
       Button(role: .destructive) { askDelete = true } label: { Label(T("删除账户", "Delete account"), systemImage: "trash").font(part == .delete ? .body : .footnote).foregroundStyle(Brand.negative) }.buttonStyle(.borderless).padding(.top, part == .delete ? 0 : 6).accessibilityIdentifier("safety.delete")
       }
     }
-    .padding(.vertical, part == .actions ? 0 : 4)
+    .padding(.vertical, part == .actions || part == .chip ? 0 : 4)
     .task { if part != .delete { await loadStatus() } }
     // 1. pause: dialog (pick how long) -> Face ID
     .confirmationDialog(T("暂停 AI 付款多久？", "Pause AI payments for how long?"), isPresented: $askPause, titleVisibility: .visible) {
@@ -56,7 +49,7 @@ struct SafetyPanel: View {
     .confirmationDialog(T("恢复 AI 付款？", "Resume AI payments?"), isPresented: $askResume, titleVisibility: .visible) {
       Button(T("恢复", "Resume")) { run { await doResume() } }
       Button(T("取消", "Cancel"), role: .cancel) {}
-    } message: { Text(T("恢复要用 Face ID。如果钱包在链上也暂停了，还要在 Coinbase 确认一笔来解除，手续费按实际成本从启付钱包扣（低于 0.01 USDC）。链上解除后，AI 才能在你设的上限内继续付款。", "Resuming needs Face ID. If the wallet is also paused on chain, you confirm one transaction in Coinbase to lift it; the network fee (actual cost, under 0.01 USDC) comes from your Kipurse wallet. AI can pay again, within your limits, once that’s on chain.")) }
+    } message: { Text((pause.map { _ in statusLine + "\n\n" } ?? "") + T("恢复要用 Face ID。如果钱包在链上也暂停了，还要在 Coinbase 确认一笔来解除，手续费按实际成本从启付钱包扣（低于 0.01 USDC）。链上解除后，AI 才能在你设的上限内继续付款。", "Resuming needs Face ID. If the wallet is also paused on chain, you confirm one transaction in Coinbase to lift it; the network fee (actual cost, under 0.01 USDC) comes from your Kipurse wallet. AI can pay again, within your limits, once that’s on chain.")) }
     // 2. withdraw: the one withdraw screen (amount → your account → fee → button → confirm → Face ID → Coinbase confirm)
     .onReceive(NotificationCenter.default.publisher(for: .kpCloseLocalSheets)) { _ in showWithdraw = false }
     .sheet(isPresented: $showWithdraw) { NavigationStack { MainWithdrawView(s: s).toolbar { Button(T("完成", "Done")) { showWithdraw = false }.accessibilityIdentifier("withdraw.close") } } }
@@ -76,16 +69,56 @@ struct SafetyPanel: View {
     }
   }
 
-  private func tile(_ t: String, _ icon: String, _ c: Color, _ id: String, _ a: @escaping () -> Void) -> some View {
-    Button(action: a) {
-      VStack(spacing: 8) { Image(systemName: icon).font(.title).symbolRenderingMode(.hierarchical).foregroundStyle(c); Text(t).font(.subheadline.weight(.semibold)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).foregroundStyle(.primary) }
-        .frame(maxWidth: .infinity, minHeight: 84).padding(.vertical, 8)
-        .background(c.opacity(0.10), in: RoundedRectangle(cornerRadius: KP.Radius.card, style: .continuous)).glass(KP.Radius.card)
-    }.buttonStyle(.plain).disabled(busy != nil).accessibilityIdentifier(id)
+  /// t1277d (§6#137): top-of-page capsule. On = soft green, green dot, "AI 付款中"; paused = solid red, white "已暂停". Same dialogs + Face ID.
+  private var pauseChip: some View {
+    let on = pause == nil
+    return Button { Haptics.tap(); if on { askPause = true } else { askResume = true } } label: {
+      HStack(spacing: 6) {
+        if busy != nil { ProgressView().controlSize(.small).tint(on ? Brand.positive : .white) }
+        else if on { Circle().fill(Brand.positive).frame(width: 8, height: 8) }
+        else { Image(systemName: "pause.fill").font(.caption.weight(.bold)) }
+        Text(on ? T("AI 付款中", "AI paying") : T("已暂停", "Paused")).font(.subheadline.weight(.bold)).lineLimit(1)
+      }
+      .fixedSize().foregroundStyle(on ? Brand.positive : .white)
+      .padding(.horizontal, 14).frame(height: 40)
+      .background(on ? Brand.positive.opacity(0.14) : Brand.negative, in: Capsule())
+      .overlay(Capsule().strokeBorder(on ? Brand.positive.opacity(0.45) : .clear, lineWidth: 1))
+    }.buttonStyle(Pressable()).disabled(busy != nil)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(on ? T("暂停 AI 付款", "Pause AI payments") : T("恢复 AI 付款", "Resume AI payments"))
+    .accessibilityValue(statusLine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("safety.pause")
+  }
+  private var pauseRow: some View {
+    let on = pause == nil
+    let action = on ? T("暂停", "Pause") : T("恢复", "Resume")
+    let c = on ? Brand.negative : Brand.positive
+    return Button { if on { askPause = true } else { askResume = true } } label: {
+      HStack(spacing: 12) {
+        Image(systemName: on ? "checkmark.shield.fill" : "pause.circle.fill").font(.title3).symbolRenderingMode(.hierarchical)
+          .foregroundStyle(on ? Brand.positive : Brand.negative).frame(width: 30)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(T("AI 付款", "AI payments")).font(KP.Typo.cardTitle).foregroundStyle(.primary)
+          Text(statusLine).font(.subheadline.weight(on ? .regular : .semibold)).foregroundStyle(on ? Color.secondary : Brand.negative).fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer(minLength: 8)
+        if busy != nil { ProgressView().frame(minWidth: 44, minHeight: 32) }
+        else {
+          Label(action, systemImage: on ? "pause.fill" : "play.fill").labelStyle(.titleAndIcon).font(.subheadline.weight(.semibold)).imageScale(.small)
+            .foregroundStyle(c).padding(.horizontal, 14).padding(.vertical, 7).background(c.opacity(0.12), in: Capsule())
+        }
+      }.padding(14).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).glass().contentShape(Rectangle())
+    }.buttonStyle(Pressable()).disabled(busy != nil)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(on ? T("暂停 AI 付款", "Pause AI payments") : T("恢复 AI 付款", "Resume AI payments"))
+    .accessibilityValue(statusLine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("safety.pause")
   }
   private var statusLine: String {
     if let b = busy { return b }
-    guard let p = pause else { return T("AI 付款正常", "AI payments are on") }
+    guard let p = pause else { return T("正常，只在你设的上限内付款", "On, only within the limits you set") }
     if let w = Self.autoReason(p.reason) { return w }
     guard let u = p.until else { return T("AI 付款已暂停，直到你恢复。", "AI payments are paused until you resume them.") }
     return T("AI 付款已暂停，到 \(Self.fmt(u)) 自动恢复。", "AI payments are paused until \(Self.fmt(u)).")

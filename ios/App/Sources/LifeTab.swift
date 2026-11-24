@@ -78,7 +78,8 @@ extension WalletState {
     let n = liveAgents.first { [$0["id"]?.string, $0["kind"]?.string].contains(t.agent) }?["name"]?.string ?? t.agent
     return Self.fourAgents.first { n.lowercased().contains($0.lowercased()) } ?? n
   }
-  func spentThisMonth(now: Date = Date()) -> Int64 { txs.filter { !$0.failed && ($0.date.map { Calendar.current.isDate($0, equalTo: now, toGranularity: .month) } ?? false) }.reduce(0) { $0 + $1.amount } }
+  /// t1281: amount + fee + network fee per payment (KipurseCore SpendCost, same formula as the gateway)
+  func spentThisMonth(now: Date = Date()) -> Int64 { txs.filter { !$0.failed && ($0.date.map { Calendar.current.isDate($0, equalTo: now, toGranularity: .month) } ?? false) }.reduce(0) { $0 + $1.cost(ppm: capFeePpm ?? 1000, maxNetworkFee: capMaxNetworkFee ?? 0) } }
 }
 
 /// Original orb character (m.html .orb): radial body, per-character texture, specular highlight, glowing eyes.
@@ -280,6 +281,8 @@ struct LifeTab: View {
           HStack(alignment: .top) {   // t1068u: top-align with 钱包/设置 titles (same Y)
             // t1065u: drop month · AI-online eyebrow; keep big title only
             PageTitle(eyebrow: nil, title: T("AI 生活", "AI Life"), id: "life.title")
+            // t1277d §6#137 (owner): pause is ONE capsule at the top, on = soft green, paused = solid red
+            if s.isMainnet || s.wallet != nil { SafetyPanel(s: s, part: .chip).padding(.top, 2).accessibilityElement(children: .contain).accessibilityIdentifier("life.pause") }
             Button { Haptics.tap(); tab = .agents } label: { Image(systemName: "ellipsis").font(.system(size: 17, weight: .bold)).foregroundStyle(.white.opacity(0.6)).frame(width: 40, height: 40).background(.white.opacity(0.08), in: Circle()) }
               .accessibilityLabel(T("管理 AI", "Manage AI")).accessibilityIdentifier("life.manage").padding(.top, 2)
           }.padding(.top, TabRootChrome.titleTop)
@@ -312,13 +315,6 @@ struct LifeTab: View {
           NavigationLink { TrustListView(s: s) } label: {
             LimitEntryRow(icon: "checkmark.seal.fill", title: T("信任的商家", "Trusted merchants"), sub: TrustListView.summary(s))
           }.buttonStyle(.plain).accessibilityIdentifier("life.trusted")
-          }
-          // §6#110 (owner 2026-11-21): 暂停 AI 付款 moved here from 设置 (one place). Same SafetyPanel, same two confirmations.
-          if s.isMainnet || s.wallet != nil {
-            VStack(alignment: .leading, spacing: KP.Space.headGap) {
-              SectionHead(title: T("暂停 AI 付款", "Pause AI payments"))
-              SafetyPanel(s: s, part: .actions).frame(maxWidth: .infinity, alignment: .leading)   // t1245 U24: one card, no glass-in-glass
-            }.accessibilityElement(children: .contain).accessibilityIdentifier("life.pause")
           }
           VStack(alignment: .leading, spacing: KP.Space.headGap) {
           SectionHead(title: T("生活账本", "Life ledger"), link: txs.isEmpty ? nil : (showAll ? T("收起", "Less") : T("全部", "All")), linkID: "life.all") { withAnimation(Brand.spring) { showAll.toggle() } }

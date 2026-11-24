@@ -13,7 +13,7 @@ test('DCR client_name: control / bidi characters, quotes and brackets removed; l
   assert.equal(cleanClientName("Grok's\tBot"),'Groks Bot');});
 test('clients: capped per wallet; a client idle 30 days with no token is forgotten (and its index entry with it)',async()=>{const {S,OA,forgot}=mkOA({maxClients:3});
   const reg=n=>http(OA,'POST','/oauth/register',{client_name:'c'+n,redirect_uris:['https://cb.example/cb']});
-  for(let i=0;i<3;i++)assert.equal((await reg(i)).code,201);const r=await reg(9);assert.equal(r.code,429,'all slots fresh');assert.equal(r.b.error,'too_many_clients');
+  for(let i=0;i<3;i++)assert.equal((await reg(i)).code,201);const r=await reg(9);assert.equal(r.code,201,'t1278 S7: at the cap the oldest unused client of the busiest source makes room (an outsider cannot lock DCR)');assert.equal(Object.keys(S.oauth.clients).length,3);
   const ids=Object.keys(S.oauth.clients);S.oauth.clients[ids[2]].created=Date.now()-3600e3;assert.equal((await reg(8)).code,201,'an unused client older than 10 min makes room');assert.ok(!S.oauth.clients[ids[2]]);assert.ok(forgot.includes(ids[2]));S.oauth.clients[ids[0]].created=Date.now()-31*86400e3;S.oauth.tokens.t1={type:'access',client_id:ids[1],exp:Date.now()/1000+60};S.oauth.clients[ids[1]].created=Date.now()-31*86400e3;
   assert.equal((await reg(10)).code,201);assert.ok(!S.oauth.clients[ids[0]],'idle client gone');assert.ok(S.oauth.clients[ids[1]],'client with a live token kept');assert.ok(forgot.includes(ids[0]));});
 test('revoke / code use / expiry report their keys (index entries go with them)',async()=>{const {S,OA,forgot}=mkOA();S.oauth.tokens.old={type:'access',client_id:'c',exp:1};S.oauth.pending.p={exp:1,status:'pending'};

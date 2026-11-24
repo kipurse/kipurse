@@ -39,6 +39,6 @@ test('guard: every wallet_sendCalls in signing pages is known; the limits page o
   const B=fs.readFileSync(new URL('../owner-sign/static/limits.js',import.meta.url),'utf8');assert.equal((B.slice(B.indexOf('var q7=')).match(/capabilities:\{paymasterService:\{url:e\.pm\}\}/g)??[]).length,2);assert.doesNotMatch(B.slice(B.indexOf('var q7=')),/canPayUSDC/);
   assert.doesNotMatch(B,/wallet_sendCalls",params:\[\{version:"2\.0\.0",chainId:"0x"\+Number\(e\.chainId\)\.toString\(16\),from:t,atomicRequired:!0,calls:e\.calls\}\]/,'unguarded send removed');});
 test('GET /owner/limits/fee: real per-change estimate in USDC + first-free flag for the app',async()=>{const {L}=mkLim({pm:'u'});const r=await call(L,'/owner/limits/fee',{},'GET');
-  assert.equal(r.code,200);assert.deepEqual(r.j,{usdc:'2345',usdcText:'0.002345',firstFree:true,gasToken:'USDC',markupBps:0,paidFrom:'kipurse_wallet',why:WHY_FEE});});
+  assert.equal(r.code,200);assert.deepEqual(r.j,{usdc:'2345',usdcText:'0.002345',firstFree:true,gasToken:'USDC',markupBps:0,paidFrom:'kipurse_wallet',why:WHY_FEE,strangerCaps:1/* t1281: server takes the owner's stranger limits */});});
 test('guard: onboarding page never silently falls back to a user-paid send when the free sponsorship fails',()=>{
   const B=fs.readFileSync(new URL('../owner-sign/static/onboard-new.js',import.meta.url),'utf8');assert.doesNotMatch(B,/your Base Account will pay the network fee…/);assert.match(B,/Free setup is unavailable right now/);});

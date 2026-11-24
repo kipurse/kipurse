@@ -70,6 +70,9 @@ export function kvUserParts(kv,{keepMigration=()=>true}={}){const lc=w=>String(w
     {name:'push-tokens',forget:w=>{kv.del(kvKey('push',lc(w),'tokens'));kv.del(kvKey('push',lc(w),'moved'));}},
     {name:'onramp-verification',forget:w=>{kv.del(`onrampv:${lc(w)}`);delPrefix(`onrampo:${lc(w)}:`);delPrefix(`onramp:${lc(w)}:`);}},
     {name:'read-grant',forget:w=>{kv.del(kvKey('readgrant',lc(w),'phone'));}},
+    /* t1278 S9: the sign-in records of this wallet (owner, wallet, phone key; kept up to 30 days for an unproven bind) and their proofs */
+    {name:'signin-records',forget:w=>{const k=kvKey('signin-w',lc(w),'ids');let ids=[];try{ids=kv.get(k)??[];}catch{ids=[];}
+      for(const id of Array.isArray(ids)?ids:[])if(/^[0-9a-f]{32}$/.test(String(id))){kv.del(kvKey('signin',null,id));kv.del(kvKey('signin-p',null,id));}kv.del(k);}},
     {name:'signer-grants',forget:w=>{delPrefix(`v55inline:${lc(w)}:`);delPrefix(`v54grant:${lc(w)}:`);delPrefix(`v54grant-s:${lc(w)}:`);kv.del(`v54grant-list:${lc(w)}`);}},
     {name:'migration-record',forget:w=>{const k=kvKey('migrate54',lc(w),'record');const m=kv.get(k);if(!m)return;
       if(!keepMigration(w)){kv.del(k);return;}

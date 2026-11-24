@@ -37,6 +37,11 @@ export function parseSiwe(m){const t=String(m??'').replace(/\r\n?/g,'\n');let v=
 const shape=x=>{const s=String(x??'');return s.length>12?`len${s.length}`:JSON.stringify(s.replace(/[^0-9a-zA-Z. ]/g,'?'));};
 export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,chainId=8453,ttlMs=10*60e3,maxAgeMs=10*60e3,grantTtlMs=30*24*3600e3,now=()=>Date.now()}){
   const K=id=>kvKey('signin',null,id);const host=()=>new URL(base()).host;
+  /* t1278 S9: the owner's SIWE message + signature live in their own short-lived key (ttlMs) and are handed out only to the starter, never in the
+     long-lived (30-day) unproven-bind record; sign-in ids are indexed by wallet (signin-w) so the user-data erase finds and deletes them */
+  const KP=id=>kvKey('signin-p',null,id);const KW=w=>kvKey('signin-w',String(w).toLowerCase(),'ids');
+  const indexId=(wallet,id,ttl)=>{try{const k=KW(wallet);const l=(kv.get(k)??[]).filter(x=>ID.test(String(x))&&x!==id&&kv.get(K(x)));l.push(id);kv.put(k,l.slice(-50),Math.max(Number(ttl)||0,31*86400e3));}catch{}};/* t1279 R5 (§6#139): the index outlives every record it lists (longest 30 d), so a later short sign-in never hides an older record from erase */
+  const erasedSince=(wallet,o)=>{try{const rec=reg?.get?.(wallet);return !!rec?.erasedAt&&Number(rec.erasedAt)>=Number(o?.at??0);}catch{return true;}};
   // t789: the sign-in page pins its bundle with SRI; the app checks the same sha384 (SigninCheck.swift) before showing the page.
   let SRI=null;const sri=()=>SRI??=signinSri(script());
   // setup (optional): the app's fresh phone key + default AI limits. A NEW account then opens its wallet on this SAME page
@@ -47,7 +52,7 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
      no setup, so a phisher cannot attach THEIR key to a victim's sign-in. */
   const keyOk=(x,y,id,r,s)=>{try{return HEX32.test(String(r??''))&&HEX32.test(String(s??''))&&p256VerifyDigest({x:String(x),y:String(y)},signinKeyDigest(id),String(r),String(s));}catch{return false;}};
   // t1275: the grant goes ONLY to the key the owner's signed SIWE statement names (o.fp set by verify from the checked statement)
-  const writeGrant=(wallet,o,owner)=>{if(!o.x||!o.y||!o.fp||o.fp!==signinKeyFp(o.x,o.y))return false;kv.put(kvKey('readgrant',wallet,'phone'),{x:o.x,y:o.y,owner,exp:now()+grantTtlMs},grantTtlMs);return true;};
+  const writeGrant=(wallet,o,owner)=>{if(!o.x||!o.y||!o.fp||o.fp!==signinKeyFp(o.x,o.y))return false;if(erasedSince(wallet,o))return false;/* t1278 S9: never after the wallet's data was erased */kv.put(kvKey('readgrant',wallet,'phone'),{x:o.x,y:o.y,owner,exp:now()+grantTtlMs},grantTtlMs);return true;};
   function start({x,y,setup,id:cid,r,s}={}){const hasKey=HEX32.test(String(x??''))&&HEX32.test(String(y??''));
     const wantSetup=!!(hasKey&&setup&&typeof setup==='object'&&onboard);
     const own=hasKey&&ID.test(String(cid??''))&&!kv.get(K(String(cid)));
@@ -56,7 +61,7 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
     const lim=wantSetup?{single:String(setup.single),daily:String(setup.daily),term:String(setup.term),days:String(setup.days??90)}:null;
     // t796 H2: the poll secret goes ONLY to the starter (never in the page URL); the pairing code is shown in the app AND on the page
     const statement=signinStatementFor(hasKey&&x,hasKey&&y);   // t1275
-    const put=onb=>{kv.put(K(id),{pollH:createHash('sha256').update(poll).digest('hex'),pair,x:hasKey?String(x):null,y:hasKey?String(y):null,nonce,state:'start',onb,proven,wantSetup,lim,statement},ttlMs);
+    const put=onb=>{kv.put(K(id),{pollH:createHash('sha256').update(poll).digest('hex'),pair,x:hasKey?String(x):null,y:hasKey?String(y):null,nonce,state:'start',onb,proven,wantSetup,lim,statement,at:now()},ttlMs);
       return {id,url:`${base()}/signin?id=${id}`,nonce,setup:!!onb,poll,pair,proven,statement,...(hasKey&&!proven?{prove:{digest:signinKeyDigest(id)}}:{})};};
     if(!(wantSetup&&proven))return put(null);
     return onboard.start({x:String(x),y:String(y),single:setup.single,daily:setup.daily,term:setup.term,days:setup.days,owner:null}).then(r0=>put(r0.id));}
@@ -78,7 +83,7 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
     return {result:phone?'reconnect':'bind',wallet:getAddress(rec.wallet),path:rec.publicPath??'/t/'+String(rec.wallet).toLowerCase(),...hint};}
   async function verify(id,{address,message:m,signature,poll}){const o=ID.test(id)&&kv.get(K(id));if(!o)throw Object.assign(Error('unknown or expired'),{code:'unknown'});
     // t1265: a finished sign-in is re-read only with the starter's poll secret (the page URL / id alone never reveals the owner or the wallet)
-    if(o.state==='done'){if(!o.pollH||!pollOk(o,poll))throw Object.assign(Error('unknown or expired'),{code:'unknown'});return {ok:true,result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o)};}
+    if(o.state==='done'){if(!o.pollH||!pollOk(o,poll))throw Object.assign(Error('unknown or expired'),{code:'unknown'});return {ok:true,result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o,id)};}
     if(!isAddress(String(address))||typeof m!=='string'||m.length>2000||!/^0x[0-9a-fA-F]+$/.test(String(signature))||String(signature).length>20000)throw Object.assign(Error('bad request'),{code:'bad_request'});
     const p=parseSiwe(m),A=getAddress(address);const t=Date.parse(p.issuedAt??'');
     // t1275: a sign-in started with a phone key must be signed over the statement naming exactly that key (never the generic text, never another key)
@@ -98,13 +103,18 @@ export function createSignin({kv,pub,reg,phoneOf,base,script,obs,onboard=null,ch
     if(r.result==='bind'&&o.x&&o.y&&r.wallet&&o.proven)writeGrant(r.wallet,o,A);
     else if(r.result==='reconnect'&&r.wallet)kv.del?.(kvKey('readgrant',r.wallet,'phone'));
     /* t1268 (§6#133, 0A #2): no Face ID at sign-in -> an unproven "bind" stays provable for the read-grant lifetime; the app proves with the Face ID of the first action that needs it (turning on Face ID approvals) */
-    kv.put(K(id),{...o,state:'done',owner:A,...r,siweMessage:m,siweSignature:String(signature)},r.result==='bind'&&!o.proven&&o.x&&o.y?grantTtlMs:ttlMs);obs?.log?.('signin',{result:r.result,setup:!!setup});return {ok:true,owner:A,...r,setup};}
+    {const ttl=r.result==='bind'&&!o.proven&&o.x&&o.y?grantTtlMs:ttlMs;const {siweMessage:_m,siweSignature:_s,...rest}=o;
+      kv.put(K(id),{...rest,state:'done',owner:A,...r},ttl);kv.put(KP(id),{siweMessage:m,siweSignature:String(signature)},ttlMs);if(r.wallet)indexId(r.wallet,id,ttl);}   /* t1278 S9 */
+    obs?.log?.('signin',{result:r.result,setup:!!setup});return {ok:true,owner:A,...r,setup};}
   /** t1275: the owner's own SIWE message + signature, so the app checks the owner itself (domain, chain, nonce, its own key in the statement, ERC-6492 on chain) */
-  const proofOf=o=>o.siweMessage&&o.siweSignature?{siweMessage:o.siweMessage,siweSignature:o.siweSignature}:{};
+  /* t1278 S9: only by the starter (callers check the poll secret first); kept in its own key for ttlMs (10 min), never in the 30-day record.
+     Re-readable inside that window so a lost status reply never breaks sign-in (executor review). */
+  const proofOf=(o,id)=>{let p=null;try{p=id?kv.get(KP(id)):null;}catch{p=null;}
+    return p?.siweMessage&&p?.siweSignature?{siweMessage:p.siweMessage,siweSignature:p.siweSignature}:{};};
   const hintOf=o=>({...(o.approver?{approver:o.approver}:{}),...(o.seat?{seat:o.seat}:{})});
   const pollOk=(o,poll)=>{if(!o?.pollH)return true;const a=Buffer.from(o.pollH,'hex'),b=createHash('sha256').update(String(poll??'')).digest();return a.length===b.length&&timingSafeEqual(a,b);};
   function status(id,poll){const o=ID.test(id)&&kv.get(K(id));if(!o||!pollOk(o,poll))return {state:'expired'};if(o.state!=='done')return {state:o.state};const s=o.result==='new'&&o.onb&&onboard?onboard.status(o.onb):null;
-    return {state:'done',result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o),setup:s?{state:s.state,wallet:s.wallet}:null};}
+    return {state:'done',result:o.result,wallet:o.wallet,owner:o.owner,path:o.path,...hintOf(o),...proofOf(o,id),setup:s?{state:s.state,wallet:s.wallet}:null};}
   function page(id,o,nonce,lang){const t=X(lang);return `<!doctype html><html lang=${lang}><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t('用 Coinbase 登录 Kipurse','Sign in to Kipurse with Coinbase')}</title>
 <style>body{margin:0;background:#F2F2F7;color:#111;font:17px/1.45 -apple-system,"PingFang SC",sans-serif}.w{max-width:480px;margin:0 auto;padding:28px 18px 40px}.c{background:#fff;border-radius:16px;padding:14px 16px;margin:12px 0}.t{font-size:24px;font-weight:700;margin:10px 0}.m{color:#666;font-size:14px}button{display:block;width:100%;border:0;border-radius:14px;padding:15px;font-size:18px;font-weight:600;margin-top:10px;background:#0052FF;color:#fff}</style>
 <div class=w><div class=t>${t('用 Coinbase 登录','Sign in with Coinbase')}</div>

@@ -271,6 +271,13 @@ public enum KipurseV55 {
       if lc(a.account) != nw || lc(a.spender) != lc(adapter) || lc(a.token) != usdcL { bad("new permission is not for the new wallet on the V5.5 adapter") }
       if registered != a { bad("registered permission differs from the approved one") }
       if let o = oldPerm, o.policy.count < 9 || a.policy.count < 9 || o.allowance != a.allowance || o.period != a.period || o.start != a.start || o.end != a.end || Array(o.policy[2...4]) != Array(a.policy[2...4]) || Array(o.policy[5...8]) != Array(a.policy[5...8]) { bad("new limits differ from your current limits") }
+      // t1280 (Q2): pauser, registry and both fee ceilings carry over from the old permission too, and must meet the absolute ceilings
+      // registry: the server's own move formula (gw wallet-v55.mjs permissionV55): a registry-using permission (verifiedSingle > 0, registry set)
+      // moves to the V5.5 registry V2, any other keeps its registry
+      if let o = oldPerm, o.policy.count == 12, a.policy.count == 12 {
+        let usesRegistry = o.policy[7] != "0" && lc(o.policy[9]) != RequestVerify.zeroAddress
+        if [1, 10, 11].contains(where: { lc(o.policy[$0]) != lc(a.policy[$0]) }) || lc(a.policy[9]) != (usesRegistry ? lc(registryV2) : lc(o.policy[9])) { bad("new pauser / registry / fee ceilings differ from your current permission") } }
+      p += RequestVerify.policyCeilingProblems(a.policy)
     } else { bad("no new spend permission") }
     return p }
   static func sel(_ sig: String) -> String { String(BatchVerify.sel(sig).dropFirst(2)) }

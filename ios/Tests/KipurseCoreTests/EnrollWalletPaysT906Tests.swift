@@ -16,7 +16,7 @@ final class EnrollWalletPaysT906Tests: XCTestCase {
   func feeCall(_ c: [[String: Any]]) -> [String: Any]? { c.first { (($0["data"] as? String)?.lowercased().hasPrefix("0xb61d27f6")) ?? false } }
   func testFeeToKipurseOpsAccepted() {
     let base = calls("enroll"); XCTAssertNotNil(feeCall(base), "vector has a fee step")
-    let r = BatchVerify.enroll(calls: swapFee(base, to: RequestVerify.duesTo), wallet: wallet, owner: owner, x: x, y: y); XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
+    let r = BatchVerify.enroll(calls: swapFee(base, to: RequestVerify.duesTo), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String); XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
   }
   func testFeeToAnyoneElseRejected() {
     let r = BatchVerify.enroll(calls: swapFee(calls("enroll"), to: "0x" + String(repeating: "5", count: 40)), wallet: wallet, owner: owner, x: x, y: y)

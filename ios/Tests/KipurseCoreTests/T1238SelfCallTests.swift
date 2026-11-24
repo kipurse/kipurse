@@ -34,15 +34,15 @@ final class T1238SelfCallTests: XCTestCase {
   func testSelfCallShapeAcceptedForOpeningEnrollRevoke() {
     let s = wrap(calls("setupNew")); XCTAssertEqual(ownerTop(s), 0); XCTAssertGreaterThan(ownerTop(calls("setupNew")), 0)
     let r = setup(s); XCTAssertTrue(r.ok, r.problems.joined(separator: "; ")); XCTAssertEqual(r.approver, (v["approver"] as! String).lowercased())
-    let e = BatchVerify.enroll(calls: wrap(calls("enroll")), wallet: wallet, owner: owner, x: x, y: y); XCTAssertTrue(e.ok, e.problems.joined(separator: "; "))
+    let e = BatchVerify.enroll(calls: wrap(calls("enroll")), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String); XCTAssertTrue(e.ok, e.problems.joined(separator: "; "))
     XCTAssertTrue(BatchVerify.revoke(calls: wrap(calls("revoke")), wallet: wallet, owner: owner, approver: v["revokeApprover"] as? String).ok)
   }
   func testOldTopLevelShapeStillChecked() {  // an older server still works the same way (and is still checked the same way)
-    XCTAssertTrue(setup(calls("setupNew")).ok); XCTAssertTrue(BatchVerify.enroll(calls: calls("enroll"), wallet: wallet, owner: owner, x: x, y: y).ok)
+    XCTAssertTrue(setup(calls("setupNew")).ok); XCTAssertTrue(BatchVerify.enroll(calls: calls("enroll"), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String).ok)
   }
   func testSameRulesInsideTheSelfCall() {
     for k in ["setup_attacker_owner", "setup_other_owner_wallet", "setup_other_phone"] { XCTAssertFalse(setup(wrap(tampered(k))).ok, k) }
-    for k in ["enroll_remove_owner", "enroll_other_phone"] { XCTAssertFalse(BatchVerify.enroll(calls: wrap(tampered(k)), wallet: wallet, owner: owner, x: x, y: y).ok, k) }
+    for k in ["enroll_remove_owner", "enroll_other_phone"] { XCTAssertFalse(BatchVerify.enroll(calls: wrap(tampered(k)), wallet: wallet, owner: owner, x: x, y: y, replacing: v["revokeApprover"] as? String).ok, k) }
     XCTAssertFalse(BatchVerify.revoke(calls: wrap(tampered("revoke_owner")), wallet: wallet, owner: owner, approver: nil).ok, "self-call removing your Coinbase wallet")
     XCTAssertFalse(BatchVerify.revoke(calls: wrap(calls("revoke")), wallet: wallet, owner: owner, approver: "0x" + String(repeating: "2", count: 40)).ok)
   }

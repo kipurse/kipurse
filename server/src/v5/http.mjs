@@ -3,20 +3,24 @@
 import {createServer} from 'node:http';import {resolveAgent} from '../v4/agents.mjs';import {forAI} from './usdc-out.mjs';import {createAskFlow} from './owner-ask.mjs';
 // t1166u (§6#80, permanent): the /v1 agent API answers AIs: amounts are decimal USDC + Display, base units only in *Atomic.
 const send=(res,code,obj)=>{res.writeHead(code,{'content-type':'application/json'});res.end(JSON.stringify(forAI(obj),(k,v)=>typeof v==='bigint'?v.toString():v));};
+/** t1278 S12: agent ids the server itself uses for the owner's own (Face ID) paths; never an AI's id */
+export const RESERVED_AGENT_IDS=new Set(['owner','siri']);
 export function createV5HttpServer(engine,{agentTokens,agents}={}){
+  /* t1278 S12: the agent API never trusts a client-supplied X-Agent-Id: without agent auth config it does not start */
+  if(!Array.isArray(agents)&&!(agentTokens&&typeof agentTokens==='object'))throw Object.assign(Error('agent auth config required (agents or agentTokens)'),{code:'agent_auth_config_required'});
   return createServer(async(req,res)=>{
     try{
-      let agentId=String(req.headers['x-agent-id']??'');const bearer=String(req.headers.authorization??'').replace(/^Bearer /,'');
-      if(agents){const a=resolveAgent(agents,bearer);if(!a)return send(res,401,{error:'unauthorized'});agentId=a.id;}
-      else if(agentTokens){agentId=agentTokens[bearer];if(!agentId)return send(res,401,{error:'unauthorized'});}
-      if(!/^[A-Za-z0-9._-]{1,64}$/.test(agentId))return send(res,400,{error:'X-Agent-Id required'});
+      let agentId='';const bearer=String(req.headers.authorization??'').replace(/^Bearer /,'');
+      if(Array.isArray(agents)){const a=resolveAgent(agents,bearer);if(!a)return send(res,401,{error:'unauthorized'});agentId=String(a.id??'');}
+      else{agentId=Object.prototype.hasOwnProperty.call(agentTokens,bearer)?String(agentTokens[bearer]??''):'';if(!agentId)return send(res,401,{error:'unauthorized'});}
+      if(!/^[A-Za-z0-9._-]{1,64}$/.test(agentId)||RESERVED_AGENT_IDS.has(agentId.toLowerCase()))return send(res,403,{error:'agent_id_not_allowed'});
       const url=new URL(req.url,'http://x');const q=Object.fromEntries(url.searchParams);
       if(req.method==='GET'){
         if(url.pathname==='/v1/status')return send(res,200,await engine.status());
         if(url.pathname==='/v1/limits')return send(res,200,await engine.limits({agentId}));
         if(url.pathname==='/v1/merchants')return send(res,200,await engine.merchantInfo(q));
         if(url.pathname==='/v1/purchases')return send(res,200,engine.listPurchases({since:q.since?Number(q.since):0,state:q.state,agentId:q.mine==='1'?agentId:undefined,limit:q.limit?Number(q.limit):50}));
-        if(url.pathname.startsWith('/v1/purchases/')){const r=engine.ledger.get(url.pathname.split('/').pop());return r?send(res,200,r):send(res,404,{error:'not_found'});}
+        if(url.pathname.startsWith('/v1/purchases/')){const r=(engine.purchaseForAI??(k=>engine.ledger.get(k)))(url.pathname.split('/').pop());/* t1279 R2 */return r?send(res,200,r):send(res,404,{error:'not_found'});}
         return send(res,404,{error:'not_found'});
       }
       if(req.method!=='POST')return send(res,404,{error:'not_found'});
@@ -66,10 +70,10 @@ export function createV5HttpServer(engine,{agentTokens,agents}={}){
         case '/v1/float/status':return send(res,200,await engine.floatStatus());
         case '/v1/float/fund':return send(res,200,await engine.floatFund({amount:b.amount,hours:b.hours}));
         case '/v1/float/reconcile':return send(res,200,await engine.floatReconcile());
-        case '/v1/maintenance/collect-fees':return send(res,200,await engine.collectFees());
+        /* t1278 S10: /v1/maintenance/collect-fees removed from the agent API (operator / keeper only) */
         default:return send(res,404,{error:'not_found'});
       }
       send(res,out.state==='rejected'?(out.reason?.startsWith('idempotency')?409:422):200,out);
-    }catch(e){send(res,500,{error:String(e.shortMessage??e.message).slice(0,200)});}
+    }catch(e){send(res,500,{error:'internal_error',...(typeof e?.code==='string'?{code:e.code}:{})});}/* t1278 S6: error code only, never the raw message */
   });
 }

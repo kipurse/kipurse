@@ -84,7 +84,7 @@ test('engine: blacklist refused for every tier; anomaly pauses: 5 new payees, ca
   const b=await engine.pay({addressSource:'owner_chat',request:direct('100000','b-1',getAddress('0x101ce0cedd142f199c9ef61739ae59b6611a0fc0')),idempotencyKey:'idem-b-0001'});assert.equal(b.reason,'SCAM_BLACKLIST');assert.equal(b.nothingPaid,true);
   for(let i=1;i<=4;i++){engine.mandates.remember(P(10+i),'Shop '+i);const r=await engine.pay({request:direct('100000','n-'+i,P(10+i)),idempotencyKey:'idem-n-000'+i});assert.equal(r.state,'paid',JSON.stringify(r));}
   const n5=await engine.pay({request:direct('100000','n-5',P(15)),idempotencyKey:'idem-n-0005'});assert.equal(n5.reason,'NEW_PAYEE_NEEDS_OWNER');
-  const sm=engine.spendingSummary({period:'today'});assert.equal(sm.count,4);assert.equal(sm.total,'0.4');assert.doesNotMatch(sm.say_to_user,/0x/);
+  const sm=engine.spendingSummary({period:'today'});assert.equal(sm.count,4);assert.equal(sm.total,'0.4144');/* t1281: 4 x (0.1 + 0.1% fee 0.0001 + network fee 0.0035) */assert.doesNotMatch(sm.say_to_user,/0x/);
   const c=mk({tierLimits:{newPayees1h:99}});c.engine.mandates.remember(P(21),'Big');for(let i=1;i<=3;i++)await c.engine.pay({order:{item:'x',max_price:'1'},request:direct('2000000','c-'+i,P(21)),idempotencyKey:'idem-c-000'+i});assert.deepEqual(c.paused,['repeated_cap_hits']);
   const d=mk({tierLimits:{newPayees1h:99,holdAbove:10n**15n}});await up(d.engine,P(31),'d31');await up(d.engine,P(32),'d32');
   const big=await d.engine.pay({request:direct('400000000','d-1',P(31)),idempotencyKey:'idem-d-0001'});assert.equal(big.state,'paid',JSON.stringify(big));

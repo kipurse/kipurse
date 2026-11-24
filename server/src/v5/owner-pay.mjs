@@ -71,6 +71,6 @@ export function createOwnerPay({enabled=false,resolveTenant,store,save=()=>{},no
       if(p==='/owner/pay/challenge'&&req.method==='POST'){const [c,o]=await challenge(ten,await readBody(req));json(c,o);return true;}
       if(p==='/owner/pay/submit'&&req.method==='POST'){const [c,o]=await submit(ten,await readBody(req));json(c,o);return true;}
       if(p==='/owner/pay/history'&&req.method==='GET'){json(200,{payments:T(ten.wallet).payments});return true;}
-    }catch(e){json(502,{error:'owner_pay_failed',detail:String(e?.message??e).slice(0,200)});return true;}
+    }catch(e){json(502,{error:'owner_pay_failed',...(typeof e?.code==='string'?{code:e.code}:{})});return true;}/* t1278 S6: error code only, never the raw message */
     json(404,{error:'not_found'});return true;}
   return {handle,forget,_challenge:challenge,_submit:submit};}

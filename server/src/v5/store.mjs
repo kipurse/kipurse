@@ -48,7 +48,9 @@ export function createRateLimiter(kv,{perKey=60,global=6000,windowMs=60000}={}){
  *  and orders, sign-in / new-wallet setup records (phone key + owner), V5.4 signer grants). With a data key their VALUES are sealed with
  *  AES-256-GCM under a per-tenant subkey (HKDF(data key, tenant address)); the key name is the AAD, so a value cannot be moved to another key.
  *  Old plaintext values stay readable and are sealed on their next write. Without a data key the KV is returned unchanged. */
-export const PERSONAL_KV_SCOPES=['push','readgrant','onramp','onrampv','onrampo','signin','onbnew','v54grant','v54grant-s','v54grant-list'];
+export const PERSONAL_KV_SCOPES=['push','readgrant','onramp','onrampv','onrampo','signin','onbnew','v54grant','v54grant-s','v54grant-list',
+  /* t1278 S8: V5.5 inline trusts (owner's kind-6 KPTR blob, payee, merchant, caps); plaintext rows written before stay readable (open() passes
+     non-sealed values through) and are sealed on their next write, exactly like v54grant */'v55inline','signin-w','signin-p'];
 const ADDR_RE=/^0x[0-9a-f]{40}$/i;
 export function sealKV(kv,dataKey,{scopes=PERSONAL_KV_SCOPES}={}){if(!kv||!dataKey)return kv;
   const k=Buffer.isBuffer(dataKey)?dataKey:Buffer.from(String(dataKey).trim(),'hex');if(k.length!==32)throw Error('data key must be 32 bytes');

@@ -11,8 +11,13 @@ public enum RequestVerify {
   public struct Choice { public var single, daily, term: String; public var days: Int?
     /// t1185u (§6#85): daily on-chain operations the owner picked (nil = unchanged; no setOpsPerDay call allowed).
     public var opsPerDay: Int?
-    public init(single: String, daily: String, term: String, days: Int?, opsPerDay: Int? = nil) { self.single = single; self.daily = daily; self.term = term; self.days = days; self.opsPerDay = opsPerDay } }
-  public struct Result: Equatable { public var problems: [String] = []; public var notes: [String] = []; public var ok: Bool { problems.isEmpty } }
+    /// t1281 (§6#141 ①): the owner's own limits for strangers (atomic USDC; both nil = an older server / legacy formula, see subCaps).
+    public var openSingle: String?, openDaily: String?
+    public init(single: String, daily: String, term: String, days: Int?, opsPerDay: Int? = nil, openSingle: String? = nil, openDaily: String? = nil) { self.single = single; self.daily = daily; self.term = term; self.days = days; self.opsPerDay = opsPerDay; self.openSingle = openSingle; self.openDaily = openDaily } }
+  public struct Result: Equatable { public var problems: [String] = []; public var notes: [String] = []; public var ok: Bool { problems.isEmpty }
+    /// t1280 (Q3): the ABI arguments of the ONE revoke(SpendPermission) inside a limits batch (nil = no revoke). The App asks the chain
+    /// (two agreeing nodes, RequestVerify.revokedIsLive) whether exactly this permission is the live one before the signing page opens.
+    public var revokeArgs: [UInt8]? = nil }
 
   // ---- tiny ABI reader ----
   struct R { let b: [UInt8]
@@ -61,7 +66,7 @@ public enum RequestVerify {
   /// t767u: Kipurse ops account and per-op cap for repaying fronted onboarding gas (vault fee slot). Fixed here, never from the server.
   /// t1123u: the official Kipurse fee address (= server DUES_SLOT / withdraw feeTo / OwnerExit.withdrawFeeTo / UsdcGas.feeTo). Was the stale 0xfc0E…345B.
   public static let duesTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9", duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
-  public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false) -> Result {
+  public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false, requireRevoke: Bool = false) -> Result {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
     // t1103: wallet-pays is exactly USDC.approve(Pimlico, <= 0.05) then the cap change. No refund, no other call.
     if walletPays {
@@ -79,7 +84,7 @@ public enum RequestVerify {
     guard data.count >= 4, Hex.encode(Array(data.prefix(4))) == "0x" + selExecuteBatch else { bad("not a wallet batch"); return res }
     let r = R(b: Array(data.dropFirst(4)))
     guard let ao = r.int(0), let n = r.int(ao), n > 0, n <= 8 else { bad("bad batch"); return res }
-    var approved: Permission?, registered: Permission?, revokes = 0, dues = 0, opsSet = 0
+    var approved: Permission?, registered: Permission?, revoked: Permission?, revokeArgs: [UInt8]?, revokes = 0, dues = 0, opsSet = 0
     for i in 0..<n {
       guard let eo = r.int(ao + 32 + i * 32) else { bad("bad batch"); return res }; let e = ao + 32 + eo
       guard let target = r.addr(e), let val = r.dec(e + 32), let dofs = r.int(e + 64), let inner = r.bytes(e + dofs), inner.count >= 4 else { bad("bad inner call"); return res }
@@ -107,7 +112,7 @@ public enum RequestVerify {
       if lc(p.spender) != lc(adapter) { bad("permission spender is not the Kipurse adapter") }
       if lc(p.token) != lc(usdc) { bad("permission token is not USDC") }
       switch (sel, lc(target)) {
-      case (selRevoke, lc(spendPermissionManager)): revokes += 1
+      case (selRevoke, lc(spendPermissionManager)): revokes += 1; revoked = p; revokeArgs = Array(inner.dropFirst(4))
       case (selApprove, lc(spendPermissionManager)): approved = p
       case (selRegister, lc(adapter)): registered = p
       default: bad("unexpected call \(sel) to \(target)")
@@ -117,7 +122,12 @@ public enum RequestVerify {
     guard let p = approved else { bad("no new permission"); return res }
     if let g = registered, g != p { bad("registered permission differs from the approved one") }
     if revokes > 1 { bad("revokes more than one permission") }
+    // t1280 (Q3): a later limit change replaces exactly ONE permission (the live one; the App confirms it on chain via revokeArgs)
+    if requireRevoke && revokes != 1 { bad("a limit change must replace exactly your current permission") }
     let pol = p.policy
+    // t1280 (Q2): guardian / registry / fee ceilings / sub-caps by the server's own formula (change: from the revoked permission; opening: template)
+    for why in policyProblems(pol, old: revokes == 1 ? revoked?.policy : nil, single: choice.single, daily: choice.daily, openSingle: choice.openSingle, openDaily: choice.openDaily, v55: lc(adapter) == lc(KipurseSuite.v55.adapter)) { bad(why) }
+    if revokes == 1, let ra = revokeArgs { res.revokeArgs = ra }
     if pol[2] != choice.single { bad("per-payment cap differs from your choice") }
     if pol[3] != choice.daily { bad("daily cap differs from your choice") }
     if pol[4] != choice.term || p.allowance.map(String.init) != choice.term { bad("total differs from your choice") }
@@ -131,15 +141,115 @@ public enum RequestVerify {
     } else { bad("bad term") }
     return res
   }
+  // MARK: t1280 (Q2/Q3) - the SpendPermission policy fields the server must not choose freely
+  /// Policy layout (gw abi.mjs POLICY_V5_T / KipurseAdapterV55.Policy): [0] executor, [1] guardian, [2] single, [3] daily, [4] term,
+  /// [5] openSingle, [6] openDaily, [7] verifiedSingle, [8] verifiedDaily, [9] registry, [10] maxFeePpm, [11] maxNetworkFee.
+  public static let zeroAddress = "0x0000000000000000000000000000000000000000"
+  /// The Kipurse merchant registry every Kipurse permission names (same address in the live V5.2/V5.4 permissions and the onboarding template).
+  public static let merchantRegistry = "0x26c707ccbd569624cf31f5c574d4fdf7e3f23998"
+  /// Every registry a Kipurse permission may name: none, the Kipurse registry, or the V5.5 registry V2 (KipurseV55.registryV2, the
+  /// server's V5.5 move switches a registry-using permission to it: gw wallet-v55.mjs permissionV55).
+  public static var knownRegistries: [String] { [zeroAddress, merchantRegistry, KipurseV55.registryV2.lowercased()] }
+  /// Absolute ceilings, whatever the server says: protocol fee rate <= 0.1 %, per-payment network fee <= 0.05 USDC (atomic).
+  public static let maxFeePpmCeiling = "1000", maxNetworkFeeCeiling = "50000"
+  /// The server's onboarding template permission (gw onboard-new.mjs policy()): guardian none, Kipurse registry, fee ceilings, sub-caps
+  /// 0.1 / 0.2002 USDC (open payees) and 2 / 5.005 USDC (registry-verified merchants). Sub-caps of a new wallet = min(template, choice).
+  public static let templatePolicy: [String] = ["", zeroAddress, "", "", "", "100000", "200200", "2000000", "5005000", merchantRegistry, "1000", "50000"]
+  static func minDec(_ a: String, _ b: String) -> String { lt(a, b) ? a : b }
+  /// Ceilings every new policy must meet (limits change, opening, V5.5 move).
+  public static func policyCeilingProblems(_ pol: [String]) -> [String] {
+    guard pol.count == 12 else { return ["bad policy"] }
+    var p = [String]()
+    if lc(pol[1]) != zeroAddress { p.append("the permission names an emergency pauser you did not choose") }
+    if !knownRegistries.contains(lc(pol[9])) { p.append("the permission names an unknown merchant registry") }
+    if lt(maxFeePpmCeiling, pol[10]) { p.append("the fee rate ceiling is above 0.1%") }
+    if lt(maxNetworkFeeCeiling, pol[11]) { p.append("the network fee ceiling is above 0.05 USDC") }
+    return p
+  }
+  /// The server formula (0A#10): change (`old` = the revoked policy) keeps guardian / registry / maxFeePpm / maxNetworkFee and sets each
+  /// sub-cap to min(old sub-cap, your cap); opening (`old` = nil) uses the template the same way. Anything else is refused.
+  /// `v55`: a V5.5 opening may name the V5.5 registry V2 instead of the template's registry (same template otherwise).
+  /// t1281: `openSingle` / `openDaily` = the stranger limits the owner chose in the app (atomic; nil = legacy formula, an older server).
+  /// Explicit values must be EXACTLY in the policy (subCaps); verified sub-caps keep min(base, your cap).
+  public static func policyProblems(_ pol: [String], old: [String]?, single: String, daily: String, openSingle: String? = nil, openDaily: String? = nil, v55: Bool = false) -> [String] {
+    var p = policyCeilingProblems(pol)
+    guard pol.count == 12 else { return p }
+    let base = old ?? templatePolicy
+    guard base.count == 12 else { return p + ["bad current permission"] }
+    let registryOK = lc(pol[9]) == lc(base[9]) || (old == nil && v55 && lc(pol[9]) == lc(KipurseV55.registryV2))
+    if lc(pol[1]) != lc(base[1]) || !registryOK || pol[10] != base[10] || pol[11] != base[11] {
+      p.append(old == nil ? "pauser / registry / fee ceilings differ from Kipurse's standard permission" : "pauser / registry / fee ceilings differ from your current permission") }
+    let sc = subCaps(single: single, daily: daily, openSingle: openSingle, openDaily: openDaily, base: base)
+    if let e = sc.error { p.append("your limits for new payees are not valid (\(e))") }
+    else if let c = sc.caps {
+      let openOK = pol[5] == c.openSingle && pol[6] == c.openDaily, verOK = pol[7] == c.verifiedSingle && pol[8] == c.verifiedDaily
+      if openSingle != nil && !openOK { p.append("the limits for new payees differ from what you chose") }
+      if !verOK || (openSingle == nil && !openOK) { p.append(old == nil ? "a sub-cap differs from Kipurse's standard sub-caps" : "a sub-cap differs from your current sub-caps") }
+    }
+    // the contract's own rule (_policy): stranger limits never above the main limits of the SAME policy
+    if lt(pol[2], pol[5]) || lt(pol[3], pol[6]) { p.append("a limit for new payees is above your main limit") }
+    return p
+  }
+
+  // MARK: t1281 (owner decision §6#141 ①) - THE stranger sub-limit formula, identical to the server's (gw src/v5/limits-public.mjs
+  // subCaps / strangerChoiceError; cross-test gw test/t1281-stranger-cap.test.mjs -> t1281-stranger-caps.json.txt).
+  // "Stranger" = a payee you have not trusted that is not registry-listed: policy [5] openSingle = per payment (amount only),
+  // [6] openDaily = per day INCLUDING fees, one counter for all strangers.
+  //  - explicit (you chose them): exactly your numbers; must be 0 < openSingle <= single, 0 < openDaily <= daily, openSingle <= openDaily,
+  //    else REFUSED (never clamped).   - legacy (both nil): min(base, your cap), as before.   - verified: always min(base, your cap).
+  // FEE HEADROOM RULE: none. Openings and limit changes are built with headroom:false, so the on-chain daily IS your daily number (fees
+  // count inside it); the stranger daily is treated the same (your number verbatim), so "same as my normal limits" = the policy daily.
+  public struct SubCaps: Equatable { public var openSingle, openDaily, verifiedSingle, verifiedDaily: String }
+  /// Decimal digits (at most 30) without leading zeros, or nil (same as the server's /^\d{1,30}$/ + BigInt).
+  static func atomicDec(_ s: String?) -> String? {
+    guard let s, !s.isEmpty, s.count <= 30, s.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
+    let t = s.drop(while: { $0 == "0" }); return t.isEmpty ? "0" : String(t) }
+  /// nil = OK (or legacy: both nil); else the server's error code. Same check order as the server.
+  public static func strangerChoiceError(single: String, daily: String, openSingle: String?, openDaily: String?) -> String? {
+    if openSingle == nil && openDaily == nil { return nil }
+    if openSingle == nil || openDaily == nil { return "stranger_incomplete" }
+    guard let os = atomicDec(openSingle), let od = atomicDec(openDaily), let s = atomicDec(single), let d = atomicDec(daily) else { return "bad_stranger_amount" }
+    if os == "0" { return "stranger_single_zero" }
+    if od == "0" { return "stranger_daily_zero" }
+    if lt(s, os) { return "stranger_single_above_single" }
+    if lt(d, od) { return "stranger_daily_above_daily" }
+    if lt(od, os) { return "stranger_single_above_stranger_daily" }
+    return nil
+  }
+  /// The four sub-limit words a policy must carry for your choice. `base` = the template (opening) or the revoked policy (change).
+  public static func subCaps(single: String, daily: String, openSingle: String?, openDaily: String?, base: [String]) -> (caps: SubCaps?, error: String?) {
+    if let e = strangerChoiceError(single: single, daily: daily, openSingle: openSingle, openDaily: openDaily) { return (nil, e) }
+    guard base.count >= 9, let s = atomicDec(single), let d = atomicDec(daily), let b5 = atomicDec(base[5]), let b6 = atomicDec(base[6]), let b7 = atomicDec(base[7]), let b8 = atomicDec(base[8]) else { return (nil, "bad_amount") }
+    let explicit = openSingle != nil
+    return (SubCaps(openSingle: explicit ? atomicDec(openSingle)! : minDec(b5, s), openDaily: explicit ? atomicDec(openDaily)! : minDec(b6, d),
+                    verifiedSingle: minDec(b7, s), verifiedDaily: minDec(b8, d)), nil)
+  }
+  /// t1280 (Q3): the SpendPermissionManager views over the SAME argument bytes the revoke carries.
+  static let permTuple = "(address,address,address,uint160,uint48,uint48,uint48,uint256,bytes)"
+  static var selIsValid: String { String(BatchVerify.sel("isValid" + "(" + permTuple + ")").dropFirst(2)) }
+  static var selIsApproved: String { String(BatchVerify.sel("isApproved" + "(" + permTuple + ")").dropFirst(2)) }
+  static var selIsRevoked: String { String(BatchVerify.sel("isRevoked" + "(" + permTuple + ")").dropFirst(2)) }
+  static func boolWord(_ v: String?) -> Bool? { guard let v, let b = Hex.decode(v), b.count == 32, b.prefix(31).allSatisfy({ $0 == 0 }), b[31] <= 1 else { return nil }; return b[31] == 1 }
+  public typealias ChainCall = (_ to: String, _ data: String) async -> String?
+  /// true only when two agreeing public nodes say the permission being revoked is approved on the SpendPermissionManager and not revoked
+  /// (isValid; if that is false, e.g. the term ended, isApproved && !isRevoked). Any read failure or disagreement = false (refuse).
+  public static func revokedIsLive(_ args: [UInt8], call: ChainCall = { to, d in await ChainRPC.ethCall(to, d, agreed: true) }) async -> Bool {
+    guard !args.isEmpty else { return false }
+    let a = String(Hex.encode(args).dropFirst(2)), spm = spendPermissionManager
+    if boolWord(await call(spm, "0x" + selIsValid + a)) == true { return true }
+    guard boolWord(await call(spm, "0x" + selIsApproved + a)) == true, boolWord(await call(spm, "0x" + selIsRevoked + a)) == false else { return false }
+    return true
+  }
+
   /// t1104: the App's check of a /owner/limits/prepare reply (calls exactly as the server sent them).
   /// Wallet-pays (feeFrom = kipurse_wallet): the WHOLE batch goes to limitsBatch(walletPays:), which allows only
   /// [USDC.approve(Pimlico 0x6666…c68b, 0 < n <= 0.05 USDC), cap change]. The older UsdcGas.split rules (approve only to the
   /// CDP paymaster, <= 0.25 USDC) stay exactly as before for every other batch.
   public static func limitsPrepared(calls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, owner: String?, walletPays: Bool, now: Date = Date()) -> Result {
-    if walletPays { return limitsBatch(calls: calls, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: true) }
+    if walletPays { return limitsBatch(calls: calls, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: true, requireRevoke: true) }
     let ug = UsdcGas.split(calls, wallet: wallet)
     if !ug.problems.isEmpty || ug.deposit > 0 { return Result(problems: ug.problems.isEmpty ? ["USDC deposit inside a limits change"] : ug.problems) }
-    return limitsBatch(calls: ug.rest, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: false)
+    return limitsBatch(calls: ug.rest, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: false, requireRevoke: true)
   }
 
   // MARK: t1123u (§6#63) — later limit changes: the network fee comes from the Kipurse wallet's USDC in the SAME confirmation.
@@ -181,8 +291,8 @@ public enum RequestVerify {
     let leg = walletFeeLeg(calls[0], wallet: wallet)
     if let why = leg.problem { bad(why) }
     if let f = leg.fee, let q = (j["fee"] as? [String: Any])?["usdc"] as? String, q != String(f) { bad("fee differs from the quote") }
-    let rest = limitsBatch(calls: [calls[1]], wallet: wallet, chainId: chain, choice: choice, currentExecutor: nil, owner: o, now: now, walletPays: false)
-    res.problems += rest.problems; res.notes += rest.notes
+    let rest = limitsBatch(calls: [calls[1]], wallet: wallet, chainId: chain, choice: choice, currentExecutor: nil, owner: o, now: now, walletPays: false, requireRevoke: true)
+    res.problems += rest.problems; res.notes += rest.notes; res.revokeArgs = rest.revokeArgs
     if leg.fee != nil { res.notes.append("network fee from your Kipurse wallet USDC, same confirmation") }
     return LimitsReply(result: res, from: res.ok ? o : nil, fee: leg.fee)
   }

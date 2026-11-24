@@ -11,12 +11,14 @@ export function resolveAgent(agents,token){
   return null;
 }
 /** Returns null if within the agent's sub-budget, else a reason code. day = permission day (same as the adapter). */
-export function agentBudgetReason(agent,ledger,amount,permission,nowS=Math.floor(Date.now()/1000)){
+/* t1281 (§6#141): the per-payment cap compares the amount; the daily / term budgets compare cost = amount + fee (+ network fee when known),
+   against history counted the same way (ledger.agentSpentSince). Callers without a cost keep amount. */
+export function agentBudgetReason(agent,ledger,amount,permission,nowS=Math.floor(Date.now()/1000),cost=amount){
   if(!agent)return null;
   if(agent.maxPaymentAtomic!==undefined&&amount>BigInt(agent.maxPaymentAtomic))return 'over_agent_single_limit';
   const start=Number(permission.start),dayStart=(start+Math.floor(Math.max(0,nowS-start)/86400)*86400)*1000;
-  if(agent.dailyAtomic!==undefined&&ledger.agentSpentSince(agent.id,dayStart)+amount>BigInt(agent.dailyAtomic))return 'over_agent_daily_budget';
-  if(agent.termAtomic!==undefined&&ledger.agentSpentSince(agent.id,start*1000)+amount>BigInt(agent.termAtomic))return 'over_agent_term_budget';
+  if(agent.dailyAtomic!==undefined&&ledger.agentSpentSince(agent.id,dayStart)+BigInt(cost)>BigInt(agent.dailyAtomic))return 'over_agent_daily_budget';
+  if(agent.termAtomic!==undefined&&ledger.agentSpentSince(agent.id,start*1000)+BigInt(cost)>BigInt(agent.termAtomic))return 'over_agent_term_budget';
   return null;
 }
 export function agentBudgetStatus(agent,ledger,permission,nowS=Math.floor(Date.now()/1000)){

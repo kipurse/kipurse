@@ -53,11 +53,12 @@ export function priceNote(order,amount){const ps=(order?.price_comparison??[]).m
 export function merchantTier(v){if(!v||!v.verified)return 'stranger';const k=v.match?.kind;if(k==='paid_before')return 'verified';return 'trusted';}
 export const TIER_TEXT={trusted:{zh:'可信商家（你批准过）',en:'Trusted (owner approved)'},verified:{zh:'已核实商家（以前付过款，没出问题）',en:'Verified (paid before, no issues)'},stranger:{zh:'新收款方，未核实，只能小额试付',en:'New payee, not verified, small trial only'}};
 /** Stranger trial caps. spentToday = atomic sum of trial payments in the last 24h (all unverified payees). */
-export function checkTrial({amount,spentToday=0n,cfg={}}){const G={...GUARD_DEFAULTS,...cfg};if(amount===undefined)return null;
+/* t1281: cost (amount + fees) for the daily sum when the caller has it; the per-payment check stays on the amount */
+export function checkTrial({amount,spentToday=0n,cfg={},cost}){const G={...GUARD_DEFAULTS,...cfg};if(amount===undefined)return null;
   const fix=`This payee is new and not verified, so only small trial payments are allowed (max ${usd(G.trialSingle)} USDC each, ${usd(G.trialDaily)} USDC per day for all new payees). To pay more: tell the user, call kipurse_request_trust for this exact payee, the owner approves it in the Kipurse app with Face ID, then retry kipurse_pay. Never split one purchase into several small payments to get around this.`;
   if(amount>G.trialSingle)return {state:'rejected',reason:'STRANGER_TRIAL_LIMIT',nothingPaid:true,capHit:true,detail:`new payee: ${usd(amount)} > trial max ${usd(G.trialSingle)} per payment`,fix,trial:{single:usd(G.trialSingle),daily:usd(G.trialDaily),usedToday:usd(spentToday),singleAtomic:String(G.trialSingle),dailyAtomic:String(G.trialDaily),usedTodayAtomic:String(spentToday)},
     say_to_user:`没有付款：这是新收款方，未核实，每笔最多只能试付 ${usd(G.trialSingle)} USDC。要付更多，请在手机 Kipurse 里用 Face ID 批准这个收款方。/ Not paid: new payee, not verified; trial payments are limited to ${usd(G.trialSingle)} USDC. Approve this payee in the Kipurse app with Face ID to pay more.`};
-  if(spentToday+amount>G.trialDaily)return {state:'rejected',reason:'STRANGER_TRIAL_DAILY',nothingPaid:true,capHit:true,detail:`trial payments today ${usd(spentToday)} + ${usd(amount)} > ${usd(G.trialDaily)}`,fix,trial:{single:usd(G.trialSingle),daily:usd(G.trialDaily),usedToday:usd(spentToday),singleAtomic:String(G.trialSingle),dailyAtomic:String(G.trialDaily),usedTodayAtomic:String(spentToday)},
+  if(spentToday+(cost??amount)>G.trialDaily)return {state:'rejected',reason:'STRANGER_TRIAL_DAILY',nothingPaid:true,capHit:true,detail:`trial payments today ${usd(spentToday)} + ${usd(amount)} > ${usd(G.trialDaily)}`,fix,trial:{single:usd(G.trialSingle),daily:usd(G.trialDaily),usedToday:usd(spentToday),singleAtomic:String(G.trialSingle),dailyAtomic:String(G.trialDaily),usedTodayAtomic:String(spentToday)},
     say_to_user:`没有付款：今天给新收款方的试付已用到 ${usd(spentToday)} / ${usd(G.trialDaily)} USDC。请在手机 Kipurse 里用 Face ID 批准这个收款方。/ Not paid: today's trial allowance for new payees is used up.`};
   return null;}
 // ---- FINAL SCOPE (owner 2026-10-26 07:28 CT): source-based tiers, hold, anomaly pause, scam blacklist ----
@@ -70,10 +71,10 @@ export function claimedTier(source){return OWNER_DIRECT_SOURCES.includes(source)
 export const TIER_SAY={trust_list:'收款方在你的信任名单里 / Payee is on your trust list',verified:'收款地址已核实（以前付过款，没出问题）/ Payee verified (paid before, no issues)',
   owner_direct:'地址是你亲自给的 / Address given by you',ai_verified:'AI 自己找到的地址：第一次要你在手机上用 Face ID 批准 / Found by the AI: first payment needs your Face ID approval on the phone',ai_upgraded:'AI 自己找到的地址：第一次要你在手机上用 Face ID 批准 / Found by the AI: first payment needs your Face ID approval on the phone',
   stranger:'新收款方：第一次要你在手机上用 Face ID 批准一次，之后记住 / New payee: approve once on your phone with Face ID, then it is remembered'};
-export function checkAiVerified({amount,spentToday=0n,lim=TIER_LIMITS}){if(amount===undefined)return null;
+export function checkAiVerified({amount,spentToday=0n,lim=TIER_LIMITS,cost}){if(amount===undefined)return null;
   const fix=`The address came from the AI's own check (addressSource ai_verified), so payments are limited to ${usd(lim.aiSingle)} USDC each and ${usd(lim.aiDaily)} USDC per day. For more: ask the user to give/confirm the address himself, or call kipurse_request_trust so the owner approves it with Face ID.`;
   if(amount>lim.aiSingle)return {state:'rejected',reason:'AI_VERIFIED_LIMIT',nothingPaid:true,capHit:true,fix,say_to_user:`没有付款：AI 核实的地址每笔最多 ${usd(lim.aiSingle)} USDC。/ Not paid: AI-checked addresses are limited to ${usd(lim.aiSingle)} USDC per payment.`};
-  if(spentToday+amount>lim.aiDaily)return {state:'rejected',reason:'AI_VERIFIED_DAILY',nothingPaid:true,capHit:true,fix,say_to_user:`没有付款：今天 AI 核实地址的额度已用到 ${usd(spentToday)} / ${usd(lim.aiDaily)} USDC。/ Not paid: today's limit for AI-checked addresses is used up.`};
+  if(spentToday+(cost??amount)>lim.aiDaily)return {state:'rejected',reason:'AI_VERIFIED_DAILY',nothingPaid:true,capHit:true,fix,say_to_user:`没有付款：今天 AI 核实地址的额度已用到 ${usd(spentToday)} / ${usd(lim.aiDaily)} USDC。/ Not paid: today's limit for AI-checked addresses is used up.`};
   return null;}
 /** Scam blacklist: bundled public lists (+ optional override file written by scripts/update-blacklist.mjs). */
 import {readFileSync} from 'node:fs';

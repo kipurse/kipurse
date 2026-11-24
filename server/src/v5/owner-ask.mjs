@@ -113,15 +113,17 @@ export function createAskFlow(E){const ASK=E.ownerAsks;
     if(!ASK||!r||r.state!=='rejected'||!spec)return null;
     /* a stopped AI / a paused wallet / a payee that failed checks is a hard refusal: never turned into an owner ask */
     if(/^(AGENT_STOPPED|wallet_paused|agent_stopped|SANCTION|payee_)/i.test(String(r.reason??''))||r.paused)return null;
-    const c=await E.ownerAskClass(spec,{agentId,refusal:r}).catch(()=>null);if(!c?.ok||!(c.newPayee||c.onchainTierCap))return null;/* t1212 §6#97: or a known payee above an on-chain payee cap */
+    const dup=r.reason==='POSSIBLE_DUPLICATE_PURCHASE';/* t1280 (§6#140): a suspected duplicate always goes to the owner, whatever the payee tier / auto limit */
+    const c=await E.ownerAskClass(spec,{agentId,refusal:r}).catch(()=>null);if(!c?.ok||!(dup||c.newPayee||c.onchainTierCap))return null;/* t1212 §6#97: or a known payee above an on-chain payee cap */
+    if(dup&&(String(c.payee).toLowerCase()!==String(r.payee).toLowerCase()||String(c.amount)!==String(r.amountAtomic)))return null;
     if(c.overWallet)return overWalletView({payee:c.payee,amountAtomic:c.amount,name,reason:c.walletReason});
-    if(!c.overAuto)return null;/* within every auto limit: the existing one-time approval flow stays as it is */
+    if(!dup&&!c.overAuto)return null;/* within every auto limit: the existing one-time approval flow stays as it is */
     const nm=cleanName(name)??null;const nt=note?String(note).replace(/[\u0000-\u001f]/g,' ').trim().slice(0,80):null;
     /* t1264: the dedupe key names the ORDER too (the request's purchase identity: payee + amount + merchant reference), so two different orders
        of the same payee / amount / purpose never merge into one card; without a reference the agent's own key keeps them apart */
     const ref=c.purchaseKey?'pk:'+c.purchaseKey:'key:'+String(agentId)+':'+String(idem??'');
-    const dd=['ask',String(c.payee).toLowerCase(),String(c.amount),purpose??'daily',ref].join('|');
-    const mkProp=()=>E.mandates.propose({items:[{purpose:purpose??'daily',single:fmtUsdc(BigInt(c.amount)),oneOff:{payee:c.payee,host:null,remember:false,ask:true,aiName:nm,note:nt}}],by:'agent:'+agentId,
+    const dd=dup?['dup',String(c.payee).toLowerCase(),String(c.amount)].join('|'):['ask',String(c.payee).toLowerCase(),String(c.amount),purpose??'daily',ref].join('|');/* t1280: ONE pending duplicate card per payee + amount, however often the AI retries (it pays at most once when approved) */
+    const mkProp=()=>E.mandates.propose({items:[{purpose:purpose??'daily',single:fmtUsdc(BigInt(c.amount)),oneOff:{payee:c.payee,host:null,remember:false,ask:true,aiName:nm,note:nt,...(dup?{dup:true}:{})}}],by:'agent:'+agentId,
       reason:'ask_owner: '+String(r.reason??'').slice(0,60)+(nt?' · '+nt:''),user_request:nt??'',dedupe:dd});
     let pr;try{pr=mkProp();}catch(e){return {...r,decision:'refuse',reason:e?.code??'ask_failed',nothingPaid:true};}
     const reqHash=req?askReqHash(req):null;
@@ -132,5 +134,10 @@ export function createAskFlow(E){const ASK=E.ownerAsks;
       a=ASK.put({approvalId:pr.id,agentId,idem,spec,payee:c.payee,amount:c.amount,name:nm,note:nt,reqHash});
       if(!a||a.stale)return {...r,decision:'refuse',reason:'ask_failed',nothingPaid:true};}
     try{E.logObs?.('owner_ask',{created:!pr.idempotent,reason:String(r.reason??'').slice(0,40)});}catch{}
-    return askView(a,{lang});}
+    const v=askView(a,{lang});
+    if(dup&&v.state==='awaiting_owner_approval'){/* t1280: the AI relays a duplicate-specific question (the generic one says "new payee / over the auto limit") */
+      const amt=fmtUsdc(BigInt(c.amount)),sh=v.payeeShort;const q={zh:`像是重复购买：10 分钟内已经给 ${sh} 付过同样的 ${amt} USDC。这笔还没有付。如果确实要再买一次，请在 Kipurse App 里用 Face ID 点「只付这一次」；不需要就点「拒绝」。`,
+        en:`This looks like a duplicate: ${amt} USDC already went to ${sh} in the last 10 minutes. Nothing has been paid for this one. If you really want a second one, tap "Pay just this once" in the Kipurse app with Face ID; otherwise tap "Decline".`};
+      return {...v,reason:'POSSIBLE_DUPLICATE_PURCHASE',ask_owner_question:q,say_to_user:lang==='en'?q.en:lang==='zh'?q.zh:q.zh+' / '+q.en};}
+    return v;}
   return {lookup,convert};}

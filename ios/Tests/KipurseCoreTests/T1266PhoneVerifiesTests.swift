@@ -200,8 +200,8 @@ final class T1266PhoneVerifiesTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_800_000_000), t = 1_800_000_000.0
     func msg(expiry: Double) -> OwnerTrustMessage { OwnerTrustMessage(account: wallet, merchant: "0x" + String(repeating: "1", count: 64), name: "x", epoch: "0", payees: ["0x1212121212121212121212121212121212123434"], signers: [], single: "1", daily: "1", expiry: String(Int(expiry)), nonce: "0x" + String(repeating: "2", count: 64), deadline: String(Int(t + 600))) }
     func bad(_ e: Double) -> Bool { OwnerAsk.trustProblems(msg(expiry: e), payee: "0x1212121212121212121212121212121212123434", single: "1", now: now).contains("bad expiry") }
-    XCTAssertFalse(bad(t + 366 * 86400 + 200), "within tolerance")
-    XCTAssertTrue(bad(t + 366 * 86400 + 400), "beyond tolerance")
+    XCTAssertFalse(bad(t + 91 * 86400 + 200), "within tolerance")   // t1281: ask trusts are at most 90 days (+1 day slack)
+    XCTAssertTrue(bad(t + 91 * 86400 + 400), "beyond tolerance")
     XCTAssertTrue(bad(t - 1), "lower bound unchanged")
     // OwnerPay deadline
     let payee = "0x1212121212121212121212121212121212123434", key = "0x" + String(repeating: "ab", count: 32)

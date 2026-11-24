@@ -9,10 +9,14 @@ struct MainConnectCard: View {
   @EnvironmentObject var m: AppModel; let r: ConnectRequest
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
+      // t1279 (R17): same rule as the approval sheet: name + official avatar ONLY from ConnectBrand.verified(host:); else the host
+      // (else the generic "AI"). Never the AI's self-chosen name (r.client) nor the server-chosen avatar (r.kind).
+      let brand = ConnectBrand.verified(host: r.host)
+      let shown = ConnectBrand.shown(host: r.host)
       HStack(spacing: 12) {
-        Avatar(name: r.client, size: 40, symbol: AgentCard.mainnet.first { $0.id == r.kind }?.symbol ?? "link")
+        Avatar(name: shown, size: 40, symbol: brand.flatMap { b in AgentCard.mainnet.first { $0.name == b }?.symbol } ?? "link")
         VStack(alignment: .leading, spacing: 2) {
-          Text(L("\(r.client) 想连接")).font(.headline)
+          Text(L("\(shown) 想连接")).font(.headline)
           Text(r.host).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
         }
       }
@@ -50,7 +54,7 @@ struct ApproveConnectSheet: View {
         switch phase {
         case .loading: ProgressView(L("正在读取请求…"))
         case .signing: status(icon: nil, title: L("授权中…"), sub: L("正在核对手机确认")).accessibilityElement(children: .combine).accessibilityIdentifier("connect.signing")
-        case .done: status(icon: "checkmark.circle.fill", title: L("授权完成"), sub: returnApp != nil ? L("正在返回 \(info?.name ?? "AI")…") : L("\(info?.name ?? "AI") 已连接，网页会自动返回它。"), color: Brand.positive).accessibilityElement(children: .combine).accessibilityIdentifier("connect.done")
+        case .done: status(icon: "checkmark.circle.fill", title: L("授权完成"), sub: returnApp != nil ? L("正在返回 \(doneName)…") : L("\(doneName) 已连接，网页会自动返回它。"), color: Brand.positive).accessibilityElement(children: .combine).accessibilityIdentifier("connect.done")
         case .declined: status(icon: "xmark.circle.fill", title: L("已拒绝"), sub: L("这个 AI 没有连接。"), color: .secondary)
         case .failed(let e): VStack(spacing: 14) { status(icon: "exclamationmark.triangle.fill", title: L("没有完成"), sub: e, color: Brand.negative)
             if info != nil { BigButton(L("重试"), icon: "arrow.clockwise") { phase = .ready }.padding(.horizontal, 24).accessibilityIdentifier("connect.retry") } }
@@ -81,9 +85,17 @@ struct ApproveConnectSheet: View {
     let grant = savedLimits
     let canApprove = grant != nil || (i.modeFirst && i.proposal != nil)
     return ScrollView { VStack(alignment: .leading, spacing: KP.Space.cardGap) {
-      HStack(spacing: 14) { Avatar(name: i.name, size: 52, symbol: AgentCard.mainnet.first { $0.name == i.name }?.symbol)
-        Text(L("\(i.name) 想连接你的钱包")).font(.title3.bold()).fixedSize(horizontal: false, vertical: true) }
-      Text(T("\(i.name) 想在你设的 AI 付款上限内用这个钱包。", "\(i.name) wants to pay from this wallet within your AI payment limit.")).font(.subheadline).foregroundStyle(.secondary)
+      // t1278 A5 (§6#138, owner approved): name + official avatar ONLY from the signed return host; the AI's self-chosen name is never trusted
+      let brand = ConnectBrand.verified(host: i.host)
+      let shown = brand ?? i.host
+      HStack(spacing: 14) { Avatar(name: shown, size: 52, symbol: brand.flatMap { b in AgentCard.mainnet.first { $0.name == b }?.symbol })
+        Text(L("\(shown) 想连接你的钱包")).font(.title3.bold()).fixedSize(horizontal: false, vertical: true) }
+      Label(T("连接后回到 \(i.host)", "Returns to \(i.host) after connecting"), systemImage: "arrow.uturn.backward.circle.fill")
+        .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.accent).accessibilityIdentifier("connect.returnHost")
+      if brand == nil, i.name != i.host { Text(T("它自称「\(i.name)」。只有你认识 \(i.host) 才批准。", "It calls itself \u{201C}\(i.name)\u{201D}. Approve only if you know \(i.host).")).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("connect.selfName") }
+      if !i.phone { Label(T("这个请求不是从这台 iPhone 发起的。不是你刚在 AI 里点的连接，就拒绝。", "This request didn't start on this iPhone. If you didn't just tap connect in your AI, decline."), systemImage: "exclamationmark.triangle.fill")
+        .font(.footnote.weight(.semibold)).foregroundStyle(Brand.caution).accessibilityIdentifier("connect.notThisPhone") }
+      Text(T("\(shown) 想在你设的 AI 付款上限内用这个钱包。", "\(shown) wants to pay from this wallet within your AI payment limit.")).font(.subheadline).foregroundStyle(.secondary)
       Text(grant.map { limitsLine($0, pending: false) } ?? i.proposal.map { limitsLine($0, pending: true) } ?? T("AI 花钱上限还没设置。这次不能批准。钱包安全上限不是你选的额度。", "AI spending limits are not set. This cannot be approved. The wallet safety limit is not a limit you chose."))
         .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("connect.limits")
       DisclosureGroup(T("技术细节", "Technical details")) { VStack(alignment: .leading, spacing: 8) {
@@ -199,7 +211,7 @@ struct ApproveConnectSheet: View {
     defer { ctx?.invalidate() }
     do {
       if approve, MainnetSession.load() == nil {
-        let c = LAContext(); c.localizedCancelTitle = L("取消"); c.touchIDAuthenticationAllowableReuseDuration = 10
+        let c = LAContext(); c.localizedCancelTitle = L("取消"); c.touchIDAuthenticationAllowableReuseDuration = 0
         PromptLog.add("connect")
         AuthLog.note("connect", "faceid-1 start session=false")   // t1256
         _ = try await c.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: T("批准连接", "Approve connection"))
@@ -229,6 +241,8 @@ struct ApproveConnectSheet: View {
       Haptics.error(); withAnimation { phase = .failed(error.localizedDescription) } }
   }
   /// The connection was started on THIS phone inside the AI's app: bring that app back so its sign-in page (still open) sees the approval and finishes.
+  /// t1279 (R17): the .done text names the AI only from the signed return host (verified brand, else the host), never info.name.
+  var doneName: String { info.map { ConnectBrand.shown(host: $0.host) } ?? "AI" }
   var returnApp: URL? { guard let i = info, i.phone, let h = ConnectApproval.returnHost(redirect: i.redirect) else { return nil }; return ConnectReturn.app(host: h) }   // t1266: signed redirect host only
   func finish(_ approve: Bool) {
     if approve { Haptics.success() }
