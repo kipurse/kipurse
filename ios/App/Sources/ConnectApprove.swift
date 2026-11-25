@@ -58,7 +58,7 @@ struct ApproveConnectSheet: View {
         case .declined: status(icon: "xmark.circle.fill", title: L("已拒绝"), sub: L("这个 AI 没有连接。"), color: .secondary)
         case .failed(let e): VStack(spacing: 14) { status(icon: "exclamationmark.triangle.fill", title: L("没有完成"), sub: e, color: Brand.negative)
             if info != nil { BigButton(L("重试"), icon: "arrow.clockwise") { phase = .ready }.padding(.horizontal, 24).accessibilityIdentifier("connect.retry") } }
-        // t1153u: Face ID off for Kipurse / approval key invalidated: calm guidance, neutral style, same Retry button.
+        // t1153: Face ID off for Kipurse / approval key invalidated: calm guidance, neutral style, same Retry button.
         case .unavailable(let n): VStack(spacing: 14) { status(icon: "faceid", title: n == .faceIDOff ? T("Face ID 已关闭", "Face ID is off") : n == .lockout ? T("Face ID 暂时被锁", "Face ID is locked for now") : T("需要重新开启 Face ID 批准", "Turn Face ID approvals on again"), sub: n.text, color: .secondary)
             .accessibilityElement(children: .combine).accessibilityIdentifier("connect.faceidoff")
             BigButton(n == .lockout ? T("用锁屏密码解锁 Face ID", "Unlock Face ID with passcode") : L("重试"), icon: n == .lockout ? "lock.open" : "arrow.clockwise") { Task { if n == .lockout { await FaceIDUnlock.ensure(); withAnimation { phase = info != nil ? .ready : .loading }; if info == nil { await load() } } else { await recheck() } } }.padding(.horizontal, 24).accessibilityIdentifier("connect.retry") }
@@ -85,7 +85,7 @@ struct ApproveConnectSheet: View {
     let grant = savedLimits
     let canApprove = grant != nil || (i.modeFirst && i.proposal != nil)
     return ScrollView { VStack(alignment: .leading, spacing: KP.Space.cardGap) {
-      // t1278 A5 (§6#138, owner approved): name + official avatar ONLY from the signed return host; the AI's self-chosen name is never trusted
+      // t1278 A5 (decision 138, owner approved): name + official avatar ONLY from the signed return host; the AI's self-chosen name is never trusted
       let brand = ConnectBrand.verified(host: i.host)
       let shown = brand ?? i.host
       HStack(spacing: 14) { Avatar(name: shown, size: 52, symbol: brand.flatMap { b in AgentCard.mainnet.first { $0.name == b }?.symbol })
@@ -161,7 +161,7 @@ struct ApproveConnectSheet: View {
       withAnimation { phase = .ready }
     } catch { phase = .failed(error.localizedDescription) }
   }
-  /// t1153u: checked when the sheet opens (never shows a Face ID prompt). Only LAError -6 (Face ID off for Kipurse) is reported;
+  /// t1153: checked when the sheet opens (never shows a Face ID prompt). Only LAError -6 (Face ID off for Kipurse) is reported;
   /// "not enrolled", lockout etc. keep the existing paths.
   static func biometryPrecheck(demo: Bool) -> FaceIDNotice? {
     #if DEBUG
@@ -185,7 +185,7 @@ struct ApproveConnectSheet: View {
     }
     #if DEBUG
     if m.demo != nil {
-      if approve && CommandLine.arguments.contains("-kpSimulateFaceIDOff") { withAnimation { phase = .unavailable(.faceIDOff) }; return }   // t1153u: Secure Enclave said LAError -6
+      if approve && CommandLine.arguments.contains("-kpSimulateFaceIDOff") { withAnimation { phase = .unavailable(.faceIDOff) }; return }   // t1153: Secure Enclave said LAError -6
       if approve && savedLimits == nil {
         withAnimation { phase = .failed(T("服务器没有确认这次额度和连接，没有批准。", "The server did not confirm this limit or connection. Nothing was approved.")) }
         return
@@ -204,9 +204,9 @@ struct ApproveConnectSheet: View {
     } else {
       d = ConnectApproval.digest(req: req.id, clientId: i.clientId, name: i.name, redirect: i.redirect, exp: i.exp, approve: approve)
     }
-    // t1157u: with no read session, ONE Face ID (this context) signs the approval and then the new read session, so the app reads the
-    // fresh state right after 授权完成. With a session the key prompts by itself, exactly as before.
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    // t1157: with no read session, ONE Face ID (this context) signs the approval and then the new read session, so the app reads the
+    // fresh state right after [zh]. With a session the key prompts by itself, exactly as before.
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     var ctx: LAContext? = nil
     defer { ctx?.invalidate() }
     do {
@@ -230,14 +230,14 @@ struct ApproveConnectSheet: View {
       if approve {
         AIConnect.pendingAmounts = nil
         if savedLimits == nil, i.modeFirst, let g = i.proposal { SignedLimitsStore.save(g, wallet: PhoneTrust.mainnetWallet) }   // t1275 (#2): exactly the amounts this Face ID signed (firstDigest), this device only
-        m.applyEveryday(j["everyday"])   // t1157u: saved limits from the reply, even if the session step below fails
-        if let c = j["siriCredential"] { SiriCredential.save(c) }   // t1158u: Siri's pay-only credential (only in the signed Siri approval reply)
+        m.applyEveryday(j["everyday"])   // t1157: saved limits from the reply, even if the session step below fails
+        if let c = j["siriCredential"] { SiriCredential.save(c) }   // t1158: Siri's pay-only credential (only in the signed Siri approval reply)
         if let ctx { _ = try? await MainnetSession.signIn(context: ctx) }   // same confirmation, no second prompt
       }
       finish(approve)
     } catch {
       AuthLog.record("connect-decide", error)   // t1255: every Face ID failure is recorded (kp-auth.log)
-      if let n = FaceIDUnlock.notice(error) { withAnimation { phase = .unavailable(n) }; return }   // t1153u: guidance, not the system's raw sentence
+      if let n = FaceIDUnlock.notice(error) { withAnimation { phase = .unavailable(n) }; return }   // t1153: guidance, not the system's raw sentence
       Haptics.error(); withAnimation { phase = .failed(error.localizedDescription) } }
   }
   /// The connection was started on THIS phone inside the AI's app: bring that app back so its sign-in page (still open) sees the approval and finishes.

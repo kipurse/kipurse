@@ -1,4 +1,4 @@
-// Owner rule: ONE language per page. English (any non-Chinese client) -> zero CJK characters; Chinese -> no "中文 / English" duplicates.
+// Owner rule: ONE language per page. English (any non-Chinese client) -> zero CJK characters; Chinese -> no "[zh]" duplicates.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {langOf,localizeJSON,withLang,CJK} from '../src/v5/i18n.mjs';
 import {createDeposit} from '../src/v5/deposit.mjs';import {createNewWalletOnboarding} from '../src/v5/onboard-new.mjs';
@@ -8,7 +8,7 @@ const CJK_ALL=/[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/g;
 const visible=h=>String(h).replace(/<script[\s\S]*?<\/script>/g,'').replace(/<style[\s\S]*?<\/style>/g,'').replace(/<[^>]+>/g,' ');
 const noCJK=(h,what)=>{const m=visible(h).match(CJK_ALL);assert.equal(m,null,`${what}: CJK in English render: ${m?.slice(0,20).join('')}`);
   const attrs=[...String(h).matchAll(/(?:placeholder|title|aria-label)="([^"]*)"/g)].map(x=>x[1]).join(' ');assert.doesNotMatch(attrs,CJK,`${what}: CJK in attributes`);};
-// zh: no English sentence duplicated next to Chinese ("中文 / English ..."). Allowed: names like Base Account, Face ID, USDC, Coinbase.
+// zh: no English sentence duplicated next to Chinese ("[zh]"). Allowed: names like Base Account, Face ID, USDC, Coinbase.
 const noBilingual=(h,what)=>{const v=visible(h).replace(/BASE MAINNET|Base Account|Face ID|Coinbase|Kipurse|USDC|Siri|App|iPhone|ETH|Base|MCP|AI/g,'');
   assert.doesNotMatch(v,/[A-Za-z]{2,}[ ,][a-z]{2,} [a-z]{2,}/,`${what}: English sentence in Chinese render`);assert.doesNotMatch(v,/[\u3400-\u9fff][^<]{0,80}\/ [A-Z][a-z]/,`${what}: "zh / en" pair`);
   assert.match(visible(h),/[\u3400-\u9fff]/,`${what}: zh render should be Chinese`);};

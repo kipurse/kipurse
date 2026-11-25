@@ -11,7 +11,7 @@ const op=(o={})=>({sender:OWNER,callData:cd(calls),callGasLimit:'0x1e8480',verif
 const NOW=Date.parse('2026-11-03T12:00:00Z');const DAY='sponsor:day:2026-11-03';
 function mk(day){const kv=createMemoryKV();if(day)kv.put(DAY,day);const cfg=sponsorConfig({KIPURSE_ONBOARD_PAYMASTER_URL:'https://pm.example/x'});
   const rec={state:'prepared',kind:'new',owner:OWNER,expect:OWNER,wallet:W,callsHash:callsHash(calls),allowed:[F,W]};
-  const s=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008u)*/cfg,kv,reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:id=>id==='a'?rec:undefined,now:()=>NOW,
+  const s=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008)*/cfg,kv,reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:id=>id==='a'?rec:undefined,now:()=>NOW,
     fetchImpl:async()=>({json:async()=>({result:{paymaster:'0x9',paymasterData:'0x'}})})});return {s,kv,cfg};}
 test('t934 caps: defaults are exactly 20/day, $2/day, $0.25/op',()=>{const c=sponsorConfig({});assert.equal(c.maxPerDay,20);assert.equal(c.maxUsdPerDay,2);assert.equal(c.maxUsdPerOp,0.25);
   for(const bad of ['-1','abc',''])assert.equal(sponsorConfig({KIPURSE_SPONSOR_MAX_PER_DAY:bad}).maxPerDay,bad===''?0:20,'invalid env falls back, never negative');});

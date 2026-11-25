@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1064u: all cards use shared premium glass — smoke life / wallet / settings + screenshots.
+/// t1064: all cards use shared premium glass — smoke life / wallet / settings + screenshots.
 final class T1064GlassCardsUITests: XCTestCase {
   var app: XCUIApplication!
   func launch(_ args: [String]) {
@@ -21,7 +21,7 @@ final class T1064GlassCardsUITests: XCTestCase {
     executionTimeAllowance = 180
     launch(["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpSkipFaceID", "-kpLifeDemo"])
     XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 12))
-    // t1065u: month · AI-online eyebrow gone
+    // t1065: month · AI-online eyebrow gone
     XCTAssertFalse(app.descendants(matching: .any)["life.online"].exists, "life.online eyebrow must be removed")
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "在线打理")).firstMatch.exists)
     sleep(1); shot("t1064-life-zh")

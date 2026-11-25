@@ -58,12 +58,12 @@ public enum ChainRescue {
     s.append(Call(to: usdc, data: t, label: "transfer"))
     return Plan(wallet: "0x" + w, to: "0x" + o, amount: b.takeNow, steps: s)
   }
-  /// Stop ALL AI payments without Kipurse (t1238, handbook §6#108). Coinbase's popup now refuses any owner change ("Account owner or
+  /// Stop ALL AI payments without Kipurse (t1238, decision 108). Coinbase's popup now refuses any owner change ("Account owner or
   /// upgrade calls are not allowed."), so this no longer removes the SpendPermissionManager. Instead the wallet switches on its own
   /// permanent pause on every Kipurse trust contract (V5.2 / V5.3 / V5.4): every AI payment and the small prepaid balance check this
   /// pause first and refuse (WalletPaused). One call the Coinbase wallet signs: wallet.executeBatch([trust.setPaused(true) ...]).
   /// It can be undone later with the normal "resume AI payments". No key is added or removed.
-  /// t1250 (§6#119): a V5.5 wallet also pauses on the V5.5 trust (every other wallet: exactly the three trusts as before).
+  /// t1250 (decision 119): a V5.5 wallet also pauses on the V5.5 trust (every other wallet: exactly the three trusts as before).
   public static let pauseTrusts = [KipurseSuite.v52.trust, KipurseSuite.v53.trust, KipurseSuite.v54.trust].map { $0.lowercased() }
   public static func pauseTrusts(wallet: String) -> [String] {
     let v55 = KipurseSuite.stored(wallet: wallet) == .v55 || (KipurseSuite.active == .v55 && Operator.wallet.lowercased() == wallet.lowercased())

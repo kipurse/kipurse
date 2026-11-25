@@ -1,4 +1,4 @@
-// ONE LIMIT (owner 2026-10-27 t592u): one overall AI limit; categories are automatic labels only.
+// ONE LIMIT (owner 2026-10-27 t592): one overall AI limit; categories are automatic labels only.
 import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
 import {getAddress} from 'viem';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {createMandates,classifyCategory,CATEGORIES,BEGINNER_DEFAULTS,normalizeItem} from '../src/v5/mandates.mjs';

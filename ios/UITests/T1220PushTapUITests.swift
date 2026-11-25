@@ -1,8 +1,8 @@
 import XCTest
 
-/// t1220u (§6#96): the owner tapped the server's "AI payment request" push (kind=mandate, KP_MANDATE) and the App closed.
+/// t1220 (decision 96): the owner tapped the server's "AI payment request" push (kind=mandate, KP_MANDATE) and the App closed.
 /// Same notification content as the server, tapped from the Home screen like on the phone: the App must stay open, show the
-/// AI payments page with the waiting request, and AI 生活 (§6#110: where 「待你批准」 now lives) must show the card (zh + en).
+/// AI payments page with the waiting request, and AI [zh] (decision 110: where "[zh]" now lives) must show the card (zh + en).
 final class T1220PushTapUITests: XCTestCase {
   var app: XCUIApplication!
   let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -36,7 +36,7 @@ final class T1220PushTapUITests: XCTestCase {
   @MainActor func testTapMandatePushZh() { run("zh") }
   @MainActor func testTapMandatePushEn() { run("en") }
   /// The owner's case: no live server session (opening the App never asks for Face ID, 0A#2). The request must still be
-  /// listed from the push, on the page the tap opens and on AI 生活 under 「待你批准」.
+  /// listed from the push, on the page the tap opens and on AI [zh] under "[zh]".
   @MainActor func testTapMandatePushNoSessionZh() { run("zh", noSession: true) }
   @MainActor func testTapMandatePushNoSessionEn() { run("en", noSession: true) }
 }

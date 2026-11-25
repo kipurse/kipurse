@@ -117,7 +117,7 @@ struct OfflineWalletCard: View {
   }
 }
 
-/// '手机丢了怎么办（启付停了也能用）': plain steps, the live on-chain balance, the plain-words preview, then the user's own Coinbase confirmation.
+/// '[zh]': plain steps, the live on-chain balance, the plain-words preview, then the user's own Coinbase confirmation.
 struct RescueGuideView: View {
   @EnvironmentObject var m: AppModel
   @State private var plan: ChainRescue.Plan?
@@ -128,8 +128,8 @@ struct RescueGuideView: View {
   @State private var showAppFallback = false
   var body: some View {
     ScrollView { VStack(alignment: .leading, spacing: KP.Space.cardGap) {
-      // t1245 (§6#115 U28/U39): same header as 使用指引 / 安全小贴士 (one big page title, no bar title); steps in glass cards
-      // like 使用指引; the rescue address on its own line (never split after "https://"), tap to copy.
+      // t1245 (decision 115 U28/U39): same header as [zh] (one big page title, no bar title); steps in glass cards
+      // like [zh]; the rescue address on its own line (never split after "https://"), tap to copy.
       PageTitle(eyebrow: nil, title: LostPhoneRecovery.title, id: "lost.title")
       Text(LostPhoneRecovery.intro).font(KP.Typo.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Text(T("没有启付 App，也按这几步做：", "Without the Kipurse app, follow these steps:")).font(KP.Typo.cardTitle).padding(.top, KP.Space.xs)
@@ -218,7 +218,7 @@ struct RescueGuideView: View {
   }
   private func prepareStop() async {
     guard let w = RescueIdentity.wallet else { return }
-    // t1238 §6#108: pause on chain instead of removing a key (Coinbase refuses owner changes)
+    // t1238 decision 108: pause on chain instead of removing a key (Coinbase refuses owner changes)
     if await ChainRescue.allPaused(wallet: w) == true { note = T("已经没有 AI 可以用这个钱包付款了，不用再停。", "No AI has permission to pay from this wallet now. There is nothing to stop."); return }
     stop = ChainRescue.stopAI(wallet: w)
   }

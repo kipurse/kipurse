@@ -1,4 +1,4 @@
-// t609u Layer 2: EVERYDAY LIMITS (日常额度). Stored on the server, set only from the owner's phone session
+// t609 Layer 2: EVERYDAY LIMITS ([zh]). Stored on the server, set only from the owner's phone session
 // (device key + Face ID), free and instant. Enforced in the engine before any signing. ALWAYS <= the on-chain
 // floor (Layer 1): anything higher is rejected on save and clamped on read (locked invariant).
 // t1073: unset / unconfirmed AI limits authorize nothing. The on-chain floor, a missing row, a historical
@@ -44,8 +44,8 @@ export function explicitEveryday(r){
   if(s<=0n||d<=0n||term<=0n||s>d||d>term)return null;
   return {single:s,daily:d,term,at};}
 const UNCONFIRMED={state:'rejected',reason:'AI_LIMITS_UNCONFIRMED',nothingPaid:true,capHit:true,fix:'AI spending limits are not confirmed. Nothing was paid. The owner sets them in the Kipurse app; there is no default.',say_to_user:'没有付款：AI 花钱上限还没有确认，不能花钱。请先在启付里自己设置，没有默认额度。/ Not paid: AI spending limits are not confirmed, so nothing can be spent. Set them yourself in Kipurse. There is no default.'};
-/** t1181u (§6#84): `scope` = {chainId, token} pins the saved limits to one network + one token (mainnet: Base + USDC). Without a
- *  scope (tests, old callers) nothing changes. A saved row without chainId/token (before t1181u) is migrated once to `scope`,
+/** t1181 (decision 84): `scope` = {chainId, token} pins the saved limits to one network + one token (mainnet: Base + USDC). Without a
+ *  scope (tests, old callers) nothing changes. A saved row without chainId/token (before t1181) is migrated once to `scope`,
  *  keeping every other field, so its behaviour is unchanged; a payment on another network / token is refused by check(). */
 export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now(),scope=null}){
   const K=kvKey('everyday',null,String(wallet).toLowerCase());
@@ -73,10 +73,10 @@ export function createEverydayLimits({kv,wallet,floor,now=()=>Date.now(),scope=n
     return {ok:true,free:true,feeUSDC:'0',...get()};}
   /** Engine hook. spentTerm is cumulative AI spend already recorded. Missing total or missing spentTerm refuses.
    *  The chain floor is not used as a stand-in budget. */
-  /* t1281 (§6#141): `cost` = what this payment takes from the wallet (amount + protocol fee + network fee when known), and spent24h /
+  /* t1281 (decision 141): `cost` = what this payment takes from the wallet (amount + protocol fee + network fee when known), and spent24h /
      spentTerm are counted the same way by the engine; the per-payment limit compares the amount only (like the chain). No cost -> amount. */
   function check({amount,cost,spent24h=0n,spentTerm,chainId,token}={}){if(amount===undefined||amount===null)return null;
-    /* t1181u: a payment on another network / with another token never spends these limits (refused, nothing paid) */
+    /* t1181: a payment on another network / with another token never spends these limits (refused, nothing paid) */
     if(chainId!==undefined||token!==undefined||SC){const pay={chainId:chainId??SC?.chainId,token:token??(chainId===undefined?SC?.token:undefined)};
       const sx=scopeCheck('everyday AI limit',raw(),pay,SC);if(sx)return sx;if(SC){const cx=scopeCheck('everyday AI limit',SC,pay,SC);if(cx)return cx;}}
     const e=get(),a=BigInt(amount),c=cost===undefined||cost===null?a:BigInt(cost);

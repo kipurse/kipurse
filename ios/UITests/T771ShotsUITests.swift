@@ -1,5 +1,5 @@
 import XCTest
-/// t771u: shots of the first-open steps and the Coinbase verify guide (normal + large text).
+/// t771: shots of the first-open steps and the Coinbase verify guide (normal + large text).
 final class T771ShotsUITests: XCTestCase {
   var app: XCUIApplication!
   @MainActor func shot(_ n: String) { sleep(1); let a = XCTAttachment(screenshot: app.screenshot()); a.name = "t771-" + n; a.lifetime = .keepAlways; add(a) }

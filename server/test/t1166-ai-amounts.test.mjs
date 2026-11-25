@@ -1,4 +1,4 @@
-// t1166u (handbook §6#80, PERMANENT LOCKED RULE + mandatory pre-deploy regression check): every AI-facing amount is human-ready USDC.
+// t1166 (decision 80, PERMANENT LOCKED RULE + mandatory pre-deploy regression check): every AI-facing amount is human-ready USDC.
 // Fails if any AI-facing response (MCP tools, /v1 agent API, /siri/*) has a raw base-unit integer as an amount field or lacks its "x.xx USDC" Display.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {getAddress} from 'viem';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';

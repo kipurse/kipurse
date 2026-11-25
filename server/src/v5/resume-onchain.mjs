@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1139u (§6#71, owner decision t1139 option a, 2026-11-13): resuming AI payments after an emergency stop must also lift the ON-CHAIN pause,
+// t1139 (decision 71, owner decision t1139 option a, 2026-11-13): resuming AI payments after an emergency stop must also lift the ON-CHAIN pause,
 // otherwise every AI payment keeps failing while the app says "resumed". The owner confirms ONE Base Account batch (signs only, pays no ETH):
 //   1. wallet.execute(USDC, 0, transfer(feeTo, F))        F = actual network cost in USDC, 0% markup, 0 < F < cap (0.01 USDC)
 //   2. wallet.execute(trust, 0, setPaused(false))          clears paused[wallet] and pausedUntil[wallet] (KipurseTrustV51.setPaused)
-// sent through the existing wallet-pays sponsor (id prefix ur-), the same shape as withdraw / limits change (t752, t1119u, t1123u).
+// sent through the existing wallet-pays sponsor (id prefix ur-), the same shape as withdraw / limits change (t752, t1119, t1123).
 // Kipurse advances nothing net: the batch repays the quoted cost to the fixed fee address. The app shows "resumed" only after the
 // server has read isPaused(wallet) == false on chain.
 import {parseAbi,encodeFunctionData,getAddress} from 'viem';
@@ -21,7 +21,7 @@ export const IS_PAUSED_ABI=ABI;
 export const unpauseData=()=>encodeFunctionData({abi:ABI,functionName:'setPaused',args:[false]});
 /** wallet.execute(trust, 0, setPaused(false)), sent by the wallet's owner (the Base Account). */
 export function unpauseCall({wallet,trust}){return {to:getAddress(wallet),value:'0x0',data:encodeFunctionData({abi:ABI,functionName:'execute',args:[getAddress(trust),0n,unpauseData()]})};}
-/** Live quote: same formula, floor and cap as the wallet-pays limits fee (§6#63). callGas = estimate of the unpause call. */
+/** Live quote: same formula, floor and cap as the wallet-pays limits fee (decision 63). callGas = estimate of the unpause call. */
 export function resumeFee({callGas,gasPriceWei,ethUsd8,walletUSDC,cap=RESUME_FEE_CAP}){return limitsWalletFee({callGas:callGas??RESUME_CALL_GAS,gasPriceWei,ethUsd8,walletUSDC,cap});}
 /** The two calls. Refuses anything else (fee outside (0, cap), bad parties). */
 export function resumeCalls({wallet,trust,feeTo=RESUME_FEE_TO,fee,cap=RESUME_FEE_CAP}){const f=BigInt(fee);

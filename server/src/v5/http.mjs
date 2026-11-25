@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Kipurse agent HTTP interface over the V5 engine. Idempotency-Key REQUIRED on paying POSTs. Auth as in V4.
 import {createServer} from 'node:http';import {resolveAgent} from '../v4/agents.mjs';import {forAI} from './usdc-out.mjs';import {createAskFlow} from './owner-ask.mjs';
-// t1166u (§6#80, permanent): the /v1 agent API answers AIs: amounts are decimal USDC + Display, base units only in *Atomic.
+// t1166 (decision 80, permanent): the /v1 agent API answers AIs: amounts are decimal USDC + Display, base units only in *Atomic.
 const send=(res,code,obj)=>{res.writeHead(code,{'content-type':'application/json'});res.end(JSON.stringify(forAI(obj),(k,v)=>typeof v==='bigint'?v.toString():v));};
 /** t1278 S12: agent ids the server itself uses for the owner's own (Face ID) paths; never an AI's id */
 export const RESERVED_AGENT_IDS=new Set(['owner','siri']);
@@ -41,7 +41,7 @@ export function createV5HttpServer(engine,{agentTokens,agents}={}){
         case '/v1/deposits':out=await engine.deposits();break;
         case '/v1/withdraw/request':out=await engine.requestWithdrawal({agentId,amount:b.amount});break;
         case '/v1/withdraw/execute':out=await engine.executeWithdrawal({agentId,withdrawalId:b.withdrawalId});break;
-        case '/v1/pay-any':{/* t1170u §6#82: same key -> stored owner-ask answer; a new payee above an AI auto limit -> ask_owner */const AF=engine.ownerAsks?createAskFlow(engine):null;
+        case '/v1/pay-any':{/* t1170 decision 82: same key -> stored owner-ask answer; a new payee above an AI auto limit -> ask_owner */const AF=engine.ownerAsks?createAskFlow(engine):null;
           {const prev=AF?.lookup(agentId,idempotencyKey);if(prev){out=prev;break;}}
           const pargs={order:b.order,payment:b.payment,merchant:b.merchant,orderRef:b.orderRef,expiresAt:b.expiresAt,allowSameAmount:b.allowSameAmount===true,intentId:b.intentId,repeatKey:b.repeatKey,maxAmount:b.maxAmount};
           out=await engine.payAny({agentId,...pargs,signedOrderUrl:b.signedOrderUrl,ownerApproval:b.ownerApproval,idempotencyKey});

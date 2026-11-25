@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1241 (handbook §6#111 ⑤): the Kipurse ATTESTOR service ("担保"). A SEPARATE process under its own system user (kipurse-attestor):
+// t1241 (decision 111 (5)): the Kipurse ATTESTOR service ("[zh]"). A SEPARATE process under its own system user (kipurse-attestor):
 // it alone can read its key dir (0700) and its at-rest data key (0400). The gateway talks to it over a unix socket (group-writable for the
 // gateway's group only). It holds ONE secp256k1 key per merchant domain and signs a V5.4 PaymentOrder only after its own checks
 // (src/v5/attestor.mjs createAttestor: independent re-read of the order on the merchant's https origin, published-signer evidence,

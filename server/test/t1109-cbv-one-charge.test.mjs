@@ -1,4 +1,4 @@
-// t1109u (owner 2026-11-11): Coinbase Verified Account check has no off switch (new + legacy opening), and one opening = one charge
+// t1109 (owner 2026-11-11): Coinbase Verified Account check has no off switch (new + legacy opening), and one opening = one charge
 // (opening + first wallet safety limits + first phone key). Logic only; no UI change.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {getAddress,encodeFunctionData} from 'viem';
@@ -43,7 +43,7 @@ test('one opening = one charge: exactly one USDC fee transfer, and it covers cap
   await assert.rejects(N.start({x:X,y:Y,owner:A}),e=>e.code==='bad_amount','no opening without the first wallet safety limits');
   const st=await N.start({x:X,y:Y,single:'2',daily:'5',term:'30',days:90,owner:A});const pr=await N.prepare(st.id,A);
   const fee=openingFeeUSDC({gasPriceWei:GP,ethUsd8:ETH,gas:OPENING_WITH_FIRST_KEY_GAS}).fee;
-  /* t1185u §6#86: the owner's own 0.15 USDC into his vault (fee reserve) is NOT a fee: exactly one, LAST, to his vault; the fee rule is unchanged */
+  /* t1185 decision 86: the owner's own 0.15 USDC into his vault (fee reserve) is NOT a fee: exactly one, LAST, to his vault; the fee rule is unchanged */
   const seeds=pr.calls.filter(c=>String(c.data).toLowerCase()===vaultSeedCall('0x3333333333333333333333333333333333333333').data.toLowerCase());
   assert.equal(seeds.length,1,'one fee-reserve seed');assert.equal(pr.calls.at(-1).data.toLowerCase(),seeds[0].data.toLowerCase(),'seed is the last step');
   const transfers=pr.calls.filter(c=>String(c.data).toLowerCase().startsWith('0xa9059cbb')&&!seeds.includes(c));
@@ -51,6 +51,6 @@ test('one opening = one charge: exactly one USDC fee transfer, and it covers cap
   const caps=checkLimits({single:'2',daily:'5',term:'30',days:90});
   const ap=approverInit({wallet:pr.wallet,trust:TRUST,x:X,y:Y,maxSingle:caps.single,maxDaily:caps.daily,version:'v2'});
   assert.ok(pr.calls.some(c=>getAddress(c.to)===getAddress(DETERMINISTIC_DEPLOYER)),'first phone key deployed in the same batch');
-  assert.ok(pr.calls.some(c=>getAddress(c.to)===getAddress(pr.wallet)&&String(c.data).toLowerCase()===selfCall(pr.wallet,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[ap.address]})).data.toLowerCase()),'first phone key added in the same batch (t1238 §6#106: wallet self-call)');
+  assert.ok(pr.calls.some(c=>getAddress(c.to)===getAddress(pr.wallet)&&String(c.data).toLowerCase()===selfCall(pr.wallet,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[ap.address]})).data.toLowerCase()),'first phone key added in the same batch (t1238 decision 106: wallet self-call)');
   assert.deepEqual(ownerUpgradeTopLevel(pr.calls),[],'no top-level owner/upgrade call (Coinbase refuses them)');
   assert.ok(pr.calls.some(c=>getAddress(c.to)===getAddress(pr.wallet)&&String(c.data).toLowerCase().startsWith('0x34fcd5be')),'first wallet safety limits set in the same batch');});

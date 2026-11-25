@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1243 (handbook §6#113): sign-in + approval share ONE Face ID only after the owner taps the button on the full card, within 60 s, once;
+/// t1243 (decision 113): sign-in + approval share ONE Face ID only after the owner taps the button on the full card, within 60 s, once;
 /// a new APNs token replaces this phone's previous one (one push per phone).
 final class T1243OneFaceIDTests: XCTestCase {
   let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -52,7 +52,7 @@ final class T1243OneFaceIDTests: XCTestCase {
     XCTAssertTrue(push.contains("PushPermission.replacedToken(lastSent:"), "the upload sends the previous token as replaces")
     let av = try String(contentsOf: root.appendingPathComponent("App/Sources/AllowancesView.swift"), encoding: .utf8)
     XCTAssertTrue(av.contains("signInUnlock.take(now: Date(), userTapped: userTapped, tag: tag)"), "approveAsk reuses the sign-in Face ID only via the rule (t1266: bound to id + choice)")
-    // t1246 (§6#116 F9): the push-action path no longer signs at all — it only opens the card (see T1246F8F9Tests); every approveAsk is a tap.
+    // t1246 (decision 116 F9): the push-action path no longer signs at all — it only opens the card (see T1246F8F9Tests); every approveAsk is a tap.
     XCTAssertFalse(av.contains("approveAsk(a, mode: p.mode"), "the push-action path never signs")
   }
 }

@@ -22,7 +22,7 @@ public struct OwnerSignerTrustMessage: Equatable {
 public enum PhoneTrust {
   /// This user's wallet (from enrollment / operator config; never compiled in).
   public static var mainnetWallet: String { Operator.wallet }
-  /// t1197u (§6#92): the Kipurse adapter of THIS wallet's suite (V5.2 0x0532… for 0x5150 and older wallets, V5.3 0xb150… for new ones).
+  /// t1197 (decision 92): the Kipurse adapter of THIS wallet's suite (V5.2 0x0532… for 0x5150 and older wallets, V5.3 0xb150… for new ones).
   public static var mainnetAdapter: String { KipurseSuite.active.adapter }
   public static let chainId = "8453"
   static let p256n: [UInt8] = Hex.decode("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551")!
@@ -53,7 +53,7 @@ public enum PhoneTrust {
     let sh = Keccak.hash(th + acc + mer + Keccak.hash(m.name) + ep + Keccak.hash(pay) + Keccak.hash(sig) + s1 + d1 + ex + n + dl)
     return Keccak.hash([0x19, 0x01] + ds + sh)
   }
-  /// t1250 (§6#119, KR-01): V5.5 OwnerInlineTrust (seat kind 6): the KPTR "approve & remember" form. Same fields and order as OwnerTrust; only the
+  /// t1250 (decision 119, KR-01): V5.5 OwnerInlineTrust (seat kind 6): the KPTR "approve & remember" form. Same fields and order as OwnerTrust; only the
   /// type name differs, so a stored-trust signature can never be used inline and the reverse.
   public static func inlineTrustDigest(_ m: OwnerTrustMessage, adapter: String = KipurseSuite.v55.adapter) -> [UInt8]? {
     KipurseV55.ownerDigest(.inlineTrust(KipurseV55.trustParams(m), nonce: m.nonce, deadline: m.deadline), account: m.account, epoch: m.epoch, adapter: adapter)
@@ -68,7 +68,7 @@ public enum PhoneTrust {
     guard suite.seatV2 else { return [] }
     return KipurseV55.trustProblems(KipurseV55.trustParams(m), inline: RequestVerify.isReusableTrust(m), deadline: m.deadline, now: now)
   }
-  /// t1214 (§6#100/#102): V5.4 OwnerSignerTrust (kind 5) — "trust the order signer(s) of merchant M, any per-order payee, within these caps,
+  /// t1214 (decision 100/#102): V5.4 OwnerSignerTrust (kind 5) — "trust the order signer(s) of merchant M, any per-order payee, within these caps,
   /// until expiry". Same domain as OwnerTrust ("Kipurse Owner" v5, verifyingContract = the V5.4 adapter); computed here from the shown fields.
   public static func signerTrustDigest(_ m: OwnerSignerTrustMessage, adapter: String = KipurseSuite.v54.adapter) -> [UInt8]? {
     let th = Keccak.hash("OwnerSignerTrust(address account,bytes32 merchant,string name,uint64 epoch,address[] signers,uint160 single,uint160 daily,uint64 expiry,bytes32 nonce,uint256 deadline)")
@@ -85,7 +85,7 @@ public enum PhoneTrust {
     if g.merchant.lowercased() != m.merchant.lowercased() || g.name != m.name || Hex.encode(Keccak.hash(g.name)).lowercased() != g.merchant.lowercased() { p.append("merchant differs") }
     if g.signers.isEmpty || g.signers.map({ $0.lowercased() }) != m.signers.map({ $0.lowercased() }) { p.append("signers differ") }
     if g.single != m.single || g.daily != m.daily || g.expiry != m.expiry || g.deadline != g.expiry { p.append("caps differ") }
-    // t1240 (§6#110): the trust signed in the same Face ID moves the merchant's epoch up by one when it lands; the grant is for that next epoch
+    // t1240 (decision 110): the trust signed in the same Face ID moves the merchant's epoch up by one when it lands; the grant is for that next epoch
     if let ge = UInt64(g.epoch), let me = UInt64(m.epoch), ge == me + 1 {} else { p.append("grant epoch is not the trust's next epoch") }
     return p
   }

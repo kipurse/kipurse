@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119, owner decision "option A"): the owner opens a NEW V5.5 wallet and moves his USDC out of his V5.4 wallet.
+// t1250 (decision 119, owner decision "option A"): the owner opens a NEW V5.5 wallet and moves his USDC out of his V5.4 wallet.
 // PREPARED ONLY: these functions build the call lists his Base Account confirms in ONE Coinbase popup; nothing here signs or sends.
 //   new wallet  : Coinbase factory createAccount([Base Account, KipurseKeySeatV2, SpendPermissionManager], 0) - all owners fixed at creation
-//                 (Coinbase refuses owner changes, §6#108), seat V2 deployed (CREATE2) + the SAME phone key, V5.5 spend permission approved
+//                 (Coinbase refuses owner changes, decision 108), seat V2 deployed (CREATE2) + the SAME phone key, V5.5 spend permission approved
 //                 by the new wallet and registered BY THE WALLET (V5.5: only the account or the executor may register), vault fee reserve,
 //                 the owner's stored trusts / denies / float cap / opt-out / recovery re-applied on KipurseTrustV55.
 //   old wallet  : close anything still open on V5.4 (x402 reservations, float), V5.4 vault -> old wallet, network fee (USDC, wallet pays),
@@ -15,7 +15,7 @@ import {seatV2Init,seatV2Owners,setKeyCallV2,cbswAddress} from './seat-v2.mjs';
 import {coinbaseRefuses} from './coinbase-rule.mjs';
 import {decodePolicyV5,encodePolicyV5} from './abi.mjs';
 export const MOVE_V55_FEE_CAP=150_000n;     // 0.15 USDC hard stop (fork-measured cost is far lower)
-export const VAULT_SEED_V55=150_000n;      // §6#86 fee reserve in the new vault (his own money; back on withdraw)
+export const VAULT_SEED_V55=150_000n;      // decision 86 fee reserve in the new vault (his own money; back on withdraw)
 /** Fork-measured gas of the whole move batch (see test/fork/t1250-v55-suite-fork.e2e.mjs); fee quote uses real x 1.1. */
 export const MOVE_V55_REAL_GAS=2_900_000n;   // fork-measured 2,882,558 for the whole move batch (block 60897935)
 export const MOVE_V55_GAS=3_190_000n;

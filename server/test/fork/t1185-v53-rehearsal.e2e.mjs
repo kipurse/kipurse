@@ -1,4 +1,4 @@
-// FORK-ONLY V5.3 rehearsal (t1185u, handbook §6#85). Private anvil fork of Base mainnet, one-off keys, never broadcasts, no real money.
+// FORK-ONLY V5.3 rehearsal (t1185, decision 85). Private anvil fork of Base mainnet, one-off keys, never broadcasts, no real money.
 // Real EntryPoint v0.7 + real Circle paymaster through a local bundler shim; the gateway runs in gasMode 'userop' (production mode).
 //  D  deploy the V5.3 suite (factory + adapter + trust) with the public deterministic deployer, exactly as on mainnet
 //  M  an EXISTING V5.2 user (opened on the live adapter, phone approver bound to the live trust, money in wallet + old vault) migrates
@@ -114,7 +114,7 @@ test('V5.3 rehearsal: deploy, migrate an existing user, new user end to end in u
   const ob=await batch(u,pr.j.calls,'openingBatch');step('U1','open wallet: ONE batch from his Base Account (wallet, SpendPermission on the V5.3 adapter, vault registered, phone approver bound to the V5.3 trust)',ob.status==='success',{wallet:u.w,calls:pr.j.calls.length,gas:ob.gas});
   const cf=await call('/onboard/confirm',{method:'POST',body:{id:st.j.id}});step('U1','confirm: caps + phone approver on chain',cf.j?.ok===true,cf.j);
   u.vault=getAddress(await pub.readContract({address:A,abi:AD,functionName:'vaultAddress',args:[u.w]}));
-  step('U1','opening put 0.15 USDC of his own money (from his Base Account) into his vault = fee reserve (§6#86)',await bal(u.vault)===150000n&&pr.j.calls.length>0,{vaultUSDC:String(await bal(u.vault)),lastCall:pr.j.calls.at(-1)?.to});
+  step('U1','opening put 0.15 USDC of his own money (from his Base Account) into his vault = fee reserve (decision 86)',await bal(u.vault)===150000n&&pr.j.calls.length>0,{vaultUSDC:String(await bal(u.vault)),lastCall:pr.j.calls.at(-1)?.to});
   step('U1','his vault is a V5.3 vault (default 500 ops/day) on the new factory',BigInt(await pub.readContract({address:u.vault,abi:VA,functionName:'opsPerDay'}))===500n,{vault:u.vault});
   {const ow=await ownersOf(u.w);const ap=ow.find(o=>o.addr&&o.addr!==u.ba&&o.addr!==getAddress(SPM));step('U1','phone approver bound to the V5.3 trust',!!ap&&getAddress(await pub.readContract({address:ap.addr,abi:APPR,functionName:'trust'}))===TR,{approver:ap?.addr});u.approverIdx=ap?.i;}
   const f=await find(u.phone);step('U1','app finds the wallet by the phone key',f.status===200&&getAddress(f.j.wallet)===u.w);
@@ -131,7 +131,7 @@ test('V5.3 rehearsal: deploy, migrate an existing user, new user end to end in u
   let X=privateKeyToAccount(generatePrivateKey()).address;const tag=Date.now().toString(36);
   const a1=await buy({to:X,amount:'1',idempotencyKey:'v53-ask-'+tag});R.ask=a1.out;
   step('U1','new payee -> ask_owner, nothing paid',a1.out?.decision==='ask_owner'&&a1.out?.nothingPaid===true&&await bal(X)===0n,{decision:a1.out?.decision,state:a1.out?.state,reason:a1.out?.reason});
-  if(a1.out?.approvalId){const n0=B.sent.length;const t=await approveAsk(a1.out.approvalId,'trust');R.askApprove=t.ap?.j??t.prep?.j;if(t.ap?.status===200){const t0=Date.now();for(;;){const x=((await call(u.pre+'/safety/mandates',{headers:u.H})).j?.askTrust??[]).find(z=>z.id===a1.out.approvalId);R.askTrustFinal=x?.trust??null;if((x&&x.trust?.state!=='submitting')||Date.now()-t0>90000)break;await new Promise(z=>setTimeout(z,250));}}/* t1243 §6#113: trust lands after the paid reply */
+  if(a1.out?.approvalId){const n0=B.sent.length;const t=await approveAsk(a1.out.approvalId,'trust');R.askApprove=t.ap?.j??t.prep?.j;if(t.ap?.status===200){const t0=Date.now();for(;;){const x=((await call(u.pre+'/safety/mandates',{headers:u.H})).j?.askTrust??[]).find(z=>z.id===a1.out.approvalId);R.askTrustFinal=x?.trust??null;if((x&&x.trust?.state!=='submitting')||Date.now()-t0>90000)break;await new Promise(z=>setTimeout(z,250));}}/* t1243 decision 113: trust lands after the paid reply */
     step('U1','FIRST AI payment of the new wallet: owner approves (认识并信任, Face ID) -> paid once via userOp from the seeded vault, payee trusted on the V5.3 trust',t.ap?.status===200&&t.ap?.j?.state==='paid'&&await bal(X)===1_000_000n&&B.sent.length>n0&&B.sent.slice(n0).every(x=>x.success),{status:t.ap?.status,state:t.ap?.j?.state,trust:t.ap?.j?.trust?.state,ops:B.sent.length-n0,err:t.prep?.j?.error??t.ap?.j?.error});}
   const pay=async(amt,k)=>{const b0=await bal(X);const r=await buy({to:X,amount:amt,idempotencyKey:k});return {r,paid:(await bal(X))-b0};};
   {const p=await pay('0.5','v53-p1-'+tag);step('U1','trusted payee: AI pays 0.5 USDC automatically (userOp)',p.paid===500000n,{state:p.r.out?.state,reason:p.r.out?.reason});}

@@ -1,4 +1,4 @@
-// t1252 (handbook §6#121): V5.5 x402 reservations are closed by the VAULT itself (UserOp, USDC gas via Circle), never by an ETH keeper by default.
+// t1252 (decision 121): V5.5 x402 reservations are closed by the VAULT itself (UserOp, USDC gas via Circle), never by an ETH keeper by default.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 const rd=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('launch: no keeper file -> markSettledInline + permitAtCap (vault pays in USDC); the ETH keeper only if an operator sets one',()=>{

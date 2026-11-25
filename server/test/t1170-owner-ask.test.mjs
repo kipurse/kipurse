@@ -1,4 +1,4 @@
-// t1170u (handbook §6#82, locked): a NEW payee above an AI auto limit -> ask the owner ("do you know this payee?"), never a plain refusal.
+// t1170 (decision 82, locked): a NEW payee above an AI auto limit -> ask the owner ("do you know this payee?"), never a plain refusal.
 // Only the owner's in-app tap + Face ID (phone key signatures) releases it; the server then pays this exact request once.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {getAddress} from 'viem';import {DatabaseSync} from 'node:sqlite';
@@ -28,7 +28,7 @@ test('new payee over the AI auto limit -> ask_owner + ready-to-relay zh/en quest
   assert.equal(r.decision,'ask_owner');assert.equal(r.state,'awaiting_owner_approval');assert.equal(r.nothingPaid,true);assert.match(r.approvalId,/^apr_/);
   assert.match(r.ask_owner_question.zh,/认识这个收款方吗/);assert.match(r.ask_owner_question.zh,/50 USDC/);assert.ok(r.ask_owner_question.zh.includes(to.slice(0,6)));assert.match(r.ask_owner_question.zh,/a new laptop stand/);
   assert.match(r.ask_owner_question.en,/Do you know this payee/);assert.match(r.ask_owner_question.en,/50 USDC/);assert.doesNotMatch(JSON.stringify(r.ask_owner_question),/50000000/);
-  assert.equal(r.amount,'50');assert.equal(r.amountAtomic,'50000000');assert.deepEqual(amountProblems(forAI(r)),[],'§6#80 amount rule');
+  assert.equal(r.amount,'50');assert.equal(r.amountAtomic,'50000000');assert.deepEqual(amountProblems(forAI(r)),[],'decision 80 amount rule');
   const r2=(await e.buy.buy({purpose:'daily',item:'a new laptop stand',merchant:'Desk Shop',to,amount:'50',idempotencyKey:key},'grok'));assert.equal(r2.approvalId,r.approvalId);assert.equal(r2.state,'awaiting_owner_approval');
   assert.equal(e.props.length,1,'one card / one push');assert.equal(e.props[0].ask.payee,to.toLowerCase());assert.ok(e.props[0].ask.modes.trust.digest!==e.props[0].ask.modes.once.digest);
   assert.match(e.props[0].items[0].human.zh,/^⚠️ 新收款方 0x/);assert.match(e.props[0].items[0].human.zh,/认识这个收款方吗/);assert.equal(e.s.writes.length,w0,'nothing on chain');
@@ -86,7 +86,7 @@ test('decline -> final for the AI; 24 h expiry -> nothing paid, card gone',async
   const d=await e.buy.buy({purpose:'daily',item:'a new laptop stand',merchant:'Desk Shop',to,amount:'50',idempotencyKey:key},'grok');assert.equal(d.state,'rejected');assert.equal(d.reason,'OWNER_DECLINED');assert.equal(d.nothingPaid,true);
   const x=await ask(e);const db=new DatabaseSync(e.engine.ledgerPath);db.prepare(`UPDATE owner_ask SET expires_at=?, created_at=? WHERE approval_id=?`).run(Date.now()-1,Date.now()-86400e3-1,x.r.approvalId);
   db.prepare(`UPDATE mandate_proposal SET created_at=? WHERE id=?`).run(Date.now()-86400e3-1000,x.r.approvalId);db.close();
-  const w0=e.s.writes.length;const [cp,op]=await A.prepare({id:x.r.approvalId,mode:'once'});assert.equal(cp,410);assert.equal(op.state,'expired');assert.equal(op.error,'request_gone');   // t1259 §6#129: 410 + plain reason (was 409)
+  const w0=e.s.writes.length;const [cp,op]=await A.prepare({id:x.r.approvalId,mode:'once'});assert.equal(cp,410);assert.equal(op.state,'expired');assert.equal(op.error,'request_gone');   // t1259 decision 129: 410 + plain reason (was 409)
   const ex=await e.buy.approvalStatus({approvalId:x.r.approvalId});assert.equal(ex.state,'expired');assert.equal(ex.nothingPaid,true);
   assert.ok(!e.engine.mandates.proposals().some(p=>p.id===x.r.approvalId),'expired card is not shown');assert.ok(['expired','not_pending'].includes(e.engine.mandates.approve(x.r.approvalId,()=>true,{mode:'once'}).error));assert.equal(e.s.writes.length,w0);});   // t1259: the card is already closed as expired
 

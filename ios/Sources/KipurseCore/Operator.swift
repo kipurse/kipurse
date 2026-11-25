@@ -15,7 +15,7 @@ public enum Operator {
   public static var server: URL? { str("KipurseMainnetServer").flatMap(URL.init(string:)) }
   /// This user's wallet: what they enrolled, else the operator-provisioned one (single-user builds). Empty = none.
   public static let ownerKey = "kp.mainnet.owner", pathKey = "kp.mainnet.path"
-  /// Multi-user: the wallet is never compiled in. The server tells the app (wallet discovery by phone key, or 开通) and it is kept here.
+  /// Multi-user: the wallet is never compiled in. The server tells the app (wallet discovery by phone key, or [zh]) and it is kept here.
   public static var demoWallet: String?
   public static var wallet: String { demoWallet ?? UserDefaults.standard.string(forKey: walletKey) ?? "" }
   /// The wallet's URL space on the server: "/t/<wallet>" (or "" for a wallet whose record keeps the original URLs).

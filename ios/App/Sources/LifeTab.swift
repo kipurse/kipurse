@@ -2,7 +2,7 @@ import SwiftUI
 import PassKit
 import KipurseCore
 
-// MARK: - t681 「AI 生活」 + 「钱包」, rebuilt to match the approved v5 mockups (m.html colours / sizes).
+// MARK: - t681 "[zh]" + "[zh]", rebuilt to match the approved v5 mockups (m.html colours / sizes).
 
 /// Mockup colours.
 enum MK {
@@ -29,7 +29,7 @@ struct MockBG: View {
   }
 }
 
-/// t1066u: life/wallet glass shells share KPGlass clear chrome (transparent + purple→cyan neon). Default radius 24.
+/// t1066: life/wallet glass shells share KPGlass clear chrome (transparent + purple→cyan neon). Default radius 24.
 struct Glass: ViewModifier {
   var radius: CGFloat = 24
   @Environment(\.accessibilityReduceTransparency) private var rt
@@ -53,10 +53,10 @@ extension WalletState {
   var allAIPaused: Bool { if let b = raw["paused"]?.bool { return b }; return raw["paused"]?["active"]?.bool ?? false }
   static let fourAgents = ["Muse", "Grok", "Claude", "Siri"]   // t693: the owner's four real agents (Grok = Grok Bot) on the original orb characters (no brand art)
   /// Live agent for one of the four names: id, kind or name contains the key ("grok" matches "Grok Bot" / "grok-bot").
-  /// t1157u: exact id/kind first, connected first (AgentMatch); a never-connected "oauth-siri" row no longer hides the real Siri row.
+  /// t1157: exact id/kind first, connected first (AgentMatch); a never-connected "oauth-siri" row no longer hides the real Siri row.
   func liveAgent(for name: String) -> JSONValue? { AgentMatch.pick(liveAgents, name: name) }
   /// Muse / Grok / Claude / Siri in fixed order. A character is matched to a live agent by id, kind or name;
-  /// with no match it shows 未连接 (grey). Status never comes from anything but real agent data.
+  /// with no match it shows [zh] (grey). Status never comes from anything but real agent data.
   func lifeAgents(now: Date = Date()) -> [LifeAgent] {
     let txs = self.txs
     return Self.fourAgents.map { n in
@@ -206,8 +206,8 @@ struct LifeLedgerRow: View {
         .overlay(RoundedRectangle(cornerRadius: KP.Radius.control, style: .continuous).strokeBorder(col.opacity(0.31), lineWidth: 1))
       VStack(alignment: .leading, spacing: 1) {
         Text(t.friendlyTitle).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).lineLimit(1).accessibilityIdentifier(t.unnamed ? "life.unnamed" : "")
-        // §6#110 (owner 2026-11-21): which AI paid + the category, clearly visible (agent label + category chip), then address/time in grey.
-        // t1245 (§6#115 U1): nothing truncated — line 2 = which AI + category chip, line 3 = address / time in grey.
+        // decision 110 (owner 2026-11-21): which AI paid + the category, clearly visible (agent label + category chip), then address/time in grey.
+        // t1245 (decision 115 U1): nothing truncated — line 2 = which AI + category chip, line 3 = address / time in grey.
         HStack(spacing: 6) {
           Text(T("\(agent) 付的", "Paid by \(agent)")).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.75)).fixedSize()
           Chip(text: T(c.zh, c.en), color: col).lineLimit(1).fixedSize()
@@ -224,7 +224,7 @@ struct LifeLedgerRow: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("\(t.merchantName), \(T("\(agent) 付的", "Paid by \(agent)")), \(T("类别", "Category")) \(T(c.zh, c.en)), -\(MoneyText.usdc(t.amount))" + (t.failed || t.pending ? ", \(t.stateZh)" : ""))
   }
-  /// Today: time. Yesterday: 昨天. Older: short date. Always in the app language.
+  /// Today: time. Yesterday: [zh]. Older: short date. Always in the app language.
   static func when(_ d: Date) -> String {
     let loc = Locale(identifier: Loc.isChinese ? "zh_CN" : "en_US"), cal = Calendar.current
     if cal.isDateInToday(d) { let f = DateFormatter(); f.locale = loc; f.dateFormat = "HH:mm"; return f.string(from: d) }
@@ -244,7 +244,7 @@ struct PageTitle: View {
   }
 }
 
-/// t1068u: shared top inset for the three root-tab large titles (AI 生活 / 钱包 / 设置) so they share one Y.
+/// t1068: shared top inset for the three root-tab large titles (AI [zh]) so they share one Y.
 enum TabRootChrome {
   static let titleTop: CGFloat = KP.Space.xs
 }
@@ -270,23 +270,23 @@ struct LifeTab: View {
   @State private var siriPhrases = false
   @State private var limitConnect: AIConnect?
   @State private var showAILimits = false
-  @State private var handoff: ConnectHandoffItem?   // t1254 §6#123: 「下一步」 page before jumping to an outside AI
+  @State private var handoff: ConnectHandoffItem?   // t1254 decision 123: 「下一步」 page before jumping to an outside AI
   var body: some View {
     let agents = s.lifeAgents()
     let txs = s.txs.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     let totals = LifeLedger.monthTotals(txs.map { LifeItem(amount: $0.amount, date: $0.date, failed: $0.failed, category: s.category($0)) }, now: Date())
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: KP.Space.sectionGap) {   // t1039u: one rhythm
-          HStack(alignment: .top) {   // t1068u: top-align with 钱包/设置 titles (same Y)
-            // t1065u: drop month · AI-online eyebrow; keep big title only
+        VStack(alignment: .leading, spacing: KP.Space.sectionGap) {   // t1039: one rhythm
+          HStack(alignment: .top) {   // t1068: top-align with 钱包/设置 titles (same Y)
+            // t1065: drop month · AI-online eyebrow; keep big title only
             PageTitle(eyebrow: nil, title: T("AI 生活", "AI Life"), id: "life.title")
-            // t1277d §6#137 (owner): pause is ONE capsule at the top, on = soft green, paused = solid red
+            // t1277d decision 137 (owner): pause is ONE capsule at the top, on = soft green, paused = solid red
             if s.isMainnet || s.wallet != nil { SafetyPanel(s: s, part: .chip).padding(.top, 2).accessibilityElement(children: .contain).accessibilityIdentifier("life.pause") }
             Button { Haptics.tap(); tab = .agents } label: { Image(systemName: "ellipsis").font(.system(size: 17, weight: .bold)).foregroundStyle(.white.opacity(0.6)).frame(width: 40, height: 40).background(.white.opacity(0.08), in: Circle()) }
               .accessibilityLabel(T("管理 AI", "Manage AI")).accessibilityIdentifier("life.manage").padding(.top, 2)
           }.padding(.top, TabRootChrome.titleTop)
-          // t927 → §6#110 (owner 2026-11-21): approvals still have ONE place, now here on AI 生活 (the AI payments home): connect requests,
+          // t927 → decision 110 (owner 2026-11-21): approvals still have ONE place, now here on AI [zh] (the AI payments home): connect requests,
           // new-merchant trust, AI allowance requests, held payments. The tab badge points here.
           if PendingApprovalsBlock.count(s) > 0 { PendingApprovalsBlock(s: s) }   // t1245 U11: no empty block, no extra gap
           VStack(alignment: .leading, spacing: KP.Space.cardGap) {
@@ -306,12 +306,12 @@ struct LifeTab: View {
           }
 
           summary(LifeCategory.allCases.compactMap { c in totals.first { $0.0 == c } })
-          if s.isMainnet {   // t1038u: AI 总限额 lives on AI Life
+          if s.isMainnet {   // t1038: AI 总限额 lives on AI Life
             NavigationLink { MainLimitsView(s: s, scope: .ai) } label: {
               LimitEntryRow(icon: "gauge.with.dots.needle.33percent", title: T(EverydayLimits.aiTitleZh, EverydayLimits.aiTitleEn), sub: T(EverydayLimits.aiExplainZh, EverydayLimits.aiExplainEn))
             }.buttonStyle(.plain).accessibilityIdentifier("life.aiLimit")
           }
-          // §6#110: new-merchant trust lives on AI 生活 — the list of merchants you trusted (new ones ask you in 待你批准 above).
+          // decision 110: new-merchant trust lives on AI [zh] — the list of merchants you trusted (new ones ask you in [zh] above).
           NavigationLink { TrustListView(s: s) } label: {
             LimitEntryRow(icon: "checkmark.seal.fill", title: T("信任的商家", "Trusted merchants"), sub: TrustListView.summary(s))
           }.buttonStyle(.plain).accessibilityIdentifier("life.trusted")
@@ -441,10 +441,10 @@ enum CelebrationHaptics {
   }
 }
 
-// MARK: - Page 2 「钱包」 (m.html .card / .acts / limits / pause+security)
+// MARK: - Page 2 "[zh]" (m.html .card / .acts / limits / pause+security)
 
-/// Balance card: Kipurse · Base·USDC, big dollars + small cents, monthly AI spend, wallet address (t1143u: same eye as the balance — hidden is head…tail, open is the full two-line address) with one-tap copy of the full address, 已保护.
-/// Hidden balance never looks like 0 (dots + "已隐藏（不是 0）"); the eye and Face ID reveal are unchanged.
+/// Balance card: Kipurse · Base·USDC, big dollars + small cents, monthly AI spend, wallet address (t1143: same eye as the balance — hidden is head…tail, open is the full two-line address) with one-tap copy of the full address, [zh].
+/// Hidden balance never looks like 0 (dots + "[zh]"); the eye and Face ID reveal are unchanged.
 struct WalletCard: View {
   let s: WalletState
   @EnvironmentObject var m: AppModel
@@ -478,7 +478,7 @@ struct WalletCard: View {
           .buttonStyle(.plain).foregroundStyle(.white.opacity(0.75)).accessibilityIdentifier("balance.hiddenHint")
       }
       Spacer(minLength: 0)
-      if !addr.isEmpty {   // t1143u: same eye as the balance; hidden = AddressDisplay.short on one line; open = full two-line address; copy always the full address (t930: the only place)
+      if !addr.isEmpty {   // t1143: same eye as the balance; hidden = AddressDisplay.short on one line; open = full two-line address; copy always the full address (t930: the only place)
         HStack(alignment: .center, spacing: 10) {   // one tap anywhere on the line copies; one accessibility element (no inner 复制 text exposed)
             Text(m.balanceRevealed ? Self.twoLines(addr) : AddressDisplay.short(addr)).font(.system(size: 13, design: .monospaced)).foregroundStyle(.white.opacity(0.78))
               .multilineTextAlignment(.leading).lineLimit(m.balanceRevealed ? nil : 1).fixedSize(horizontal: false, vertical: true)
@@ -495,7 +495,7 @@ struct WalletCard: View {
       }
       HStack {
         Spacer()
-        // t1245 (§6#115 U38): a wallet that is not open yet (no deposit) is grey 「未开户」, never green 「已保护」.
+        // t1245 (decision 115 U38): a wallet that is not open yet (no deposit) is grey "[zh]", never green "[zh]".
         let notOpen = !s.active || (s.balance == 0 && !s.ledger.contains { $0.kind == "deposit" })
         Text(s.allAIPaused ? T("● AI 已暂停", "● AI paused") : notOpen ? T("● 未开户", "● Not open yet") : T("● 已保护", "● Protected")).font(.system(size: 13))
           .foregroundStyle(s.allAIPaused ? Color(hex: 0xFF6B88) : notOpen ? Color.white.opacity(0.55) : MK.green).accessibilityIdentifier("wallet.protection")
@@ -515,13 +515,13 @@ struct WalletCard: View {
     .accessibilityElement(children: .contain)
   }
   private func copyWallet(_ a: String) { UIPasteboard.general.string = a; Haptics.success(); copiedWallet = true }
-  /// t1133u: the whole address on two even lines (21 + 21 characters), nothing left out.
+  /// t1133: the whole address on two even lines (21 + 21 characters), nothing left out.
   static func twoLines(_ a: String) -> String { a.count == 42 ? String(a.prefix(21)) + "\n" + String(a.suffix(21)) : a }
   func groupThousands(_ s: String) -> String { var out = ""; for (i, ch) in s.reversed().enumerated() { if i > 0 && i % 3 == 0 { out.append(",") }; out.append(ch) }; return String(out.reversed()) }
 }
 
 /// Per-agent limits card: the four characters with today's spend against the wallet's daily limit (the limit the owner signed).
-/// t1245 (§6#115 U16/U17): ONE source for the AI spending limit (this page and the AI 付款和花费 sheet both use `policy`);
+/// t1245 (decision 115 U16/U17): ONE source for the AI spending limit (this page and the AI [zh] sheet both use `policy`);
 /// not set = one plain sentence, and each AI shows only what it spent today (no "/ 0 USDC").
 struct AgentLimitsCard: View {
   let s: WalletState
@@ -564,7 +564,7 @@ struct AgentLimitsCard: View {
   }
 }
 
-/// t1066u: list rows use the same clear transparent glass wash as cards (no frost blur).
+/// t1066: list rows use the same clear transparent glass wash as cards (no frost blur).
 struct GlassRowBG: View {
   @Environment(\.accessibilityReduceTransparency) private var rt
   @Environment(\.colorScheme) private var cs
@@ -587,7 +587,7 @@ func money2(_ atomic: Int64) -> String { MoneyText.usdc(atomic) }   // t1245: th
 /// Active (online/paying): the glow breathes (and a light ring sweeps while paying). Not connected / paused: dim, grey, static.
 /// The logo artwork itself is never animated or recoloured; only the glow behind it. Reduce Motion = static glow.
 /// Muse (Meta): official Muse app icon from muse.ai/images/landing/brand/muse-app-icon.svg (t857).
-/// t1060: shared glass bead (build-35 soft refraction rim, no hard stroke). Used by welcome orbit + AI 生活.
+/// t1060: shared glass bead (build-35 soft refraction rim, no hard stroke). Used by welcome orbit + AI [zh].
 struct AgentGlassBead: View {
   let asset: String
   var size: CGFloat = 44
@@ -666,7 +666,7 @@ struct AgentLogo: View {
   static func glow(_ n: String) -> Color { switch key(n) { case "grok": return Color(hex: 0xE8E8FF); case "claude": return Color(hex: 0xD97757); case "siri": return Color(hex: 0x8A5CFF); case "muse": return Color(hex: 0x0082FB); default: return Color(hex: 0xFF8A5B) } }
   static func scale(_ n: String) -> CGFloat { switch key(n) { case "siri": return 0.86; case "muse": return 0.8; default: return 0.58 } }   // fallback Orb only; glass bead uses fixed 0.62 inset
   var off: Bool { phase == .offline || phase == .paused }
-  /// t1062: spin/halo only when agent is lit (接通且在线/付款中); Reduce Motion / still → none
+  /// t1062: spin/halo only when agent is lit ([zh]); Reduce Motion / still → none
   var live: Bool { phase.isLit && !rm && !still }
   var body: some View {
     let col = AgentLogo.glow(name)

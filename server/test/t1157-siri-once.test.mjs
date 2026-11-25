@@ -1,4 +1,4 @@
-// t1157u: after a Siri first-connect (fresh, or U3 with an older oauth-siri record) the owner app sees exactly ONE Siri, connected,
+// t1157: after a Siri first-connect (fresh, or U3 with an older oauth-siri record) the owner app sees exactly ONE Siri, connected,
 // in state.agents and in GET /safety/mandates; phone-decide returns the saved AI limits (state.everyday shape).
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {generateKeyPairSync,sign} from 'node:crypto';
 import {createOAuth,firstConnectText,replaceSiriAgent} from '../kit/oauth.mjs';

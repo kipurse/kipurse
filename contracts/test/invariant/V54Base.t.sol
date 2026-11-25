@@ -7,7 +7,7 @@ import {KipurseTrustV54} from "../../src/KipurseTrustV54.sol";
 import {PayerVaultV5, PackedUserOperation} from "../../src/KipurseAdapterV5.sol";
 import {KipurseFloatVaultV5} from "../../src/KipurseFloatVaultV5.sol";
 
-/// Shared fixture for the V5.4 invariant / fuzz suites (t1214 §6#118): the V5Base world (real Coinbase Smart Wallet, real
+/// Shared fixture for the V5.4 invariant / fuzz suites (t1214 decision 118): the V5Base world (real Coinbase Smart Wallet, real
 /// SpendPermissionManager, EIP-3009 USDC fixture, registry) with the LIVE KipurseAdapterV54 + KipurseTrustV54 swapped in.
 /// Typed helpers use the V5.4 structs directly (no cast through the V5 ABI).
 abstract contract V54Base is V5Base {
@@ -16,7 +16,7 @@ abstract contract V54Base is V5Base {
     uint160 constant TERM54 = 120e6;          // term = SPM allowance of the V5.4 permission
     uint256 constant WALLET_FUNDS = 300e6;    // minted on top of V5Base's 100e6
 
-    // V5.4 signer-trust grant (handbook §6#99): merchant GM's order signer may name any per-order payee
+    // V5.4 signer-trust grant (decision 99): merchant GM's order signer may name any per-order payee
     uint256 constant K_SHOP = 0x5109; address shopSigner;
     string constant GNAME = "deposits.example"; bytes32 constant GM = keccak256(bytes("deposits.example"));
     uint160 constant GS = 3e6; uint160 constant GD = 8e6;

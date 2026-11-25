@@ -10,7 +10,7 @@ struct Tx: Identifiable {
   var merchantRaw: String? = nil, badge = "new", contact: String? = nil, website: String? = nil
   /// t1281: protocol fee + network fee the server reports for this row (atomic; nil from an older server)
   var fee: Int64? = nil, networkFee: Int64? = nil
-  /// t1281 (§6#141): what this payment took from the wallet = amount + fee + network fee (KipurseCore SpendCost, same formula as the gateway)
+  /// t1281 (decision 141): what this payment took from the wallet = amount + fee + network fee (KipurseCore SpendCost, same formula as the gateway)
   func cost(ppm: Int64, maxNetworkFee: Int64 = 0) -> Int64 { SpendCost.cost(amount: amount, fee: fee, networkFee: networkFee, ppm: ppm, inFlight: SpendCost.inFlight(state), maxNetworkFee: maxNetworkFee) }
   /// Plain merchant name: registered name, "Card · <shop>" for real-world card payments, else a short address.
   var merchantName: String { if let r = merchantRaw, !r.isEmpty { let m = DisplaySafe.merchant(r); if m.isEmpty { return shortAddr(payee) }; return m.hasPrefix("card:") ? T("实体店 · ", "In store · ") + m.dropFirst(5) : m }; return shortAddr(payee) }  // t690: display-safe (no bidi / fake address / fake ✅)
@@ -48,7 +48,7 @@ extension WalletState {
   var explorer: String { raw["explorer"]?.string ?? "https://basescan.org" }
   var liveAgents: [JSONValue] { agents.filter { !($0["revoked"]?.bool ?? false) } }
 }
-/// Truthful agent status from lastUsed (last MCP request seen by the server). 在线 only if used within 2 minutes.
+/// Truthful agent status from lastUsed (last MCP request seen by the server). [zh] only if used within 2 minutes.
 struct AgentStatus {
   let online: Bool, text: String; var lastUse = L("从未使用")
   init(_ a: JSONValue, now: Date = Date()) {
@@ -59,7 +59,7 @@ struct AgentStatus {
   }
 }
 extension AgentStatus {
-  /// t1245 (§6#115 U37): same words as the AI 生活 orbs (AgentPhase.lastSeen): 「最近活动 10 分钟前」 / "Active 10 min ago".
+  /// t1245 (decision 115 U37): same words as the AI [zh] orbs (AgentPhase.lastSeen): "[zh]" / "Active 10 min ago".
   static func ago(_ d: Date, now: Date = Date()) -> String {
     let l = AgentPhase.lastSeen(d, now: now)!; return T(l.zh, l.en)
   }
@@ -304,14 +304,14 @@ struct NetworkPill: View {
 
 // MARK: - Tabs
 
-/// t879: three visible tabs (AI 生活 / 钱包 / 设置). .agents is pushed inside 生活; `tab = .settings` now switches to the 设置 tab, so every old `tab = .settings` still works.
+/// t879: three visible tabs (AI [zh]). .agents is pushed inside [zh]; `tab = .settings` now switches to the [zh] tab, so every old `tab = .settings` still works.
 enum AppTab: Hashable { case life, home, agents, settings }
 /// Wraps in a NavigationStack unless already pushed inside one.
 struct EmbedStack<C: View>: View { let embedded: Bool; @ViewBuilder let content: () -> C
   var body: some View { if embedded { content() } else { NavigationStack { content() } } } }
 
-/// Three tabs: AI 生活 (待你批准 / 授权 / 新商家信任 / 暂停 AI 付款 + agents + life ledger), 钱包 (balance + 入金 / 支付 / 提现 records), 设置.
-/// §6#110 (owner 2026-11-21): the approvals badge sits on AI 生活, where every pending request now lives.
+/// Three tabs: AI [zh] ([zh] + agents + life ledger), [zh] (balance + [zh] records), [zh].
+/// decision 110 (owner 2026-11-21): the approvals badge sits on AI [zh], where every pending request now lives.
 struct MainTabs: View {
   @EnvironmentObject var m: AppModel
   @ObservedObject private var allow = AllowanceStore.shared   // t1245 U9: the badge follows the AI requests + holds too
@@ -333,7 +333,7 @@ struct MainTabs: View {
     #if DEBUG
     .task { if CommandLine.arguments.contains("-kpCelebrate"), let t = s.txs.first(where: { $0.agent == "grok-bot" }) ?? s.txs.first { try? await Task.sleep(nanoseconds: 1_500_000_000); m.celebrate = t } }   // screenshot of the payment cheer
     #endif
-    // §6#110: pending requests (approvals, AI allowance asks, new-merchant trust, holds) live on AI 生活; a payment receipt opens on 钱包.
+    // decision 110: pending requests (approvals, AI allowance asks, new-merchant trust, holds) live on AI [zh]; a payment receipt opens on [zh].
     .onAppear { if UserDefaults.standard.string(forKey: "openTab") != nil { tab = .life; UserDefaults.standard.removeObject(forKey: "openTab") } }
     .onChange(of: m.pendingTab) { t in if let t { tab = t == "activity" ? .home : .life; m.pendingTab = nil } }
     .onReceive(NotificationCenter.default.publisher(for: Notification.Name("kpNeedAILimits"))) { _ in tab = .life }
@@ -352,9 +352,9 @@ struct HomeView: View {
   }
 }
 
-// MARK: 1. 钱包
+// MARK: 1. [zh]
 
-/// Hero balance: Apple Card–style indigo card, big rounded number that rolls on change, unit "USDC（美元稳定币）".
+/// Hero balance: Apple Card–style indigo card, big rounded number that rolls on change, unit "[zh]".
 struct BalanceHero: View {
   let balance: Int64; var status: (String, Color, String)? = nil; var reserve: Int64 = 0
   @EnvironmentObject var m: AppModel
@@ -423,9 +423,9 @@ struct RollingNumber: ViewModifier {
   }
 }
 
-/// t927 → §6#110: the ONE pending block (待你批准): connect requests + approvals (incl. new-merchant trust) + AI allowance requests + held payments.
-/// Shown at the top of AI 生活 (the AI payments home). Same cards, same order as before; only the page changed.
-/// t1245 (§6#115 U9/U11): the header, the tab badge and LifeTab all use ONE count (PendingBadge); the block is left out when empty.
+/// t927 → decision 110: the ONE pending block ([zh]): connect requests + approvals (incl. new-merchant trust) + AI allowance requests + held payments.
+/// Shown at the top of AI [zh] (the AI payments home). Same cards, same order as before; only the page changed.
+/// t1245 (decision 115 U9/U11): the header, the tab badge and LifeTab all use ONE count (PendingBadge); the block is left out when empty.
 struct PendingApprovalsBlock: View {
   @ObservedObject private var allow = AllowanceStore.shared
   @ObservedObject private var holds = HoldsStore.shared
@@ -455,7 +455,7 @@ struct PendingApprovalsBlock: View {
   }
 }
 
-/// t1245 (§6#115 U12): the one leading icon of a 待你批准 card; only its colour tells the kind apart (same size as MainTrustCard's avatar).
+/// t1245 (decision 115 U12): the one leading icon of a [zh] card; only its colour tells the kind apart (same size as MainTrustCard's avatar).
 struct PendingIcon: View {
   let symbol: String; var tint: Color = Brand.accent
   var body: some View {
@@ -472,18 +472,18 @@ struct HomeTab: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        // t991: one vertical rhythm (KP.Space), one card style, one header style. Order: balance → verify → 充值|提现 → 待你批准 → 记录.
+        // t991: one vertical rhythm (KP.Space), one card style, one header style. Order: balance → verify → [zh]|[zh] → [zh] → [zh].
         VStack(alignment: .leading, spacing: KP.Space.sectionGap) {
-          PageTitle(eyebrow: nil, title: L("钱包"), id: "wallet.title").padding(.top, TabRootChrome.titleTop)   // t1068u: same Y as AI 生活 / 设置 · t930: settings has ONE entry (the 设置 tab)
+          PageTitle(eyebrow: nil, title: L("钱包"), id: "wallet.title").padding(.top, TabRootChrome.titleTop)   // t1068: same Y as AI 生活 / 设置 · t930: settings has ONE entry (the 设置 tab)
           VStack(spacing: KP.Space.s) {
             WalletCard(s: s)
             if s.isMainnet || CommandLine.arguments.contains("-kpCBVHome") { HomeVerifyRow(ownerHint: s.owner) }   // t864
           }
-          // t927: Face ID 批准 has ONE entry: 设置 → Face ID 批准 (home row removed)
+          // t927: Face ID [zh] has ONE entry: [zh] → Face ID [zh] (home row removed)
           if s.active {
             VStack(alignment: .leading, spacing: KP.Space.s) {
               if s.balance == 0 {
-                NavigationLink { UsageGuideView(current: 2) } label: { KPNotice {
+                NavigationLink { UsageGuideView() } label: { KPNotice {
                   VStack(alignment: .leading, spacing: KP.Space.xxs) {
                     Label(T("第一步：先充值开户", "Step 1: deposit to open"), systemImage: "arrow.down.circle.fill").font(KP.Typo.cardTitle).foregroundStyle(Brand.accent)
                     Text(T("钱包现在是 0。使用 AI 付款必须先充值，充值成功就是开户成功。点这里看使用指引。", "Your wallet is at 0. AI payments need a deposit first; a successful deposit opens your account. Tap for the guide.")).font(KP.Typo.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -496,18 +496,18 @@ struct HomeTab: View {
                 KPActionButton(title: T("提现", "Withdraw"), icon: "arrow.up.circle.fill", kind: .secondary, disabled: s.balance == 0) { sheet = "withdraw" }
                   .accessibilityLabel(T("提现（转回你的 Coinbase 钱包）", "Withdraw (back to your Coinbase wallet)")).accessibilityIdentifier("home.withdraw")
               }
-              // t1133u: the separate 我的钱包地址 row is gone; full address + copy live in WalletCard (t1058u still: on the wallet front)
-              if s.isMainnet {   // t1038u: 钱包总限额 lives on the Wallet tab
+              // t1133: the separate [zh] row is gone; full address + copy live in WalletCard (t1058 still: on the wallet front)
+              if s.isMainnet {   // t1038: 钱包总限额 lives on the Wallet tab
                 NavigationLink { MainLimitsView(s: s, scope: .wallet) } label: {
                   let st = WalletLimitsLine.state(s)
                   LimitEntryRow(icon: "lock.shield.fill", title: T(EverydayLimits.walletTitleZh, EverydayLimits.walletTitleEn), sub: WalletLimitsLine.rowText(st),
-                                subTint: WalletLimitsLine.expired(st) ? Brand.negative : nil)   // t1129u: the limit in force · t1245 U38: expired says so in red
+                                subTint: WalletLimitsLine.expired(st) ? Brand.negative : nil)   // t1129: the limit in force · t1245 U38: expired says so in red
                 }.buttonStyle(.plain).accessibilityIdentifier("wallet.totalLimit")
               }
             }
           }
-          // §6#110 (owner 2026-11-21): the ONE pending block (待你批准) moved to AI 生活 (PendingApprovalsBlock); pause lives there too.
-          // Wallet safety limits stay on this Wallet tab, AI spending limits on AI 生活 (one place each).
+          // decision 110 (owner 2026-11-21): the ONE pending block ([zh]) moved to AI [zh] (PendingApprovalsBlock); pause lives there too.
+          // Wallet safety limits stay on this Wallet tab, AI spending limits on AI [zh] (one place each).
           if s.isMainnet, let w = s.wallet, !m.stray.isEmpty { StrayNotice(wallet: w) }
           if !s.active { SetupCard(s: s, sheet: $sheet) }
           if s.quarantined > 0 { WarnBox(text: T("暂时冻结的钱（超出每日充值额度，AI 不能用）：\(MoneyText.usdc(s.quarantined))", "Frozen for now (over your daily deposit limit, AI can't use it): \(MoneyText.usdc(s.quarantined))"), icon: "lock.shield.fill") }
@@ -526,7 +526,7 @@ struct HomeTab: View {
           }
         }.padding(.horizontal, KP.Space.page).padding(.bottom, 132)   // clears the floating tab bar on every size
       }
-      .modifier(TabBarEdgeBacking())   // t1150u: text scrolled under the glass tab bar no longer shows through as ghost text (background below stays)
+      .modifier(TabBarEdgeBacking())   // t1150: text scrolled under the glass tab bar no longer shows through as ghost text (background below stays)
       .background(MockBG()).refreshable { await m.refresh() }
       .toolbar(.hidden, for: .navigationBar)
       .onChange(of: s.hasSetup) { v in if v && sheet == "setup" { sheet = nil } }
@@ -560,7 +560,7 @@ struct HomeTab: View {
   }
 }
 struct SheetID: Identifiable { let id: String }
-/// t1150u: card text resting under the floating glass tab bar showed through it as ghost text. Masks the scroll content at
+/// t1150: card text resting under the floating glass tab bar showed through it as ghost text. Masks the scroll content at
 /// the bottom safe-area edge (the tab bar's top) so nothing is drawn behind the bar. A mask only hides pixels; it adds no
 /// view and does not change layout or taps. Top edge unchanged (mask extends upward). Earlier iOS: unchanged.
 struct TabBarEdgeBacking: ViewModifier {
@@ -617,7 +617,7 @@ struct TxRow: View {
 struct TxDetail: View {
   @EnvironmentObject var m: AppModel
   let t: Tx; let explorer: String; var agentName: String? = nil
-  /// §6#110: the life-ledger category (餐饮 / 出行 …), shown next to 付款的 AI.
+  /// decision 110: the life-ledger category ([zh] …), shown next to [zh] AI.
   var category: LifeCategory? = nil
   var who: String { agentName ?? t.agent }
   @Environment(\.dismiss) var dismiss
@@ -727,7 +727,7 @@ struct ApprovalCard: View {
 }
 
 /// Agent trust request: the raw address is what counts (check every character); the AI's own words are labelled unverified.
-/// 同意 = Face ID, then the owner page opens in Safari where his Coinbase wallet signs trustBySig; 不同意 = reject (no signature needed).
+/// [zh] = Face ID, then the owner page opens in Safari where his Coinbase wallet signs trustBySig; [zh] = reject (no signature needed).
 struct TrustRequestCard: View {
   @EnvironmentObject var m: AppModel; let r: TrustRequest
   var body: some View {
@@ -756,7 +756,7 @@ struct TrustRequestCard: View {
   }
 }
 
-// MARK: 4. AI 智能体
+// MARK: 4. AI [zh]
 
 struct AgentsTab: View {
   @EnvironmentObject var m: AppModel
@@ -820,7 +820,7 @@ struct AgentsTab: View {
     AgentLine(name: a["name"]?.string ?? "AI", symbol: AgentGallery.symbols[a["kind"]?.string ?? ""], on: on, sub: on ? usedText(a["lastUsed"]?.string) : offline(true))
     }
   }
-  /// t1245 (§6#115 U22): one row of the mainnet list (so rows can be laid out in glass cards with hairlines between them).
+  /// t1245 (decision 115 U22): one row of the mainnet list (so rows can be laid out in glass cards with hairlines between them).
   enum Row { case muse(Bool), card(AgentCard, Bool), extra(JSONValue), siri, copyMcp }
   @ViewBuilder func row(_ r: Row) -> some View {
     switch r {
@@ -835,7 +835,7 @@ struct AgentsTab: View {
       }.accessibilityIdentifier("agents.copyMcp")
     }
   }
-  /// Same block as AI 生活: white section title (SectionHead) above one glass card.
+  /// Same block as AI [zh]: white section title (SectionHead) above one glass card.
   @ViewBuilder func block(_ title: String, _ rows: [Row]) -> some View {
     VStack(alignment: .leading, spacing: KP.Space.headGap) {
       SectionHead(title: title)
@@ -910,7 +910,7 @@ struct SiriPhrasesSheet: View {
   }
 }
 
-/// One row style for every AI: same icon, black name, status line (green 已连接 + last use, or 未连接) and a quiet 连接 pill.
+/// One row style for every AI: same icon, black name, status line (green [zh] + last use, or [zh]) and a quiet [zh] pill.
 struct AgentLine: View {
   let name: String; var symbol: String? = nil; let on: Bool; let sub: String; var action: String? = nil
   var body: some View {
@@ -1083,10 +1083,10 @@ struct ConnectResultView: View {
   private func copyButton(_ v: String) -> some View { Button { UIPasteboard.general.string = v; Haptics.success() } label: { Label(L("复制"), systemImage: "doc.on.doc") } }
 }
 
-/// t1038u: one glass row used for the two limit entries (Wallet tab / AI Life), same KP card style as the frozen UI.
+/// t1038: one glass row used for the two limit entries (Wallet tab / AI Life), same KP card style as the frozen UI.
 struct LimitEntryRow: View {
   let icon: String; let title: String; let sub: String
-  /// t1245 (§6#115 U38): a warning colour for the subtitle (expired limit); nil = the usual grey.
+  /// t1245 (decision 115 U38): a warning colour for the subtitle (expired limit); nil = the usual grey.
   var subTint: Color? = nil
   var body: some View {
     HStack(spacing: 12) {
@@ -1100,7 +1100,7 @@ struct LimitEntryRow: View {
   }
 }
 
-// MARK: 5. 设置 / 安全
+// MARK: 5. [zh]
 
 struct SettingsTab: View {
   @EnvironmentObject var m: AppModel
@@ -1108,23 +1108,23 @@ struct SettingsTab: View {
   var embedded = false
   var body: some View {
     EmbedStack(embedded: embedded) {
-      // t1068u: same PageTitle + top inset as AI 生活 / 钱包 (no system large title — that sat higher/lower)
+      // t1068: same PageTitle + top inset as AI [zh] (no system large title — that sat higher/lower)
       VStack(spacing: 0) {
         PageTitle(eyebrow: nil, title: L("设置"), id: "settings.title")
           .padding(.horizontal, KP.Space.page)
           .padding(.top, TabRootChrome.titleTop)
           .padding(.bottom, KP.Space.xs)   // t1245 U5: rows never slide under the title (the list below is clipped to its own frame)
         List { Group {
-          // §6#110 (owner 2026-11-21): 暂停 AI 付款 moved to AI 生活 (one place); 删除账户 stays below in 危险操作.
+          // decision 110 (owner 2026-11-21): [zh] (one place); [zh].
           if s.isMainnet {
-            Section {   // t1038u: limits moved — 钱包总限额 on the Wallet tab, AI 总限额 on AI Life
+            Section {   // t1038: limits moved — 钱包总限额 on the Wallet tab, AI 总限额 on AI Life
               NavigationLink { PhoneSignerView() } label: { Label(T("Face ID 批准", "Face ID approvals"), systemImage: "faceid") }.accessibilityIdentifier("settings.phone") }
 
           }
           #if KP_DEV_MIGRATION
           if s.isMainnet, DevMigrationCheck.visible { Section { NavigationLink { DevMigrationView() } label: { Label("V5.4 (dev)", systemImage: "hammer") }.accessibilityIdentifier("settings.devMigration") } header: { Text("Developer") } }
           #endif
-          Section { NavigationLink { UsageGuideView(current: s.balance > 0 ? 3 : 2) } label: { Label(T("使用指引", "How to start"), systemImage: "list.number") }.accessibilityIdentifier("settings.usageGuide")
+          Section { NavigationLink { UsageGuideView() } label: { Label(T("使用指引", "How to start"), systemImage: "list.number") }.accessibilityIdentifier("settings.usageGuide")
             NavigationLink { LostPhoneGuide() } label: { Label(LostPhoneRecovery.title, systemImage: "iphone.slash") }.accessibilityIdentifier("settings.lostPhone")
             NavigationLink { SafetyTipsView() } label: { Label(T("安全小贴士", "Safety tips"), systemImage: "checkmark.shield") }.accessibilityIdentifier("settings.tips") }
 
@@ -1137,7 +1137,7 @@ struct SettingsTab: View {
           if s.isMainnet || s.wallet != nil {
             Section { SafetyPanel(s: s, part: .delete) } header: { Text(T("危险操作", "Danger zone")) } footer: { Text(T("删除后不能恢复。钱不会消失，但请先在钱包页提现。", "Can't be undone. Your money stays, but withdraw it first on the Wallet tab.")) }
           }
-          // §6#110 (owner 2026-11-21): 退出登录 / 换账户 is the very last section.
+          // decision 110 (owner 2026-11-21): [zh] is the very last section.
           Section {
             Button { m.signOut() } label: { Label(T("退出登录 / 换账户", "Sign out / switch account"), systemImage: "rectangle.portrait.and.arrow.right") }
               .accessibilityIdentifier("settings.signout")
@@ -1185,13 +1185,13 @@ struct LimitsView: View {
   }
 }
 
-/// §6#110: opened from AI 生活 → 信任的商家. Testnet: the server trust list (swipe to revoke). Mainnet: the owner's address book
-/// (payees he trusted with Face ID, or verified ones) — read-only; a new merchant always asks in 待你批准 first.
+/// decision 110: opened from AI [zh] → [zh]. Testnet: the server trust list (swipe to revoke). Mainnet: the owner's address book
+/// (payees he trusted with Face ID, or verified ones) — read-only; a new merchant always asks in [zh] first.
 struct TrustListView: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
   static func book(_ s: WalletState) -> [JSONValue] { (s.raw["payeeBook"]?.array ?? []).filter { ($0["status"]?.string ?? "new") != "new" && $0["address"]?.string != nil } }
-  /// t1241 (§6#111): merchant DOMAINS the owner trusted with Face ID (layered trust; read-only here, the server reports them)
+  /// t1241 (decision 111): merchant DOMAINS the owner trusted with Face ID (layered trust; read-only here, the server reports them)
   static func domains(_ s: WalletState) -> [JSONValue] { (s.raw["trustedMerchants"]?.array ?? []).filter { $0["domain"]?.string != nil } }
   static func count(_ s: WalletState) -> Int { (s.raw["trust"]?["trusted"]?.array ?? []).count + book(s).count + domains(s).count }
   static func summary(_ s: WalletState) -> String {
@@ -1203,7 +1203,7 @@ struct TrustListView: View {
     let list = s.raw["trust"]?["trusted"]?.array ?? []
     let book = Self.book(s), doms = Self.domains(s)
     List { Group {
-      if !doms.isEmpty {   // t1241 §6#111: trusted merchant domains (each order's new address is checked, signed by Kipurse's attestor)
+      if !doms.isEmpty {   // t1241 decision 111: trusted merchant domains (each order's new address is checked, signed by Kipurse's attestor)
         Section {
           ForEach(Array(doms.enumerated()), id: \.offset) { i, d in
             let dm = d["domain"]?.string ?? "", paused = d["paused"]?.bool ?? false, signed = d["merchantSigned"]?.bool
@@ -1251,7 +1251,7 @@ struct TrustListView: View {
       } footer: { Text(T("AI 想付钱给新商家时，会先出现在 AI 生活的「待你批准」。左滑可以取消信任。", "When your AI wants to pay a new merchant, it first shows in Waiting for you on AI Life. Swipe left to stop trusting.")) }
     }.listRowBackground(GlassRowBG())
     }
-    // t1245 (§6#115 U8/U30): glass list like its entry card; the same name as the entry (信任的商家 / Trusted merchants)
+    // t1245 (decision 115 U8/U30): glass list like its entry card; the same name as the entry ([zh] / Trusted merchants)
     .listStyle(.insetGrouped).kpSectionRhythm().scrollContentBackground(.hidden).background(MockBG())
     .navigationTitle(T("信任的商家", "Trusted merchants")).navigationBarTitleDisplayMode(.inline)
   }
@@ -1296,7 +1296,7 @@ extension Optional where Wrapped == String { var orEmpty: String { self ?? "" } 
 /// t1073/t1074: first connect with no explicit AI save opens the existing limits page. A saved row launches as before.
 enum AIConnect: Hashable {
   case siri, muse, card(String)
-  /// t1245 (§6#115 U23): the AI's name for the "set the limit first, then we continue connecting <name>" notice.
+  /// t1245 (decision 115 U23): the AI's name for the "set the limit first, then we continue connecting <name>" notice.
   var displayName: String {
     switch self {
     case .siri: return "Siri"
@@ -1367,7 +1367,7 @@ enum AIConnect: Hashable {
   }
   @MainActor static func begin(_ target: AIConnect, s: WalletState, m: AppModel, pending: Binding<AIConnect?>, present: Binding<Bool>) {
     if needsChoice(m) {
-      // t1157u: "limits not set" read from a cache that may be old (no read session) must not reopen setup. Read the real state first
+      // t1157: "limits not set" read from a cache that may be old (no read session) must not reopen setup. Read the real state first
       // (one Face ID, on this tap), then decide. Nothing is saved or granted here.
       if m.stateMayBeStale {
         Task { @MainActor in
@@ -1431,7 +1431,7 @@ struct EmergencyStopRow: View {
   }
   private func run(_ path: String) async {
     busy = true; defer { busy = false }
-    if path == "safety/resume" { let r = await SafetyPanel.resumeFlow(m) { _ in }; if r.ok { Haptics.success(); msg = L("已恢复 AI 付款。") } else { needsBind = r.code == Unbound.notBound; msg = r.text ?? Unbound.resumeFailText(r.code) }; return }   // t1139u: on-chain unpause too
+    if path == "safety/resume" { let r = await SafetyPanel.resumeFlow(m) { _ in }; if r.ok { Haptics.success(); msg = L("已恢复 AI 付款。") } else { needsBind = r.code == Unbound.notBound; msg = r.text ?? Unbound.resumeFailText(r.code) }; return }   // t1139: on-chain unpause too
     do { let (c, j) = try await MainnetSession.authedPost(path, [:])
       if c == 200 { Haptics.success(); msg = path.hasSuffix("stop") ? (((j["chain"] as? [String: Any])?["paused"] as? Bool) == true ? L("已停止。链上已暂停 24 小时。") : L("已停止 AI 付款。链上暂停没有成功，可以稍后再试。")) : L("已恢复 AI 付款。") }
       else { msg = c == 401 ? L("请先用 Face ID 打开钱包再试。") : L("没有成功（\(c)），请再试一次。") }
@@ -1444,7 +1444,7 @@ struct EmergencyStopRow: View {
 /// so: show + copy this wallet's address (QR too), then open Coinbase's send page in the in-app browser. Works on a bound:false phone
 /// (needs only the wallet address; nothing is signed). Arrival is watched by polling the balance.
 struct CoinbaseDepositView: View {
-  /// t885: Coinbase 充值 = ONLY the user's own Coinbase Wallet (Coinbase wallet), never the Coinbase exchange / Onramp.
+  /// t885: Coinbase [zh] = ONLY the user's own Coinbase Wallet (Coinbase wallet), never the Coinbase exchange / Onramp.
   /// Reads the Coinbase wallet's USDC on-chain; the transfer page (/deposit?mode=tap, server unchanged) asks the Coinbase wallet
   /// (keys.coinbase.com popup, in-app browser) for ONE USDC.transfer to THIS user's Kipurse wallet (server-registered, never typed).
   /// The account in the popup must be the owner, else the page refuses. Kipurse signs nothing and sponsors nothing here.
@@ -1456,7 +1456,7 @@ struct CoinbaseDepositView: View {
     // t888: MUST carry the #vw=<own wallet> commitment, or the page's guard refuses the transfer after the Coinbase confirmation.
     return c?.url.map { BatchVerify.depositURL($0, wallet: wallet) }
   }
-  /// t888: open the transfer page with nothing stacked under it (closes the local Coinbase 充值 sheet first), then watch for arrival.
+  /// t888: open the transfer page with nothing stacked under it (closes the local Coinbase [zh] sheet first), then watch for arrival.
   /// t1279 (R15): `baseline` and "now" are two-node agreed chain balances (AppModel.agreedBalanceNow), never the server's number;
   /// no agreed baseline -> no toast (the deposit view's own watcher still reads the chain).
   @MainActor static func openTransfer(_ m: AppModel, _ u: URL, baseline: Int64?) {
@@ -1556,7 +1556,7 @@ struct CoinbaseDepositView: View {
 }
 
 
-/// t857: home section header (充值 / 提现 / 限额), v5 style: brand-tinted icon + bold title.
+/// t857: home section header ([zh]), v5 style: brand-tinted icon + bold title.
 struct HomeSectionTitle: View {
   let title: String; let icon: String; let id: String
   var body: some View {

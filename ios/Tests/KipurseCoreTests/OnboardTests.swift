@@ -45,15 +45,15 @@ final class OnboardTests: XCTestCase {
     XCTAssertNil(CoinbaseIdentity.openedOnSignIn(none)); XCTAssertNil(none.setupState)
     let bad = CoinbaseIdentity.Result(j(#"{"state":"done","result":"new","owner":"\#(o)","wallet":null,"setup":{"state":"done","wallet":"nope"}}"#))!
     XCTAssertNil(CoinbaseIdentity.openedOnSignIn(bad))
-    XCTAssertNil(CoinbaseIdentity.presetSetup)   // t603u: no default limit authorization
+    XCTAssertNil(CoinbaseIdentity.presetSetup)   // t603: no default limit authorization
   }
-  /// t1004u: opening needs no Face ID. t1022u supersedes "Kipurse pays first": user pays in the same confirmation; zero Coinbase USDC cannot open (deposit first).
+  /// t1004: opening needs no Face ID. t1022 supersedes "Kipurse pays first": user pays in the same confirmation; zero Coinbase USDC cannot open (deposit first).
   func testZeroBalanceNewUserCanOpenWithoutFaceID_t1004u() {
     let userPays = Onboard.Quote(j(#"{"gas":"1","feeUSDC":"0.05","payer":"","payerCanPayEth":false,"payerCanPayUSDC":true,"sponsoredByKipurse":false,"sponsored":false,"feePaidBy":"user_usdc","signatures":1}"#))
     XCTAssertTrue(Onboard.canStart(userPays))
     XCTAssertFalse(Onboard.canStart(nil))
     XCTAssertNotNil(Onboard.depositAtomic("5")); XCTAssertNil(Onboard.depositAtomic("0"))
     for w in ["免费", "垫付", "赞助", "代付", "Face ID"] { XCTAssertFalse(Onboard.feeNote.contains(w), w) }
-    XCTAssertTrue(Onboard.feeNote.contains("另从你的 Coinbase 钱包（Base 账户）扣") || Onboard.feeNote.contains("charged separately from your Coinbase wallet") || Onboard.feeNote.contains("USDC"))   // t1114u: fee is separate from the deposit
+    XCTAssertTrue(Onboard.feeNote.contains("另从你的 Coinbase 钱包（Base 账户）扣") || Onboard.feeNote.contains("charged separately from your Coinbase wallet") || Onboard.feeNote.contains("USDC"))   // t1114: fee is separate from the deposit
   }
 }

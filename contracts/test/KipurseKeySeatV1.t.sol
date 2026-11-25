@@ -5,7 +5,7 @@ import "../src/KipurseErrors.sol";
 import {KipurseAdapterV54} from "../src/KipurseAdapterV54.sol";
 import {KipurseKeySeatV1} from "../src/KipurseKeySeatV1.sol";
 
-/// Handbook §6#108: Face ID KEY SEAT. The wallet is created by the Coinbase factory with owners [owner, seat, SPM] in one go;
+/// Handbook decision 108: Face ID KEY SEAT. The wallet is created by the Coinbase factory with owners [owner, seat, SPM] in one go;
 /// after that NO owner is ever added or removed. Phone set / change / off = wallet.execute(seat, 0, setKey|clearKey).
 contract KipurseKeySeatV1Test is V5Base {
     uint256 constant PK1 = 0xA11CE0FF1CE; uint256 constant PK2 = 0xB0B0B0B0B; uint256 constant SEAT_IDX = 1;

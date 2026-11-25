@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1214 (§6#102, owner t1230u; §6#101 owner t1227u "我的base账号付"): ONE-TIME V5.4 adapter deploy page, the same proven way as V5.3
-// (§6#87–90). The owner's Base Account confirms exactly ONE fixed batch: deployer <- V5.4 adapter init code (it creates its own trust
+// t1214 (decision 102, owner t1230; decision 101 owner t1227 "[zh]"): ONE-TIME V5.4 adapter deploy page, the same proven way as V5.3
+// (decision 87–90). The owner's Base Account confirms exactly ONE fixed batch: deployer <- V5.4 adapter init code (it creates its own trust
 // contract and registers its vault implementations in the V5.3 factory) + USDC fee leg 0.15 to the fixed Kipurse fee address.
 // Gas is fronted by Kipurse's paymaster for that exact batch only and repaid in USDC inside it; never ETH (Coinbase's estimator handles
 // this single ~9.5M-gas batch: CDP estimate t1214 = call 9,493,432). The KPVH guard (link #vh=) refuses any other batch; this script

@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1238 (handbook §6#109): after the owner's wallet moved to a new key-seat wallet, the phone showed the OLD wallet's cached home
+/// t1238 (decision 109): after the owner's wallet moved to a new key-seat wallet, the phone showed the OLD wallet's cached home
 /// (AIs "online", October ledger) because the one local cache file is not tied to a wallet and sign-out kept it.
 /// A cached home may be shown only for the wallet this phone is on now.
 public enum CacheGuard {

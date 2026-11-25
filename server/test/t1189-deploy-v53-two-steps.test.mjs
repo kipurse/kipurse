@@ -1,4 +1,4 @@
-// t1189 (§6#89): Coinbase's (CDP) bundler could not estimate the single ~12M-gas deploy batch ("estimateCallGas should make progress each
+// t1189 (decision 89): Coinbase's (CDP) bundler could not estimate the single ~12M-gas deploy batch ("estimateCallGas should make progress each
 // time it is called"). The page now asks for two confirmations in order, each pinned by its own link commitment; the old link is refused calmly.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {loadV53Plan,deployV53Calls,deployV53Fragment} from '../src/v5/deploy-v53.mjs';

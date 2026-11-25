@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1253 (handbook §6#122): after the owner-signed V5.4 -> V5.5 move the phone switches to the new wallet ONLY on its own chain checks,
+/// t1253 (decision 122): after the owner-signed V5.4 -> V5.5 move the phone switches to the new wallet ONLY on its own chain checks,
 /// never because the server says so (address-integrity rule). The phone derives the V5.5 wallet and key seat from the owner's Base
 /// Account itself, then requires, from the chain (two independent nodes agreeing):
 ///   1. the new wallet has code, and both the owner's Base Account and that seat are its owners;

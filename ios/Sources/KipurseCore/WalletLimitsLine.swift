@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1129u: the 钱包安全上限 row on the wallet page shows the limit that is in force ON CHAIN (or the server's copy of it),
+/// t1129: the [zh] row on the wallet page shows the limit that is in force ON CHAIN (or the server's copy of it),
 /// never only the generic fee explanation. Read-only; the fee explanation stays on the change page.
 public enum WalletLimitsLine {
   public enum State: Equatable {
@@ -30,19 +30,19 @@ public enum WalletLimitsLine {
     case .unreadable: return T("暂时读不到，请稍后再试", "Can't read it right now. Try again later.")
     case .unset: return T("还没有设置", "Not set yet")
     case .ready(let s, let d, let t, let end):
-      // t1245 (§6#115 U20): the exact numbers, the same as the limit page and its input boxes (30.03 stays 30.03).
+      // t1245 (decision 115 U20): the exact numbers, the same as the limit page and its input boxes (30.03 stays 30.03).
       let base = T("每笔 \(AnswerRules.format(s)) · 每天 \(AnswerRules.format(d)) · 总额 \(AnswerRules.format(t)) USDC",
                    "Per payment \(AnswerRules.format(s)) · per day \(AnswerRules.format(d)) · total \(AnswerRules.format(t)) USDC")
       guard let end else { return base }
       return base + T(" · 到 \(day(end, zone: zone))", " · until \(day(end, zone: zone))")
     }
   }
-  /// t1245 (§6#115 U38): the limit's end date has passed (it no longer protects anything until renewed).
+  /// t1245 (decision 115 U38): the limit's end date has passed (it no longer protects anything until renewed).
   public static func expired(_ st: State, now: Date = Date()) -> Bool {
     if case .ready(_, _, _, let end?) = st { return end <= now }
     return false
   }
-  /// The home row: an expired limit says so first (shown in red) instead of an old 「到 …」 date.
+  /// The home row: an expired limit says so first (shown in red) instead of an old "[zh]" date.
   public static func rowText(_ st: State, now: Date = Date(), zone: TimeZone = .current) -> String {
     expired(st, now: now) ? T("已过期，点这里续期", "Expired. Tap here to renew") : text(st, zone: zone)
   }

@@ -64,7 +64,7 @@ final class T1073AISpendTests: XCTestCase {
     XCTAssertNotEqual(text, ConnectApproval.text(wallet: "0xAB", req: "req1", clientId: "kpc_1", name: "Siri", redirect: "https://kipurse.com/connect/Siri", exp: 1_700_000_000, approve: true))
   }
 
-  /// t1076 / t1129u: a wallet/chain caps change is not an AI everyday policy. The AI card must not treat caps as saved limits.
+  /// t1076 / t1129: a wallet/chain caps change is not an AI everyday policy. The AI card must not treat caps as saved limits.
   func testChainCapsAreNotDisplayedAsEverydayPolicy() {
     func object(_ d: [String: JSONValue]) -> JSONValue { .object(d) }
     let caps = object(["single": .string("10000000"), "daily": .string("50000000"), "term": .string("200000000"),

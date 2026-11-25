@@ -11,7 +11,7 @@ public enum ServerText {
     "invalid_session": ("登录已过期，请用 Face ID 重新打开钱包。", "Your session expired. Open your wallet with Face ID again."),
     "face_id_required": ("这一步需要 Face ID 确认。", "This step needs Face ID."),
     "not_owner": ("这个确认不是来自钱包主人的账户，什么都没改。", "That signature isn't from this wallet's owner. Nothing changed."),
-    "connect_failed": ("这次没有连接成功：没有保存额度，也没有扣钱。请回到 AI 重新连接。", "This connection did not go through. No limits were saved and nothing was charged. Please connect again from your AI."),   // t1153u
+    "connect_failed": ("这次没有连接成功：没有保存额度，也没有扣钱。请回到 AI 重新连接。", "This connection did not go through. No limits were saved and nothing was charged. Please connect again from your AI."),   // t1153
     "bad_signature": ("确认没通过核对，什么都没改。", "The signature didn't check out. Nothing changed."),
     "bad_nonce": ("这一步已过期，请重新开始。", "This step expired. Please start again."),
     "challenge_expired": ("这一步已过期，请重新开始。", "This step expired. Please start again."),

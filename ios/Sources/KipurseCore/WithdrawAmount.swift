@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1116u: everyday withdraw = any amount the user picks, or everything ("全部" / "All", = wallet + fee reserve, as before).
+/// t1116: everyday withdraw = any amount the user picks, or everything ("[zh]" / "All", = wallet + fee reserve, as before).
 /// Only the amount is the user's; the destination is still only the user's own Coinbase wallet (OwnerExit rebuilds the batch).
 public enum WithdrawAmount {
   public enum Problem: String, Equatable { case empty, notANumber, zero, overBalance, notAboveFee }
@@ -29,6 +29,6 @@ public enum WithdrawAmount {
   public static func presetAvailable(_ preset: String, total: Int64) -> Bool { atomic(preset).map { $0 <= total } ?? true }
   /// The prepared plan must be for EXACTLY the amount the user just confirmed (no "close enough").
   public static func preparedMatches(prepared: UInt64, confirmed: Int64) -> Bool { confirmed > 0 && prepared == UInt64(confirmed) }
-  /// 预计到账 ≈ amount − network fee (never below 0).
+  /// [zh] ≈ amount − network fee (never below 0).
   public static func net(amount: Int64, fee: Int64) -> Int64 { max(0, amount - fee) }
 }

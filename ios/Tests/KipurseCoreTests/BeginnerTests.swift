@@ -8,6 +8,10 @@ final class BeginnerTests: XCTestCase {
       let p = Beginner.plans(use: u, spend: v); XCTAssertEqual(p.map(\.key), ["cautious", "normal", "roomy"])
       for x in p { XCTAssertLessThanOrEqual(x.single, x.daily); XCTAssertLessThanOrEqual(x.daily, x.term); XCTAssertGreaterThan(x.single, 0) }
       XCTAssertLessThan(p[0].daily, p[2].daily) } }
+    for v in Beginner.Spend.allCases {
+      let p = Beginner.plans(spend: v); XCTAssertEqual(p.map(\.key), ["cautious", "normal", "roomy"])
+      for x in p { XCTAssertLessThanOrEqual(x.single, x.daily); XCTAssertLessThanOrEqual(x.daily, x.term); XCTAssertGreaterThan(x.single, 0) }
+    }
   }
   func testLabelsNeverMonthly() {
     let all = Beginner.useZh + Beginner.spendZh + Beginner.plans(use: .shopping, spend: .mid).map(\.zh)

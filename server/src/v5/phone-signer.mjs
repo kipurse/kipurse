@@ -19,14 +19,14 @@ const ART3=JSON.parse(fs.readFileSync(new URL('./phone-approver-v3-artifact.json
 /** t1268: the on-chain address the app checks this wallet's phone key against (WalletVerify on the phone, two public nodes): the key SEAT for
  *  key-seat wallets (version seat1 / seat2), the PhoneApprover contract otherwise. A hint only: the app never trusts it without the chain. */
 export const approverHint=a=>{try{if(!a?.approver)return {};const ad=getAddress(String(a.approver));return String(a.version??'').startsWith('seat')?{seat:ad}:{approver:ad};}catch{return {};}};
-export const NO_CEILING=((1n<<160n)-1n).toString();export const PAY_VERSIONS=new Set(['v2','v3','seat1','seat2']);   // t1250: seat2 = key seat V2 (V5.5; only V5.5 wallets carry it)   // seat1 = key seat (§6#109), V4 signature format
+export const NO_CEILING=((1n<<160n)-1n).toString();export const PAY_VERSIONS=new Set(['v2','v3','seat1','seat2']);   // t1250: seat2 = key seat V2 (V5.5; only V5.5 wallets carry it)   // seat1 = key seat (decision 109), V4 signature format
 export const WALLET_ABI=parseAbi(['function addOwnerAddress(address owner)','function removeOwnerAtIndex(uint256 index, bytes owner)','function isOwnerAddress(address account) view returns (bool)',
   'function nextOwnerIndex() view returns (uint256)','function execute(address target, uint256 value, bytes data)','function ownerAtIndex(uint256 index) view returns (bytes)','function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)']);
 export const APPROVER_ABI=ART.abi;
 // Upgrade gas paid from the KIPURSE WALLET's own USDC: the owner's Base Account sends the batch (pays gas up front, its own
 // money) and the same atomic batch has the wallet send `fee` USDC back to that Base Account. Nobody else fronts or sponsors.
 export const BASE_USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-export const ETH_USD_FEED='0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70'; // Chainlink ETH/USD on Base (8 decimals); t1026u: was 0xc0de… (no data on Base RPCs)
+export const ETH_USD_FEED='0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70'; // Chainlink ETH/USD on Base (8 decimals); t1026: was 0xc0de… (no data on Base RPCs)
 export const UPGRADE_GAS=1_800_000n;          // measured 1,758,806 on a Base fork (deploy V2 + addOwnerAddress + USDC refund: 1,775,833)
 export const L1_ALLOWANCE_WEI=1_000_000_000_000n; // Base L1 data fee allowance (0.000001 ETH)
 export const FEE_MARGIN_PCT=0n;export const FEE_CAP=50_000n;export const FEE_MIN=0n; // atomic USDC: actual cost, no markup, no minimum; cap 0.05
@@ -58,10 +58,10 @@ export function phoneTrustWrapper(ownerIndex,m,r,s){const body=encodeAbiParamete
   return encodeAbiParameters([{type:'tuple',components:[{name:'ownerIndex',type:'uint256'},{name:'signatureData',type:'bytes'}]}],[{ownerIndex:BigInt(ownerIndex),signatureData:data}]);}
 
 export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null,afterOpening='charge'}){
-  // t1127u (owner, firm): Face ID is paid for ONCE, inside the opening batch. afterOpening='refuse' (mainnet) -> never build, quote or show a
+  // t1127 (owner, firm): Face ID is paid for ONCE, inside the opening batch. afterOpening='refuse' (mainnet) -> never build, quote or show a
   // separate fee-bearing enrollment after opening (no reinstall / new-phone / Settings fee). The first key from the opening batch stays free ('already').
   const refuseFee=afterOpening==='refuse';
-  // t1128u (owner "允许再扣"): afterOpening='wallet' (mainnet) -> a post-opening enable / re-enable / replace is a WALLET-PAYS batch only: live actual-cost fee <= FEE_CAP,
+  // t1128 (owner "[zh]"): afterOpening='wallet' (mainnet) -> a post-opening enable / re-enable / replace is a WALLET-PAYS batch only: live actual-cost fee <= FEE_CAP,
   // paid from the Kipurse wallet to feeTo in the same batch the sponsor fronts (Kipurse nets 0). Wallet short / sponsor off / fee over cap -> stop: no batch, no charge.
   const walletOnly=afterOpening==='wallet';const stop=(code,msg)=>Object.assign(Error(msg+' Nothing was charged.'),{code});const openingOnly=()=>Object.assign(Error('Face ID approvals are set up only in the opening batch; no separate fee after opening. Nothing was charged.'),{code:'opening_only'});
   // t906 (owner): the fee comes from the KIPURSE WALLET; the Base Account only signs. sponsor = {available():bool, register(id,{owner,wallet,calls,reimburse})->paymasterUrl|null}.
@@ -76,7 +76,7 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     for(let i=n-1;i>=0;i--){const b=await pub.readContract({address:W,abi:WALLET_ABI,functionName:'ownerAtIndex',args:[BigInt(i)]});if(String(b).toLowerCase()===want)return i;}return -1;}
   async function quoteNow(gas){const [gp,rd]=await Promise.all([pub.getGasPrice(),pub.readContract({address:feed,abi:FEED_ABI,functionName:'latestRoundData'})]);
     const px=BigInt(rd[1]);if(px<=0n||Date.now()/1e3-Number(rd[3])>86400)throw Object.assign(Error('ETH price unavailable'),{code:'no_price'});return upgradeFeeUSDC({gasPriceWei:gp,ethUsd8:px,...(gas?{gas}:{})});}
-  // t1238 §6#109: key-seat wallet (owners fixed at creation). S.phone.seat is permanent; the phone key lives IN the seat.
+  // t1238 decision 109: key-seat wallet (owners fixed at creation). S.phone.seat is permanent; the phone key lives IN the seat.
   const SEAT=()=>P().seat?getAddress(P().seat):null;
   async function enrollSeat({x,y}){const seat=SEAT();const k=await seatKey(pub,seat);if(k.wallet!==W)throw Object.assign(Error('key seat is not for this wallet'),{code:'mismatch'});
     if(k.x===BigInt(x)&&k.y===BigInt(y)){if(!P().active||BigInt(P().active.x)!==k.x){P().active={approver:seat,index:await findIndex(seat),x,y,maxSingle:NO_CEILING,maxDaily:NO_CEILING,version:SEAT_VERSION,fingerprint:fingerprint(x,y),at:new Date().toISOString()};save();}
@@ -126,7 +126,7 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
       /* t621 #1: the app decodes + checks these exact calls itself before the page may send them */ calls:calls(P().pending[id]),owner:OWNER,wallet:W,chainId,version:approverVersion,feeTo:P().pending[id].feeTo??null,walletPays:!!P().pending[id].paymaster};}
   function calls(e){if(e.seat)return assertNoTopLevelOwnerCall([setKeyCall(W,e.seat,e.x,e.y)].concat(BigInt(e.fee??0)>0n?[{to:W,value:'0x0',data:encodeFunctionData({abi:WALLET_ABI,functionName:'execute',args:[getAddress(token),0n,encodeFunctionData({abi:ERC20_ABI,functionName:'transfer',args:[e.feeTo?getAddress(e.feeTo):OWNER,BigInt(e.fee)]})]})}]:[]));
     const a=approverInit({wallet:W,trust,x:e.x,y:e.y,maxSingle:e.maxSingle,maxDaily:e.maxDaily,version:e.version??'v1'});
-    return assertNoTopLevelOwnerCall([{to:DETERMINISTIC_DEPLOYER,value:'0x0',data:a.deployData},selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[a.address]}))]   // t1238 §6#106: self-call
+    return assertNoTopLevelOwnerCall([{to:DETERMINISTIC_DEPLOYER,value:'0x0',data:a.deployData},selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[a.address]}))]   // t1238 decision 106: self-call
       .concat((e.remove??[]).map(removeCall)).concat(BigInt(e.fee??0)>0n?[{to:W,value:'0x0',data:encodeFunctionData({abi:WALLET_ABI,functionName:'execute',args:[getAddress(token),0n,encodeFunctionData({abi:ERC20_ABI,functionName:'transfer',args:[e.feeTo?getAddress(e.feeTo):OWNER,BigInt(e.fee)]})]})}]:[]));}
   async function confirm(id){const e=P().pending[id];if(!e)throw Object.assign(Error('unknown or expired enrollment'),{code:'unknown'});
     if(e.seat){const k=await seatKey(pub,e.seat);if(k.wallet!==W)throw Object.assign(Error('approver mismatch'),{code:'mismatch'});if(k.x!==BigInt(e.x)||k.y!==BigInt(e.y))return {ok:false,detail:'not on chain yet'};
@@ -140,12 +140,12 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     if(old&&getAddress(old.approver)!==getAddress(e.approver)&&await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[old.approver]}))P().retiring=old;
     const v3=e.version==='v3';P().active={approver:e.approver,index,x:e.x,y:e.y,maxSingle:v3?NO_CEILING:e.maxSingle,maxDaily:v3?NO_CEILING:e.maxDaily,version:e.version??'v1',fingerprint:fingerprint(e.x,e.y),at:new Date().toISOString()};delete P().pending[id];save();if(P().dead)await pruneDead();return {ok:true,...P().active,deadLeft:P().dead??[]};}
   async function revokeCalls(){const a=P().active;if(!a)throw Object.assign(Error('no phone signer'),{code:'none'});if(SEAT()){const k=await seatKey(pub,SEAT());return k.x===0n?null:[clearKeyCall(W,SEAT())];}const index=await findIndex(a.approver);if(index<0)return null;
-    return [selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(index),pad(getAddress(a.approver))]}))];}   // t1238 §6#106: self-call
+    return [selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(index),pad(getAddress(a.approver))]}))];}   // t1238 decision 106: self-call
   async function revokeConfirm(){const a=P().active;if(!a)return {ok:true};if(SEAT()){if((await seatKey(pub,SEAT())).x!==0n)return {ok:false,detail:'still an owner'};P().active=null;save();return {ok:true};}if(await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.approver]}))return {ok:false,detail:'still an owner'};
     P().active=null;save();return {ok:true};}
   /** Migration step 2: remove the replaced approver from the wallet (owner signs these calls in the wallet). */
   async function retiringCalls(){if(SEAT())return null;const a=P().retiring;if(!a)return null;const index=await findIndex(a.approver);if(index<0)return null;
-    return [selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(index),pad(getAddress(a.approver))]}))];}   // t1238 §6#106: self-call
+    return [selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(index),pad(getAddress(a.approver))]}))];}   // t1238 decision 106: self-call
   async function retiringConfirm(){const a=P().retiring;if(!a)return {ok:true};if(await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a.approver]}))return {ok:false,detail:'still an owner'};
     delete P().retiring;save();return {ok:true};}
   /** Does the active approver support owner payments (V2) and is it still an owner on chain right now? */
@@ -161,7 +161,7 @@ export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,bas
     S.phone={pending:{},active:null,...(d.size?{dead:[...d]}:{})};save();}
   /** Dead approvers still on chain -> [{approver,index}] (index read now; removeOwnerAtIndex does not shift other indices). */
   async function deadOwners(exclude){if(SEAT())return [];const out=[];for(const a of P().dead??[]){if(exclude&&getAddress(a)===getAddress(exclude))continue;const i=await findIndex(a);if(i>=0)out.push({approver:getAddress(a),index:i});}return out;}
-  const removeCall=r=>selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(r.index),pad(getAddress(r.approver))]}));   // t1238 §6#106: self-call
+  const removeCall=r=>selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'removeOwnerAtIndex',args:[BigInt(r.index),pad(getAddress(r.approver))]}));   // t1238 decision 106: self-call
   async function pruneDead(){const left=[];for(const a of P().dead??[])if(await pub.readContract({address:W,abi:WALLET_ABI,functionName:'isOwnerAddress',args:[a]}))left.push(a);
     if(left.length)P().dead=left;else delete P().dead;save();return left;}
   function page(title,inner,nonce,data,lang='zh'){return `<!doctype html><html lang=${lang}><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>

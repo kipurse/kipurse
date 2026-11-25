@@ -1,4 +1,4 @@
-// t1185u (handbook §6#86): opening seeds the owner's own payer vault with 0.15 USDC from his Base Account (first AI payment works).
+// t1185 (decision 86): opening seeds the owner's own payer vault with 0.15 USDC from his Base Account (first AI payment works).
 import test from 'node:test';import assert from 'node:assert/strict';
 import {vaultSeedCall,vaultSeedNote,usdcCallProblem,OPENING_VAULT_SEED,USDC_BASE} from '../src/v5/usdc-gas.mjs';
 import {decodeFunctionData,parseAbi} from 'viem';

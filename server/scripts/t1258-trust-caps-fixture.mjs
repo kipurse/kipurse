@@ -1,4 +1,4 @@
-// t1258 (handbook 0A #10, §6#127): the SERVER's own trust-cap math -> fixture the iOS tests must accept (and refuse +1 atomic).
+// t1258 (handbook 0A #10, decision 127): the SERVER's own trust-cap math -> fixture the iOS tests must accept (and refuse +1 atomic).
 // Both trust kinds (stored kind 1 via engine.trustRequest, inline V5.5 kind 6 via owner-ask-approve) carry daily = trustDailyCap(trustCapsFor().daily, ppm).
 // Usage: node scripts/t1258-trust-caps-fixture.mjs > <Kipurse>/Tests/KipurseCoreTests/Fixtures/t1258-trust-caps.json
 import {trustCapsFor,trustDailyCap} from '../src/v5/owner-ask-approve.mjs';

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import XCTest
 
-/// t1281 (handbook §6#141 ③): grant cards show the signed-but-hidden terms under their lines — by-site scope, full payee address,
+/// t1281 (decision 141 (3)): grant cards show the signed-but-hidden terms under their lines — by-site scope, full payee address,
 /// which approval it replaces, remember or not, validity — built through the real approval() path from gateway sign texts (-kpGrantDemo). zh/en.
 final class T1281CardDetailsUITests: XCTestCase {
   var app: XCUIApplication!
@@ -27,7 +27,10 @@ final class T1281CardDetailsUITests: XCTestCase {
     XCTAssertTrue(payees.contains((zh ? "收款地址：" : "Payee address: ") + "0x 1111 1111 1111 1111 1111 1111 1111 1111 1111 2222"), "\(payees)")
     XCTAssertTrue(payees.contains { $0.hasSuffix("0x 3333 3333 3333 3333 3333 3333 3333 3333 3333 4444") }, "\(payees)")
     XCTAssertEqual(reps, [zh ? "会替换你之前批准的一项（mnd_9f…5b4a）" : "Replaces one you approved before (mnd_9f…5b4a)"])
-    XCTAssertEqual(rem, [zh ? "批准后记住这个收款方，以后它不算新收款方" : "After approval this payee is remembered and no longer counts as new"])
+    XCTAssertEqual(rem, [
+      zh ? "批准后记住这些收款方，以后它们不算新收款方" : "After approval these payees are remembered and no longer count as new",
+      zh ? "批准后记住这个收款方，以后它不算新收款方" : "After approval this payee is remembered and no longer counts as new"
+    ])
     XCTAssertTrue(exp.contains(zh ? "有效 90 天" : "Valid for 90 days"), "\(exp)")
     XCTAssertTrue(exp.contains(zh ? "只能用一次，1 天内有效" : "Single use, valid for 1 day"), "\(exp)")
     for l in sites + payees + reps + rem + exp { XCTAssertEqual(Self.hasCJK(l), zh, l); if zh { XCTAssertFalse(l.contains(" / "), l) } }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1280 (handbook §6#140): regressions for the second re-audit server findings.
+// t1280 (decision 140): regressions for the second re-audit server findings.
 import test from 'node:test';import assert from 'node:assert/strict';import http from 'node:http';import net from 'node:net';
 import {createObs} from '../src/v5/obs.mjs';import {withLang} from '../src/v5/i18n.mjs';import {withSignCors} from '../src/v5/cors.mjs';
 const raw=(port,line)=>new Promise(r=>{const s=net.connect(port,'127.0.0.1',()=>s.write(line+'\r\nHost: x\r\nConnection: close\r\n\r\n'));let b='';s.on('data',d=>b+=d);s.on('close',()=>r(b));s.on('error',()=>r(b));});

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1187 (§6#87, owner approved 2026-11-18 14:36 CT): ONE-TIME page that lets the owner's Base Account confirm exactly ONE fixed batch:
+// t1187 (decision 87, owner approved 2026-11-18 14:36 CT): ONE-TIME page that lets the owner's Base Account confirm exactly ONE fixed batch:
 //   1. deterministic deployer 0x4e59 <- V5.3 PayerVaultFactory init code   (CREATE2 -> 0x34d9…D57D)
 //   2. deterministic deployer 0x4e59 <- V5.3 Kipurse adapter init code      (CREATE2 -> 0xb150…033C)
 //   3. USDC.transfer(Kipurse fee address, 0.20 USDC)  - the fee, paid from the owner's own USDC in the same batch (never ETH)
 // Kipurse's existing paymaster only fronts the gas for this exact batch (callsHash), the batch repays it in USDC (t752 shape).
 // The page refuses any other batch (server: exact calls + sponsor callsHash; browser: KPVH #vh commitment) and is inert once both
 // contracts have code. Nothing here touches any existing wallet, key, permission or ledger.
-// t1189 (§6#89, 2026-11-18): Coinbase's bundler cannot estimate the ~12M-gas single batch ("estimateCallGas should make progress each
+// t1189 (decision 89, 2026-11-18): Coinbase's bundler cannot estimate the ~12M-gas single batch ("estimateCallGas should make progress each
 // time it is called", reproduced read-only on the CDP endpoint). Now TWO confirmations in order, each estimated OK on that endpoint:
 //   step 1: deployer <- factory init code + USDC 0.05 fee leg;   step 2 (after the factory is on chain): deployer <- adapter init code + USDC 0.15.
 // Same 0.20 USDC in total, each op repays its own fronted gas (t752 shape). The link carries one KPVH commitment per step (#vh1=…&vh2=…).
@@ -75,7 +75,7 @@ export function createDeployV53({plan,owner,pub,sponsor,ethUsd8=null,script=()=>
 <div class=m>${t('工厂','Factory')} <code>${plan.factory}</code><br>${t('适配器','Adapter')} <code>${plan.adapter}</code><br>${t('通过公开部署器','Via the public deployer')} <code>${DEPLOYER}</code></div></div>
 <div class=c id=fee><div class=m>${t('手续费（一共）','Fee (in total)')}</div><div class=big>${fmt(DEPLOY_V53_FEE_USDC)} USDC</div><div class=m>${t(`分两次付：第 1 步 ${fmt(DEPLOY_V53_STEP_FEES[0])}，第 2 步 ${fmt(DEPLOY_V53_STEP_FEES[1])}。从你的 Base 账户（${short(OWNER)}）里的 USDC 付，不用 ETH。`,`Paid in two parts: ${fmt(DEPLOY_V53_STEP_FEES[0])} in step 1 and ${fmt(DEPLOY_V53_STEP_FEES[1])} in step 2, from the USDC in your Base Account (${short(OWNER)}). No ETH needed.`)}${u!=null?' '+t(`Base 上的实际成本现在约 ${u.toFixed(2)} 美元，多留一点余量以防网络变忙。`,`The actual cost on Base is about $${u.toFixed(2)} right now; the rest is headroom in case the network gets busy.`):''}</div></div>
 <div class=c id=how><div class=m>${t(`一共要在 Coinbase 里确认<b>两次</b>（合约太大，Coinbase 没法一次处理，所以分开）。第 1 次：部署工厂 + 付 ${fmt(DEPLOY_V53_STEP_FEES[0])} USDC。完成后这个页面会自动换成第 2 步，再点一次按钮。第 2 次：部署适配器 + 付 ${fmt(DEPLOY_V53_STEP_FEES[1])} USDC。每次确认后大约 10–60 秒完成。内容不一致时页面会停下，不会提交。`,`You confirm in Coinbase <b>twice</b> (the contracts are too big for Coinbase to handle in one go, so it is split). First: deploy the factory + pay ${fmt(DEPLOY_V53_STEP_FEES[0])} USDC. When that is done this page switches to step 2 by itself; tap the button again. Second: deploy the adapter + pay ${fmt(DEPLOY_V53_STEP_FEES[1])} USDC. Each takes about 10–60 seconds after you confirm. If anything differs, this page stops and submits nothing.`)}</div></div>
-<div class=c id=steps><b id=s1>${s.step===2?'✅':'①'} ${t('第 1 步：部署工厂','Step 1: deploy the factory')}</b><br><b id=s2>② ${t('第 2 步：部署适配器','Step 2: deploy the adapter')}</b></div>
+<div class=c id=steps><b id=s1>${s.step===2?'✅':'(1)'} ${t('第 1 步：部署工厂','Step 1: deploy the factory')}</b><br><b id=s2>(2) ${t('第 2 步：部署适配器','Step 2: deploy the adapter')}</b></div>
 <div class=c id=safari style="display:none"><b>${t('请在 Safari 里打开这个页面','Please open this page in Safari')}</b><div class=m>${t('你现在是在别的 App 里看这个页面。Coinbase 的确认窗口在这里打不开，所以按钮先藏起来了，什么都没有发生。','You are viewing this page inside another app. The Coinbase confirmation window cannot open here, so the button is hidden. Nothing has happened.')}</div>
 <div class=m>${t('点「在 Safari 中打开」；如果没反应，点「复制链接」，打开 Safari，粘贴到地址栏。','Tap “Open in Safari”. If nothing happens, tap “Copy link”, open Safari and paste it into the address bar.')}</div>
 <button id=osf>${t('在 Safari 中打开','Open in Safari')}</button><button id=cpl style="background:#EEF2FF;color:#0052FF">${t('复制链接','Copy link')}</button><p class=m id=cps></p></div>

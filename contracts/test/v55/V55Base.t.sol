@@ -12,7 +12,7 @@ import {KipurseKeySeatV2} from "../../src/KipurseKeySeatV2.sol";
 import {KipurseMerchantRegistryV2} from "../../src/KipurseMerchantRegistryV2.sol";
 import {PackedUserOperation} from "../../src/KipurseAdapterV5.sol";
 
-/// Shared fixture for the V5.5 suites (handbook §6#119): the V5Base world (real Coinbase Smart Wallet, real
+/// Shared fixture for the V5.5 suites (decision 119): the V5Base world (real Coinbase Smart Wallet, real
 /// SpendPermissionManager, EIP-3009 USDC fixture, registry) with KipurseAdapterV55 + KipurseTrustV55 + PayerVaultFactoryV55
 /// swapped in (the deployed KipurseFeeControllerV5 is reused unchanged). Port of test/invariant/V54Base.t.sol.
 abstract contract V55Base is V5Base {

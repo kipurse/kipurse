@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1128u (owner "允许再扣", handbook §6#66): turning Face ID on AFTER opening may carry one actual-cost network fee, but only in the
+/// t1128 (owner "[zh]", decision 66): turning Face ID on AFTER opening may carry one actual-cost network fee, but only in the
 /// wallet-pays shape: the Kipurse wallet pays at most 0.05 USDC to Kipurse's fixed fee address in the same batch, and the owner's Base
 /// account only confirms (never fronts, never ETH). Fee 0 (the opening-batch key) needs no check here.
 public enum EnrollFee {

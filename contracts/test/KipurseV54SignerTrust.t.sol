@@ -6,7 +6,7 @@ import {KipurseAdapterV54} from "../src/KipurseAdapterV54.sol";
 import {KipurseTrustV54} from "../src/KipurseTrustV54.sol";
 import {KipursePhoneApproverV4} from "../src/KipursePhoneApproverV4.sol";
 
-/// V5.4 (handbook §6#99/§6#100): owner signs ONE OwnerSignerTrust grant for merchant M's order signer; later orders signed by
+/// V5.4 (decision 99/decision 100): owner signs ONE OwnerSignerTrust grant for merchant M's order signer; later orders signed by
 /// that signer pay the order's own per-order payee (no payee binding) within the grant caps. Everything else as V5.2.
 contract KipurseV54SignerTrustTest is V5Base {
     KipurseAdapterV54 a4; KipurseTrustV54 t4;

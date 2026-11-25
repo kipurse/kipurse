@@ -1,7 +1,7 @@
 import SwiftUI
 import KipurseCore
 
-/// t1034: 帮助与客服 / 隐私政策 / 服务条款 are in-app pages (no Safari, no kipurse.com). Same frozen look as build 16.
+/// t1034: [zh] are in-app pages (no Safari, no kipurse.com). Same frozen look as build 16.
 struct LegalSection: Identifiable { let id = UUID(); let zh: String; let en: String; let bodyZh: [String]; let bodyEn: [String] }
 
 /// Who operates this build and how to reach them. From Info.plist (KIPURSE_OPERATOR_* / KIPURSE_SUPPORT_EMAIL / KIPURSE_GOVERNING_LAW_* in
@@ -15,11 +15,11 @@ enum LegalOperator {
   static var addrEn: String { info("KipurseOperatorAddressEn") }
   static var addrZh: String { info("KipurseOperatorAddressZh") }
   static var email: String { let e = info("KipurseSupportEmail"); return e.contains("@") ? e : "support@example.com" }
-  /// Chinese: "<address>的 <name>", or just the name
+  /// Chinese: "[zh]", or just the name
   static var byZh: String { addrZh.isEmpty ? " \(name)" : "\(addrZh)的 \(name)" }
   /// English: "<name>, <address>", or just the name
   static var nameAddrEn: String { addrEn.isEmpty ? name : "\(name), \(addrEn)" }
-  /// Chinese address followed by "，", or ""
+  /// Chinese address followed by "[zh]", or ""
   static var addrZhLead: String { addrZh.isEmpty ? "" : "\(addrZh)，" }
   static var contactZh: String { "\(email) · \(name)" + (addrZh.isEmpty ? "" : "，\(addrZh)") }
   static var contactEn: String { "\(email) · \(nameAddrEn)" }

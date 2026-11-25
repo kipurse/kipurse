@@ -1,4 +1,4 @@
-// t1185u (handbook §6#85): V5.3 vault = at most opsPerDay() session userOps per UTC day; nonce key = UTC day; calm refusal when used up.
+// t1185 (decision 85): V5.3 vault = at most opsPerDay() session userOps per UTC day; nonce key = UTC day; calm refusal when used up.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {parseAbi,decodeFunctionData,getAddress} from 'viem';import {privateKeyToAccount} from 'viem/accounts';
 import {createUserOpWriter,opsToday,opsUsedUp,opsResetAt,SEQ_MASK,DAY,setOpsPerDayCall} from '../src/v5/userop.mjs';
@@ -40,7 +40,7 @@ test('midnight guard: an op is never signed in the last seconds of a UTC day (it
   const w=createUserOpWriter({cfg:{chainId:84532,token:USDC,bundlerFetch,userOp:{pollMs:1,midnightGuardS:5}},pub,session,vault:VAULT,adapter:AD,maxGasPerOp:50000n});
   const t0=Date.now();await w.write('collectFees',[]);assert.ok(Date.now()-t0>=4000,'waited for the new UTC day');
   const n=BigInt(sent.find(x=>x.method==='eth_sendUserOperation').params[0].nonce);assert.equal(n>>64n,DAYK+1n,'new day key');});
-test('calm refusal text: nothing paid, resets 00:00 UTC, owner can raise; amounts rule (§6#80) clean',async()=>{
+test('calm refusal text: nothing paid, resets 00:00 UTC, owner can raise; amounts rule (decision 80) clean',async()=>{
   const e=opsUsedUp({cap:500n,used:500n,nowS:NOW});assert.equal(e.resetsAtUnix,opsResetAt(NOW));
   const {engineFor,direct}=await import('./helpers/v5-fixture.mjs');const {mkdtempSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
   const x=engineFor({ownerRulesDir:mkdtempSync(join(tmpdir(),'ops-'))},{bal:1000000000n});

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1246 (handbook §6#116): F8 — the phone bounds a card trust by its OWN ceiling (the AI limits the owner set, else 5 / 20 USDC);
+/// t1246 (decision 116): F8 — the phone bounds a card trust by its OWN ceiling (the AI limits the owner set, else 5 / 20 USDC);
 /// F9 — a push button only opens the card (no Face ID / signing straight from the lock screen).
 final class T1246F8F9Tests: XCTestCase {
   func msg(single: String, daily: String) -> OwnerTrustMessage {

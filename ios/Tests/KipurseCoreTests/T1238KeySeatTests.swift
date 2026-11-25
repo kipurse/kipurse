@@ -1,14 +1,14 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1238 (handbook §6#109): the phone checks key-seat batches. Fixtures are the REAL server replies from the Base-fork matrix run with
+/// t1238 (decision 109): the phone checks key-seat batches. Fixtures are the REAL server replies from the Base-fork matrix run with
 /// KIPURSE_KEY_SEAT=1 (work/t1214/deploy/t1238-seat-matrix-ON-fixtures.json): opening (U1/U2/U3), new phone (U1.enroll), Face ID off (U1.revokePlan).
 final class T1238KeySeatTests: XCTestCase {
   var f: [String: [String: Any]] = [:]
   override func setUp() {
     let u = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("t1238-seat-fixtures.json.txt")
     f = ((try? JSONSerialization.jsonObject(with: Data(contentsOf: u))) as? [String: [String: Any]]) ?? [:]
-    KipurseSuite.pin(.v53)   // new wallets open on V5.3 (§6#92); the seat was built with the V5.3 trust
+    KipurseSuite.pin(.v53)   // new wallets open on V5.3 (decision 92); the seat was built with the V5.3 trust
   }
   override func tearDown() { KipurseSuite.pin(nil) }
   func calls(_ k: String) -> [[String: Any]] { ((f[k]?["calls"] as? [[String: Any]]) ?? []).map { $0.compactMapValues { $0 as? String } } }
@@ -64,7 +64,7 @@ final class T1238KeySeatTests: XCTestCase {
     let k = "U1.enroll", (x, y) = key(k), w = s(k, "wallet"), o = s(k, "owner"), c = calls(k)
     let r = BatchVerify.enroll(calls: c, wallet: w, owner: o, x: x, y: y); XCTAssertTrue(r.ok, r.problems.joined(separator: "; "))
     XCTAssertEqual(r.approver, s(k, "approver").lowercased())
-    XCTAssertNil(EnrollFee.problem(f[k]! as [String: Any], owner: o), "wallet-pays fee shape (§6#66)")
+    XCTAssertNil(EnrollFee.problem(f[k]! as [String: Any], owner: o), "wallet-pays fee shape (decision 66)")
     XCTAssertFalse(BatchVerify.enroll(calls: c, wallet: w, owner: o, x: Array(repeating: 7, count: 32), y: y).ok, "another phone")
     var two = c; two.append(c[0]); XCTAssertFalse(BatchVerify.enroll(calls: two, wallet: w, owner: o, x: x, y: y).ok, "set twice / extra step")
     let seat = s(k, "approver"), clear = T1238SelfCallTests.execute(target: seat, inner: KeySeat.clearKeyData)

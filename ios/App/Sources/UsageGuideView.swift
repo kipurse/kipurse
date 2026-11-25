@@ -1,9 +1,11 @@
 import SwiftUI
 import KipurseCore
-/// Handbook 0B (owner t1010u): 使用指引, four steps, existing design system only (PageTitle, .card(), KPNotice, Brand).
-/// §6#110: below the steps, links to 手机丢了怎么办 and 安全小贴士 (existing LimitEntryRow cards).
+/// Handbook 0B (owner t1010): [zh], four steps, existing design system only (PageTitle, .card(), KPNotice, Brand).
+/// decision 110: below the steps, links to [zh] (existing LimitEntryRow cards).
 struct UsageGuideView: View {
-  var current: Int = 1
+  @EnvironmentObject var m: AppModel
+  /// t1248: derive the highlighted step from the live wallet / server (never a hardcoded number the caller guessed).
+  var current: Int { UsageGuide.current(state: m.state, verified: CoinbaseIdentity.verified() || m.demo != nil) }
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: KP.Space.l) {
@@ -17,9 +19,9 @@ struct UsageGuideView: View {
               Text(T("第 \(st.n) 步：", "Step \(st.n): ") + T(st.zh, st.en)).font(KP.Typo.cardTitle)
               Text(T(st.detailZh, st.detailEn)).font(KP.Typo.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-          }.frame(maxWidth: .infinity, alignment: .leading).card().accessibilityElement(children: .combine).accessibilityIdentifier("guide.step\(st.n)")
+          }.frame(maxWidth: .infinity, alignment: .leading).card().accessibilityElement(children: .combine).accessibilityIdentifier("guide.step\(st.n)").accessibilityValue(done ? "done" : now ? "current" : "todo")
         }
-        // §6#110 (owner 2026-11-21): the guide also holds 手机丢了怎么办 and 安全小贴士 (not extra steps: 0B keeps exactly four).
+        // decision 110 (owner 2026-11-21): the guide also holds [zh] (not extra steps: 0B keeps exactly four).
         VStack(alignment: .leading, spacing: KP.Space.headGap) {
           SectionHead(title: T("更多帮助", "More help"))
           VStack(spacing: KP.Space.cardGap) {

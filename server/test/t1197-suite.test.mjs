@@ -1,4 +1,4 @@
-// t1197u (handbook §6#92): new wallets on V5.3; 0x5150 and every wallet registered before stay on V5.2. Guard tests - never delete.
+// t1197 (decision 92): new wallets on V5.3; 0x5150 and every wallet registered before stay on V5.2. Guard tests - never delete.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {getAddress} from 'viem';
 const L=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
 const S=JSON.parse(fs.readFileSync(new URL('../mainnet/v53-suite.json',import.meta.url),'utf8'));

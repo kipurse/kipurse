@@ -1,5 +1,5 @@
 import Foundation
-/// t609u two-layer limits. Layer 1 = on-chain safety floor (链上安全底线); Layer 2 = everyday limits (日常额度):
+/// t609 two-layer limits. Layer 1 = on-chain safety floor ([zh]); Layer 2 = everyday limits ([zh]):
 /// stored on the server, set only from this phone (device key + Face ID), free and instant, ALWAYS <= the floor.
 public enum EverydayLimits {
   public enum Cost: Equatable { case free; case floorChange(firstFree: Bool) }

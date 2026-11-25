@@ -1,4 +1,4 @@
-// t624u: Kipurse does no KYC of its own. It relies on Coinbase's prior KYC through the public on-chain
+// t624: Kipurse does no KYC of its own. It relies on Coinbase's prior KYC through the public on-chain
 // "Coinbase Verified Account" attestation (EAS on Base). Read-only, free; no identity data is stored or sent anywhere.
 import {getAddress,isAddress} from 'viem';
 export const CBV={schema:'0xf8b05c79f090979bf4a80270aba232dff11a10d9ca55c4f88de95317970f0de9',attester:'0x357458739F90461b99789350868CD7CF330Dd7EE',

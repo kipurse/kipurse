@@ -80,7 +80,7 @@ public enum GasCheck {
 
   /// /phone/status `active` says the V2 approver (owner payments / Siri) is live -> no upgrade needed.
   /// (V3 = same as V2 without the frozen phone ceiling; also Siri-capable.)
-  public static func isV2(_ active: [String: Any]?) -> Bool { ["v2", "v3", "seat1", "seat2"].contains(active?["version"] as? String ?? "") }   // seat1 = key seat (§6#109), V4 format; seat2 = key seat V2 (V5.5, t1250)
+  public static func isV2(_ active: [String: Any]?) -> Bool { ["v2", "v3", "seat1", "seat2"].contains(active?["version"] as? String ?? "") }   // seat1 = key seat (decision 109), V4 format; seat2 = key seat V2 (V5.5, t1250)
   /// Server offers the one-time V3 upgrade (only when the operator turned V3 on): Siri then follows the wallet's live limits.
   public static func upgradeToV3(_ active: [String: Any]?) -> Bool { (active?["upgradeTo"] as? String) == "v3" && (active?["version"] as? String) != "v3" }
 

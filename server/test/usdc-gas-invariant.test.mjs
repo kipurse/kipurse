@@ -1,5 +1,5 @@
 import {WHY_FEE} from '../src/v5/limits-public.mjs';
-// t604u (locked): gas and fees ALWAYS in USDC, never ETH. t603u: first limits authorization free; no ETH-funded path.
+// t604 (locked): gas and fees ALWAYS in USDC, never ETH. t603: first limits authorization free; no ETH-funded path.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {PRINCIPLES,assertPrinciples} from '../src/v5/principles.mjs';import {gasRoute,createPublicLimits} from '../src/v5/limits-public.mjs';
 import {limitsChangeFee,LIMITS_CALL_GAS} from '../src/v5/limits-fee.mjs';

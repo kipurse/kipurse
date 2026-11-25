@@ -23,7 +23,7 @@ export function attestorsFor(dir,domains){const o={};for(const d of domains){con
   o[k]=loadOrCreateAttestor(`${dir}/attestor-${k}.json`);}return o;}
 
 /* ===================================================================================================================================
- * t1241 (handbook §6#111 ⑤, layered merchant trust): the per-domain ATTESTOR ("担保") for the V5.4 signed route.
+ * t1241 (decision 111 (5), layered merchant trust): the per-domain ATTESTOR ("[zh]") for the V5.4 signed route.
  * Runs as its OWN service (mainnet/attestor-server.mjs, own system user, keys only it can read); tests / fork run it in-process with the
  * same API. The owner's Face ID trust names <domain> + attestor.address(<domain>) as that merchant's ONE order signer (V5.4 grant).
  * The gateway can NOT pay a merchant order on that route unless this service agrees (2-of-2):

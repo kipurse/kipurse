@@ -9,7 +9,7 @@ public enum PhoneEnrollCopy {
   public static let secureKeyZH = "这台手机没能生成安全钥匙，请稍后再试"
   public static let attestZH = "安全检查没通过，没有开启"
   public static let usdcZH = "启付钱包 USDC 不够付开启手续费"
-  /// t1128u (owner "允许再扣", handbook §6#66): the first Face ID key rides in the opening fee. After opening (reinstall, new phone, or a wallet
+  /// t1128 (owner "[zh]", decision 66): the first Face ID key rides in the opening fee. After opening (reinstall, new phone, or a wallet
   /// opened before the first key was bundled) turning it on takes ONE actual network fee from the Kipurse wallet: live quote, at most 0.05 USDC.
   public static let afterOpeningFeeZH = "新开户时，首次开启 Face ID 已含在开户费里。开户后再开启（重装、换手机或开户时没带）要从启付钱包付一笔实际网络费，确认前显示实时报价，最多 0.05 USDC；只改上限不会扣这笔钱。"
   public static let afterOpeningFeeEN = "For a new account, the first Face ID setup is included in the opening fee. Turning it on after opening (reinstall, new phone, or not set up at opening) takes one actual network fee from your Kipurse wallet, shown as a live quote before you confirm, at most 0.05 USDC; changing limits alone never charges it."
@@ -31,7 +31,7 @@ public enum PhoneEnrollCopy {
     NSURLErrorCannotLoadFromNetwork, NSURLErrorCallIsActive
   ]
   /// LAError cancel / biometric failure. Compared by raw value so this file does not import LocalAuthentication.
-  /// t1153u: -6 (biometryNotAvailable = Face ID off for Kipurse) is NOT a cancel; it gets FaceIDNotice guidance instead.
+  /// t1153: -6 (biometryNotAvailable = Face ID off for Kipurse) is NOT a cancel; it gets FaceIDNotice guidance instead.
   private static let faceIDCodes: Set<Int> = [-1, -2, -3, -4, -7, -9]   // t1255: -8 (lockout) has its own guidance
   private static let laDomain = "com.apple.LocalAuthentication"
   private static let attestDomain = "com.apple.devicecheck.error"

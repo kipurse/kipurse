@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1245 (§6#115, owner 「全部改」 2026-11-21): ONE money display rule for the whole app.
+/// t1245 (decision 115, owner "[zh]" 2026-11-21): ONE money display rule for the whole app.
 /// - A USDC amount (balance, payment, deposit, withdrawal, totals) always shows exactly 2 decimals ("18.50"), rounded half up;
 ///   a non-zero amount under 0.005 shows "<0.01" so it never looks like 0.
 /// - A fee / network fee shows 2 decimals too, except when it is under 0.01: then up to 6 decimals ("0.003451").
@@ -51,7 +51,7 @@ public enum MoneyText {
   }
 }
 
-/// t1245 (§6#115 U9): the AI 生活 tab badge counts every pending item the 「待你批准」 block shows, with the block's own rules:
+/// t1245 (decision 115 U9): the AI [zh] tab badge counts every pending item the "[zh]" block shows, with the block's own rules:
 /// approvals (incl. new-merchant trust) always; connect requests on mainnet; AI allowance / ask requests and held payments on an
 /// active mainnet wallet. The block header uses the same number, so badge and block never disagree.
 public enum PendingBadge {
@@ -63,7 +63,7 @@ public enum PendingBadge {
   }
 }
 
-/// t1245 (§6#115 U20): the wallet safety limit page opens with the validity it has now (e.g. 365 days), not a fixed 90.
+/// t1245 (decision 115 U20): the wallet safety limit page opens with the validity it has now (e.g. 365 days), not a fixed 90.
 public enum LimitTerm {
   /// Whole days between the on-chain start and end (rounded), only when it is a choice the page accepts (1…365).
   public static func days(start: Date?, end: Date?) -> Int? {

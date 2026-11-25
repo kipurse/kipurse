@@ -13,7 +13,7 @@ enum AssistantFlow {
     #else
     let demo = false
     #endif
-    // t1158u (§6#77): with Siri's own credential the SERVER decides (caps, trust list, Siri stop, pause), so a stale local cache
+    // t1158 (decision 77): with Siri's own credential the SERVER decides (caps, trust list, Siri stop, pause), so a stale local cache
     // only offers the saved names; without a live session and without the credential, nothing can be decided here.
     let cred = SiriCredential.present
     guard s != nil || demo || cred else { throw MainIntentError.openOnce }   // never decide a payment from a stale cache
@@ -37,7 +37,7 @@ enum AssistantFlow {
   }
   /// Siri = a free, server-authorized agent (like Claude / Grok Bot / Muse): the server applies the allowances, trust list,
   /// Siri's own cap / stop and the pause. Inside the allowance it pays; otherwise the owner gets the normal Face ID push.
-  /// No on-chain setup, no fee to enable. t1158u: phone session if alive, else Siri's own credential; neither / unreachable -> .notPaid (a spoken reason).
+  /// No on-chain setup, no fee to enable. t1158: phone session if alive, else Siri's own credential; neither / unreachable -> .notPaid (a spoken reason).
   enum SiriPayOutcome { case answered(IntentDialog), notPaid(SiriCredRule.NotPaid) }
   @MainActor static func siriAgentPay<I: AppIntent>(_ intent: I, payee p: AssistantData.Payee, amount: Int64, ask: Bool = true) async throws -> SiriPayOutcome {
     let name = p.display, amt = AnswerRules.format(amount)
@@ -79,7 +79,7 @@ enum AssistantFlow {
   }
 }
 
-/// Existing phrase "用 Kipurse 付款": asks for anything missing.
+/// Existing phrase "[zh]": asks for anything missing.
 struct StartPaymentIntent: AppIntent, ForegroundContinuableIntent {
   static var title: LocalizedStringResource = "Start a Kipurse payment"
   static var description = IntentDescription("Pick a payee and amount. Within the voice allowance it pays a saved payee; otherwise Kipurse asks for Face ID.")
@@ -93,7 +93,7 @@ struct StartPaymentIntent: AppIntent, ForegroundContinuableIntent {
     return .result(dialog: try await AssistantFlow.pay(self, payeeId: payee.id, amount: amount))
   }
 }
-/// "用 Kipurse 付给 楼下咖啡店 5 块" — both parameters, so Siri can fill them from one sentence.
+/// "[zh]" — both parameters, so Siri can fill them from one sentence.
 struct PayIntent: AppIntent, ForegroundContinuableIntent {
   static var title: LocalizedStringResource = "Pay a payee with Kipurse"
   static var description = IntentDescription("Pay a saved payee. Within the voice allowance it pays; over it or a new payee asks for Face ID.")
@@ -103,7 +103,7 @@ struct PayIntent: AppIntent, ForegroundContinuableIntent {
   static var parameterSummary: some ParameterSummary { Summary("Pay \(\.$amount) USDC to \(\.$payee)") }
   @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { await SiriSeen.mark(); return .result(dialog: try await AssistantFlow.pay(self, payeeId: payee.id, amount: amount)) }
 }
-/// "把上次那笔再付一次": newest settled payment (or the one Siri picked), same amount, same saved payee.
+/// "[zh]": newest settled payment (or the one Siri picked), same amount, same saved payee.
 struct RepeatPaymentIntent: AppIntent, ForegroundContinuableIntent {
   static var title: LocalizedStringResource = "Repeat a Kipurse payment"
   static var description = IntentDescription("Repeat the last (or chosen) payment: same payee, same amount, confirmed with Face ID in Kipurse.")
@@ -146,7 +146,7 @@ struct RejectIntent: AppIntent, ForegroundContinuableIntent {
   @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { await SiriSeen.mark(); return .result(dialog: try await AssistantFlow.decide(self, approval, approve: false)) }
 }
 
-/// t952 A2: common fixed amounts so one sentence carries the amount ("用启付付5块"); Kipurse then asks for the payee. Other amounts use PayIntent.
+/// t952 A2: common fixed amounts so one sentence carries the amount ("[zh]"); Kipurse then asks for the payee. Other amounts use PayIntent.
 enum AmountPreset: String, AppEnum {
   case one, two, five, ten, twenty
   static var typeDisplayRepresentation: TypeDisplayRepresentation = "Amount"

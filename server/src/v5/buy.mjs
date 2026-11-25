@@ -33,13 +33,13 @@ export function decide(r,{amount,name,purpose,lang}={}){const who=name??'收款�
   else if(rs==='AGENT_STOPPED'){d='refuse';s={text:r.say_to_user};n='stop_tell_user_agent_stopped';}
   else if(rs==='OVER_USER_BUDGET'){d='ask_owner';s={text:r.say_to_user};n='ask_user_for_higher_budget';}
   else if(st==='payment_not_accepted'){d='refuse';s=say('商家没有收下这笔付款，钱没有被扣走，会自动退回额度。','The merchant did not accept the payment; it is returned automatically.');n='retry_later_or_choose_other_merchant';}
-  else if(rs==='missing_order_fields'&&r?.say_to_user){d='refuse';s={text:r.say_to_user};n='ask_user_or_merchant_for_missingFields_then_retry_same_merchantPurchaseId';}/* t1204 §6#93 */
+  else if(rs==='missing_order_fields'&&r?.say_to_user){d='refuse';s={text:r.say_to_user};n='ask_user_or_merchant_for_missingFields_then_retry_same_merchantPurchaseId';}/* t1204 decision 93 */
   else {d='refuse';s=r?.say_to_user?{text:r.say_to_user}:say('没有付款：'+(rs||'出了点问题')+'。','Not paid: '+(rs||'something went wrong')+'.');n=r?.fix?'read_fix':'tell_user';}
   return {decision:d,say_to_user:lang==='en'?(s.en??s.text):lang==='zh'?(s.zh??s.text):s.text,next_step:n};}
 /** reasons that the owner can approve as ONE payment (push + Face ID) */
 const ASKABLE=/^(NEW_PAYEE_NEEDS_OWNER|AI_UNATTENDED_|STRANGER_TRIAL|AI_VERIFIED|X402_OVER_HOLD_LIMIT|over_unrecognized_cap|AGENT_SINGLE_CAP|AGENT_DAILY_CAP|AGENT_MONTHLY_CAP|over_stranger|MANDATE_)/;
 export function createBuy(E,{now=()=>Date.now(),sleep=ms=>new Promise(z=>setTimeout(z,ms)),waitMs=20000,pollMs=2000}={}){
-  const MD=E.mandates;const AF=createAskFlow(E);/* t1170u §6#82 */
+  const MD=E.mandates;const AF=createAskFlow(E);/* t1170 decision 82 */
   async function follow(purchaseKey,statusUrl,{wait=waitMs,agentId,lang,credential}={}){const t0=now();let last={status:'pending'};
     while(true){const m=await E.merchantStatus(statusUrl,credential?{credential}:undefined);if(m.ok)last=readMerchantStatus(m.body);
       if(last.status!=='pending'||now()-t0>=wait)break;await sleep(pollMs);}
@@ -53,12 +53,12 @@ export function createBuy(E,{now=()=>Date.now(),sleep=ms=>new Promise(z=>setTime
     const purpose=classifyCategory({purpose:a.purpose,item:a.item??a.what,merchant:a.merchant??a.payee_name,host:a.url?(()=>{try{return new URL(a.url).host;}catch{return null;}})():null});/* label only (ONE LIMIT) */const amountAt=a.amount!==undefined?usdcAtomic(a.amount):undefined;if(amountAt===null)return {decision:'refuse',state:'rejected',reason:'bad_amount',next_step:'fix_amount',fix:'amount = decimal USDC like "3" or "0.5"',say_to_user:'金额格式不对。/ Bad amount.'};
     const order={item:a.item??a.what??'',merchant:a.merchant??a.payee_name??'',user_request:a.user_request??'',max_price:a.budget??a.max_price??undefined,purpose:purpose??undefined};
     const idem=a.idempotencyKey;let r,name=a.merchant??a.payee_name??null,route;
-    {const prev=AF.lookup(agentId,idem,{lang,req:a});if(prev)return {...prev,route:'direct',purpose:purpose??null};}/* t1170u: same key while the owner decides / after he paid -> the stored answer, never a second payment */
+    {const prev=AF.lookup(agentId,idem,{lang,req:a});if(prev)return {...prev,route:'direct',purpose:purpose??null};}/* t1170: same key while the owner decides / after he paid -> the stored answer, never a second payment */
     if(a.url){route='x402';r=await E.paidFetch({agentId,url:a.url,method:a.method??'GET',body:a.body,order,purpose,addressSource:a.addressSource,maxAmount:a.budget?String(usdcAtomic(a.budget)):undefined,idempotencyKey:idem});
       try{name=name??new URL(a.url).hostname;}catch{}}
     else if(a.origin){route='merchant_order';r=await E.payMerchantOrder({agentId,origin:a.origin,orderParams:a.orderParams??{},merchantPurchaseId:a.merchantPurchaseId??idem,order,purpose,addressSource:a.addressSource,idempotencyKey:'mco-'+(a.merchantPurchaseId??idem)});
       try{name=name??new URL(a.origin).hostname;}catch{}
-      /* t1212 §6#97 (owner 「改，新收款方一次 Face ID 批准就付这一笔」): a new payee above an AI auto limit -> the §6#82 card: ONE Face ID trusts (if chosen)
+      /* t1212 decision 97 (owner "[zh]"): a new payee above an AI auto limit -> the decision 82 card: ONE Face ID trusts (if chosen)
          AND approves exactly this order payment on chain; the server pays it once under the derived key owner-ask:<approvalId> */
       if(r?._askSpec&&idem){const k=await AF.convert(r,{agentId,idem,spec:r._askSpec,name:a.merchant&&a.merchant!=='direct'?String(a.merchant):name,note:a.item??a.what??a.user_request??null,purpose,lang,req:a});
         if(k)return {...k,route,purpose:purpose??null,merchant:r.merchant,merchantPurchaseId:r.merchantPurchaseId};}}
@@ -92,7 +92,7 @@ export function createBuy(E,{now=()=>Date.now(),sleep=ms=>new Promise(z=>setTime
     const f=await follow(purchaseKey,o.statusUrl,{wait:0,agentId});return {purchaseKey,fulfillment:f.status,merchantStatus:f.merchantStatus,merchantDetail:f.detail,refund:f.refund??undefined,say_to_user:lang==='en'?f.say.en:lang==='zh'?f.say.zh:f.say.text,next_step:f.status==='pending'?'poll_again_later':'done'};}
   const approvalStatus=async({approvalId,lang})=>{{let k=E.ownerAsks?.get(approvalId);/* t1264: an ask still 'executing' (restart / unknown outcome) is settled from the ledger + chain first */
       if(k?.state==='executing'&&typeof E.reconcileOwnerAsk==='function'){try{k=(await E.reconcileOwnerAsk(approvalId))??E.ownerAsks.get(approvalId);}catch{}}
-      if(k)return askView(k,{lang});}/* t1170u: owner asks answer with their own state (paying / paid / declined / expired) */
+      if(k)return askView(k,{lang});}/* t1170: owner asks answer with their own state (paying / paid / declined / expired) */
     const p=MD.getProposal(approvalId);
     if(!p){let t=null;try{t=await E.trustRequestStatus({id:approvalId});}catch{}if(!t||t.error||t.state==='rejected'&&!t.status)return {error:'not_found',fix:'use approvalId or trustRequestId from kipurse_buy'};
       const s=t.status??t.state;return {approvalId,state:s==='trusted'?'approved':s,kind:'new_payee',next_step:s==='trusted'?'retry_the_payment_with_the_same_idempotencyKey':['awaiting_owner','awaiting_signature'].includes(s)?'wait_owner_face_id':'tell_user_not_approved',
@@ -107,12 +107,12 @@ export function createBuy(E,{now=()=>Date.now(),sleep=ms=>new Promise(z=>setTime
     try{const p=MD.propose({items,by:'agent:'+agentId,reason:a.reason??'',user_request:a.user_request??''});return {approvalId:p.id,state:p.state,items:p.items.map(i=>i.human),decision:'ask_owner',next_step:'tell_user_then_poll_kipurse_approval_status',
       say_to_user:'我已把额度申请发到你手机：'+p.items.map(i=>i.human.zh).join('；')+'。用 Face ID 同意就生效。/ I sent the allowance request to your phone; approve with Face ID.'};}
     catch(e){return {state:'rejected',reason:e.code??'bad_request',detail:scrubUrls(e.message).slice(0,200),fix:'per_payment (+ per_day, total) in decimal USDC; recurring {payee (0x), amount, every: week|month|year, name}'};}}
-  /** t1170u: the AI may only ask the server to push the owner's card again (never approve it) */
+  /** t1170: the AI may only ask the server to push the owner's card again (never approve it) */
   const remindOwner=({approvalId,lang},agentId)=>{const r=E.ownerAsks?.remind(approvalId,agentId);if(!r)return {error:'not_supported'};
-    if(r.ok){try{MD.remind(approvalId,'agent:'+agentId,{force:true});}catch{}return {...askView(r.ask,{lang}),reminded:true};}   // t1170u card: its own 5-min gate (owner_ask.reminded_at); push + note the time for the shared gate
+    if(r.ok){try{MD.remind(approvalId,'agent:'+agentId,{force:true});}catch{}return {...askView(r.ask,{lang}),reminded:true};}   // t1170 card: its own 5-min gate (owner_ask.reminded_at); push + note the time for the shared gate
     if(r.error!=='not_found'){/* t1264: an ask being paid / paid / sent-but-unconfirmed is never reported as "nothing paid" */const ak=E.ownerAsks.get?.(approvalId);
       const np=ak?.state==='executing'||ak?.state==='paid'?false:ak?.state==='failed'?ak.result?.nothingPaid!==false:true;return {...r,nothingPaid:np};}
-    /* t1210 §6#95: also the buy / allowance requests (mandate_proposal) -- same AI only, at most every 5 minutes; it can never approve or pay */
+    /* t1210 decision 95: also the buy / allowance requests (mandate_proposal) -- same AI only, at most every 5 minutes; it can never approve or pay */
     const m=MD.remind?.(approvalId,'agent:'+agentId);if(!m)return {error:'not_supported'};if(!m.ok)return {...m,nothingPaid:true};
     const zh=m.proposal.items.map(i=>i.human?.zh??'').join('；'),en=m.proposal.items.map(i=>i.human?.en??'').join('; ');
     return {approvalId:m.proposal.id,state:'awaiting_owner_approval',decision:'ask_owner',reminded:true,nothingPaid:true,next_step:'tell_user_then_poll_kipurse_approval_status',
@@ -126,7 +126,7 @@ export function spendingReport(E,{period='month',from,to,purpose,agent,format='s
   else {const d=new Date(new Date(now).toLocaleString('en-US',{timeZone:tz}));const off=now-d.getTime();d.setHours(0,0,0,0);d.setDate(1);since=d.getTime()+off;}
   if(!Number.isFinite(since))since=now-30*86400e3;if(!Number.isFinite(until))until=now;
   const pk=purpose?purposeKey(purpose):null;
-  /* t1281 (§6#141 ②): each row also says what really left the wallet (amount + 0.1% fee + network fee), same formula as the limits */
+  /* t1281 (decision 141 (2)): each row also says what really left the wallet (amount + 0.1% fee + network fee), same formula as the limits */
   const cp=E.ledger?.costParams?.()??null;
   const rows=E.ledger.listFiltered({since,state:'paid',limit:5000}).filter(r=>Number(r.created_at??r.createdAt??0)<=until).map(r=>{const o=E.orderFor(r.purchase_key)??{};
     const cat=o.purpose&&CATEGORIES.includes(o.purpose)?o.purpose:classifyCategory({purpose:o.purpose,item:o.item,merchant:o.merchant});return {date:new Date(Number(r.created_at??r.createdAt??now)).toISOString(),purpose:cat,purposeName:purposeName(cat,true),purposeNameEn:purposeName(cat,false),item:o.item??null,user_request:o.user_request??null,payee:o.payeeName??r.label??null,

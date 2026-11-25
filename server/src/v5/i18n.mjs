@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// ONE language per response (owner rule): Chinese iPhone -> 100% Chinese, anything else -> 100% English, never "中文 / English".
+// ONE language per response (owner rule): Chinese iPhone -> 100% Chinese, anything else -> 100% English, never "[zh]".
 // Order: ?lang=zh|en (the app adds it from the iPhone language) -> x-kp-lang header (app API calls) -> Accept-Language -> English.
 export const CJK=/[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/;
 export function langOf(req,u){

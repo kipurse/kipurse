@@ -4,7 +4,7 @@ import "./V5Base.sol";
 import {KipurseAdapterV54} from "../src/KipurseAdapterV54.sol";
 import "../src/KipurseErrors.sol";
 
-/// t1181u (handbook §6#84, audit §6#83): binding tests on the LIVE V5.2 adapter (no contract change).
+/// t1181 (decision 84, audit decision 83): binding tests on the LIVE V5.2 adapter (no contract change).
 ///  - an OwnerApproval is bound to the chain and to the adapter (EIP-712 domain) -> replay elsewhere fails
 ///  - a SpendPermission for another token (or another spender) is refused by Scope, for every pay entry point
 ///  - KNOWN BUG documented: after the owner cancels an owner-approved x402 reservation, the SAME approval can be
@@ -94,7 +94,7 @@ contract KipurseV54RegressAuditGapsTest is V5Base {
     /// The live V5.2 lets the executor re-prepare an owner-approved x402 payment after the owner cancelled it, with the SAME
     /// approval, while validBefore (<= 600 s) has not passed. This test asserts the CURRENT behaviour so the suite stays
     /// green; KipurseV53ApprovalOnce (branch) asserts the fixed behaviour. Flip this test when the fixed adapter is live.
-    function test_FIXED_cancelThenReplay_sameOwnerApproval_rejected() public { // t1181u branch: flipped from test_KNOWN_BUG_...
+    function test_FIXED_cancelThenReplay_sameOwnerApproval_rejected() public { // t1181 branch: flipped from test_KNOWN_BUG_...
         KipurseAdapterV5.Auth memory a = auth(stranger, 3e6, 510);
         bytes memory sig = x402ApprovalFor(a);
         vm.prank(executor); (, bytes32 digest,) = adapter.prepareAuthorization(p, a, sig, nf, dl());

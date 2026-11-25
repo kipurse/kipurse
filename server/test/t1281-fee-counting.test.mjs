@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1281 (handbook §6#141, owner decision): every off-chain limit counts what REALLY leaves the wallet: amount + 0.1% protocol fee +
+// t1281 (decision 141, owner decision): every off-chain limit counts what REALLY leaves the wallet: amount + 0.1% protocol fee +
 // network fee, the same as the on-chain daily / term caps. Per-payment (single) caps still compare the amount only (like the chain).
 // The app uses the identical formula (KipurseCore SpendCost); the cross-test fixture is checked here.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';

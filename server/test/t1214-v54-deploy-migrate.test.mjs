@@ -1,4 +1,4 @@
-// t1214 (§6#102, owner t1230u; §6#101 owner t1227u): V5.4 deploy page (owner's Base Account pays 0.15 USDC, never ETH) and the owner wallet
+// t1214 (decision 102, owner t1230; decision 101 owner t1227): V5.4 deploy page (owner's Base Account pays 0.15 USDC, never ETH) and the owner wallet
 // switch to V5.4 (one owner-signed batch, fee = actual cost in USDC from the Kipurse wallet). PREPARED ONLY: every switch defaults OFF.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import {webcrypto,createHash} from 'node:crypto';
 import {getAddress,decodeAbiParameters,decodeFunctionData,parseAbi} from 'viem';
@@ -83,7 +83,7 @@ test('trust card (phone): kind-5 grant only when the V5.4 hook is wired and the 
   const T=src('src/v5/trust-approve-public.mjs');assert.match(T,/if\(signerGrant&&!c\.grant&&\(c\.inner\.message\?\.signers\?\?\[\]\)\.length\)/);
   assert.match(T,/gok=v\?\.status==='trusted'&&await phone\.verifyWrapped\(c\.grant\.digest,gw\)/);/* t1240: verified on chain after the trust lands (grant is for the next epoch) */assert.match(T,/\.\.\.\(c\.grant\?\{signerGrant:/);
   const L=src('mainnet/mainnet-owner-launch.mjs');assert.match(L,/const SGH=SU\.name==='v5\.4'&&cfg\.signerGrant\?/);assert.match(L,/createPublicTrustApproval\(\{signerGrant:SGH,/);
-  /* t1240 §6#110 (owner decision 2026-11-21): owner asks MAY add the kind-5 grant, but only for a signer the engine verified (spec.signer, never AI
+  /* t1240 decision 110 (owner decision 2026-11-21): owner asks MAY add the kind-5 grant, but only for a signer the engine verified (spec.signer, never AI
      input), only with the hook wired, and the grant signature is verified on chain (isValidSignature) before it is stored */
   const OA=src('src/v5/owner-ask-approve.mjs');assert.match(OA,/const sgn=signerGrant&&\/\^0x\[0-9a-fA-F\]\{40\}\$\/\.test\(String\(a\.spec\?\.signer/);
   assert.match(OA,/gok=p256Verify\(cap\.active,rs,/);assert.match(OA,/wok=await verifyWrapped\(c\.trust\.grant\.digest,gw\)/);assert.match(OA,/if\(!gok\)return \[403,\{error:'not_owner',part:'signer_grant'\}\]/);

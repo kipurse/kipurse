@@ -1,4 +1,4 @@
-// t1238 (handbook §6#109, owner chose ①): move the owner's wallet to a NEW key-seat wallet on V5.4, then reconnect the AIs.
+// t1238 (decision 109, owner chose (1)): move the owner's wallet to a NEW key-seat wallet on V5.4, then reconnect the AIs.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {decodeFunctionData,getAddress,parseAbi} from 'viem';
 import {moveToSeatCalls,newSeatWallet,CB_FACTORY,MOVE_SEAT_FEE_CAP} from '../src/v5/move-seat.mjs';

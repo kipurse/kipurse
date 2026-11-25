@@ -12,7 +12,7 @@ test('t1278 S1: aborted requests release their inflight slot exactly once; finis
     // 5 clients open /slow and hang up before an answer: more than maxInflight in total
     for(let i=0;i<5;i++){const s=net.connect(port,'127.0.0.1');await new Promise(r=>s.on('connect',r));s.write('GET /slow HTTP/1.1\r\nHost: x\r\n\r\n');
       await new Promise(r=>setTimeout(r,20));s.destroy();await new Promise(r=>setTimeout(r,20));}
-    /* t1279 R7 (§6#139): an aborted request keeps its slot while its handler still runs (3 = maxInflight; the other 2 were shed with 503) */
+    /* t1279 R7 (decision 139): an aborted request keeps its slot while its handler still runs (3 = maxInflight; the other 2 were shed with 503) */
     await new Promise(r=>setTimeout(r,50));assert.equal(O.inflight(),3,'aborted but still running -> still counted');
     release();for(let i=0;i<50&&O.inflight()!==0;i++)await new Promise(r=>setTimeout(r,10));
     assert.equal(O.inflight(),0,'every aborted request gave its slot back once its handler finished');await new Promise(r=>setTimeout(r,20));assert.equal(O.inflight(),0,'never below zero (decrement once)');

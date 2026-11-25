@@ -4,7 +4,7 @@ import "./V5Base.sol";
 import {KipurseAdapterV52} from "../src/KipurseAdapterV52.sol";
 import "../src/KipurseErrors.sol";
 
-/// t1181u (§6#84): STRICT version of the cancel-then-replay check. FAILS on the live V5.2 source (the bug), PASSES on the
+/// t1181 (decision 84): STRICT version of the cancel-then-replay check. FAILS on the live V5.2 source (the bug), PASSES on the
 /// contract branch (approvalUsed). Not part of the live suite; the live suite carries test_KNOWN_BUG_... instead.
 contract KipurseApprovalOnceStrictTest is V5Base {
     function setUp() public override {

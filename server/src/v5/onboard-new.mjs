@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// NEW USER "开通" (find-or-create): the app starts with only its phone key + chosen limits. On the page the user connects HIS Base Account;
+// NEW USER "[zh]" (find-or-create): the app starts with only its phone key + chosen limits. On the page the user connects HIS Base Account;
 // the server then builds ONE atomic batch for exactly that owner:
 //   - he already has a Kipurse wallet here  -> that wallet's re-setup batch (tenant onboarding);
 //   - he has none -> create his wallet (Coinbase Smart Wallet factory, deterministic, owner = his Base Account) + spend permission/caps +
@@ -7,7 +7,7 @@
 import {langOf,X} from './i18n.mjs';import {randomBytes,createHash} from 'node:crypto';import {getAddress,encodeAbiParameters,encodeFunctionData,parseAbi,decodeAbiParameters} from 'viem';
 import {approverInit,DETERMINISTIC_DEPLOYER,WALLET_ABI,APPROVER_ABI,fingerprint,p256Key,ETH_USD_FEED} from './phone-signer.mjs';import {checkLimits,limitsWindow,subCapsOrThrow,STRANGER_CAPS_API} from './limits-public.mjs';
 import {selfCall,assertNoTopLevelOwnerCall} from './owner-selfcall.mjs';import {seatInit,seatOwners,setKeyCall,SEAT_VERSION} from './key-seat.mjs';import {buildMigrationPlanV5} from './plan.mjs';import {v5Abi,permissionFromJson} from './abi.mjs';import {kvKey} from './store.mjs';import {callsHash} from './onboard-sponsor.mjs';import {CBV,CBV_GUIDE} from './cb-verified.mjs';import {approveCall,depositCall,feeRepayCall,vaultSeedCall,vaultSeedNote,OPENING_VAULT_SEED,USDC_BASE,KIPURSE_FEE_TO,OPENING_FEE_USDC,OPENING_FEE_CAP_USDC,OPENING_WITH_FIRST_KEY_GAS,openingFeeUSDC,fmtOpeningFeeUSDC,openingFeeNote} from './usdc-gas.mjs';
-/** t767u: new wallets set the vault's fee slot to Kipurse's ops account so fronted onboarding gas (and any debt) is repaid from AI payments
+/** t767: new wallets set the vault's fee slot to Kipurse's ops account so legacy dues (pre-t1022 onboarding gas, failed-op debt) are repaid from AI payments
  *  without another signature. Cap per operation = 0.05 USDC (= the onboarding worst case the sponsor counts, and the network-fee cap). Only
  *  for apps that say they can check it (features:['dues_slot']); older apps get the batch they already know. */
 export const DUES_SLOT={to:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',maxPerOp:50_000n};
@@ -20,11 +20,11 @@ const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v).replace(/
 const usd=a=>{const n=BigInt(a),w=n/1000000n,f=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
 export {clientOf};
 export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy,reg,tenantStart,tenantConfirm,register,base,script,quote,sponsor=null,verified=null,appAttest=null,noteFirstKey=null,chainId=8453,ttlMs=30*60e3,keyProof=null}){
-  // t624u: NEW wallets only — the Base Account must carry Coinbase's on-chain "Verified Account" attestation (Coinbase did the KYC; Kipurse stores nothing).
+  // t624: NEW wallets only — the Base Account must carry Coinbase's on-chain "Verified Account" attestation (Coinbase did the KYC; Kipurse stores nothing).
   // Existing wallets (re-setup, withdraw, stop) are never gated. RPC failure fails closed for new onboarding only.
   // public check endpoint: 20 reads/min per network, answers cached 60 s (verified answers are re-checked at prepare anyway)
   const vLimit=limiter({max:Number(cfg?.rate?.verifiedPerMin??20),windowMs:60e3}),vCache=ttlCache(60e3);
-  // t1109u: no off switch. Without a checker the opening fails closed (never treated as verified).
+  // t1109: no off switch. Without a checker the opening fails closed (never treated as verified).
   async function cbv(owner){if(typeof verified!=='function')return {verified:false,reason:'unavailable'};try{return await verified(owner);}catch{return {verified:false,reason:'unavailable'};}}
   const cbvErr=r=>Object.assign(Error(r.reason==='unavailable'?'Coinbase verification check is unavailable; nothing was charged. Try again.':'This Base Account has no Coinbase Verified Account attestation yet.'),{code:r.reason==='unavailable'?'verify_unavailable':'not_verified'});
   const K=id=>kvKey('onbnew',null,id);
@@ -43,11 +43,11 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
     if(client){const k='rl:start:'+client+':'+hour();if(rlGet(k)>=RL.startsPerHour)throw Object.assign(Error('too many setup attempts from this network; try again in an hour'),{code:'rate_limited'});rlInc(k,2*3600e3);}const expect=owner&&/^0x[0-9a-fA-F]{40}$/.test(String(owner))?getAddress(owner):null;const c=checkLimits({single,daily,term,days:days??90,openSingle,openDaily});if(c.error)throw Object.assign(Error(c.detail),{code:c.error});
     const id=randomBytes(12).toString('hex');kv.put(K(id),{x,y,expect,choice:{single:c.single.toString(),daily:c.daily.toString(),term:c.term.toString(),days:c.days,...(c.openSingle!==undefined?{openSingle:c.openSingle.toString(),openDaily:c.openDaily.toString()}:{})/* t1281 */},state:'start'},ttlMs);
     return {id,url:`${base()}/onboard/new?id=${id}`,fingerprint:fingerprint(x,y),quote:await quote(expect??'')};}
-  async function prepare(id,owner,client,features=[],deposit=null,req=null){const duesSlot=!!sponsor?.onboardOn&&Array.isArray(features)&&features.includes('dues_slot');/* t1008u: no new dues */const o=kv.get(K(id));if(!o)throw Object.assign(Error('unknown or expired'),{code:'unknown'});owner=getAddress(owner);if(o.expect&&o.expect!==owner)throw Object.assign(Error('请用刚才登录的那个 Coinbase 账户'),{code:'owner_mismatch'});
+  async function prepare(id,owner,client,features=[],deposit=null,req=null){const duesSlot=!!sponsor?.onboardOn&&Array.isArray(features)&&features.includes('dues_slot');/* t1008: no new dues */const o=kv.get(K(id));if(!o)throw Object.assign(Error('unknown or expired'),{code:'unknown'});owner=getAddress(owner);if(o.expect&&o.expect!==owner)throw Object.assign(Error('请用刚才登录的那个 Coinbase 账户'),{code:'owner_mismatch'});
     // t621 #1: idempotent. The APP prepares first, decodes + checks the batch and commits to it (#vh); the page then gets the SAME calls.
     if(o.state==='prepared'&&o.owner===owner&&Array.isArray(o.calls)){const paymaster=o.kind==='new'&&sponsor?.enabled&&o.expect===owner&&sponsor.available(owner)?`${base()}/onboard/new/paymaster?id=${id}`:null;
       return o.kind==='tenant'?{calls:o.calls,wallet:o.wallet,existing:true,owner,chainId,summary:'找到你已有的启付钱包'}:{calls:o.calls,wallet:o.wallet,existing:false,owner,chainId,paymaster,summary:'创建你的启付钱包',vault:o.vault,...(o.duesSlot?{duesSlot:{to:DUES_SLOT.to,maxPerOp:DUES_SLOT.maxPerOp.toString(),note:DUES_SLOT_NOTE}}:{})};}
-    // t763u (locked): the Coinbase Verified Account attestation is required for EVERY opening, including re-opening an existing wallet. Deposit history never counts.
+    // t763 (locked): the Coinbase Verified Account attestation is required for EVERY opening, including re-opening an existing wallet. Deposit history never counts.
     const v0=await cbv(owner);if(!v0.verified)throw cbvErr(v0);
     const mine=reg.byOwner(owner)[0];const ch=o.choice;
     if(mine){if(!await proven(mine.wallet,o.x,o.y,req))throw Object.assign(Error('Sign in with Coinbase on this phone first, then set it up again. 先在这台手机上用 Coinbase 登录，再重新开通。'),{code:'sign_in_first'});
@@ -58,7 +58,7 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
       if(v.uid){const uk='cbvuid:'+createHash('sha256').update(String(v.uid).toLowerCase()).digest('hex').slice(0,32),oh=createHash('sha256').update(owner.toLowerCase()).digest('hex').slice(0,32);
         const prev=kv.get(uk);if(prev&&prev.o!==oh)throw Object.assign(Error('This Coinbase verification is already used by another Kipurse wallet.'),{code:'verification_in_use'});
         kv.put(uk,{o:oh},10*365*864e5);}}
-    // t1238 §6#109 (KIPURSE_KEY_SEAT, default off): the wallet gets ALL owners at creation [owner, his key seat, SPM]; no owner change ever after.
+    // t1238 decision 109 (KIPURSE_KEY_SEAT, default off): the wallet gets ALL owners at creation [owner, his key seat, SPM]; no owner change ever after.
     const seat=cfg?.keySeat?(cfg.seatV2?(await import('./seat-v2.mjs')).seatV2Init({factory:CB_FACTORY,owner,spm:cfg.manager,trust:cfg.trust}):seatInit({factory:CB_FACTORY,owner,spm:cfg.manager,trust:cfg.trust})):null;   // t1250: seat V2 only for V5.5 (cfg.seatV2, flag KIPURSE_V55)
     const owners=seat?seatOwners(owner,seat.address,cfg.manager):[encodeAbiParameters([{type:'address'}],[owner])];const W=getAddress(await pub.readContract({address:CB_FACTORY,abi:FACT,functionName:'getAddress',args:[owners,0n]}));
     const code=await pub.getCode({address:W});const exists=!!code&&code!=='0x';
@@ -81,24 +81,24 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
          setKeyCall(W,seat.address,o.x,o.y)]
       : [...(exists?[]:[{to:CB_FACTORY,value:'0x0',data:encodeFunctionData({abi:FACT,functionName:'createAccount',args:[owners,0n]})}]),
       {to:DETERMINISTIC_DEPLOYER,value:'0x0',data:a.deployData},
-      ...(spmOwner?[]:[selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[getAddress(cfg.manager)]}))]),   // t1238 §6#106: self-call
+      ...(spmOwner?[]:[selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[getAddress(cfg.manager)]}))]),   // t1238 decision 106: self-call
       {to:W,value:'0x0',data:pl.walletExecuteBatch.data},
       selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[a.address]}))];assertNoTopLevelOwnerCall(calls);
-    // t1026u: one USDC fee for the whole batch, including the first key (OPENING_WITH_FIRST_KEY_GAS). User pays. Kipurse does not advance it.
+    // t1026: one USDC fee for the whole batch, including the first key (OPENING_WITH_FIRST_KEY_GAS). User pays. Kipurse does not advance it.
     const ug=!!sponsor?.usdcGas;let dep=0n;try{dep=deposit==null?0n:BigInt(deposit);}catch{dep=0n;}if(dep<0n)dep=0n;
     const [gp,rd]=await Promise.all([pub.getGasPrice(),pub.readContract({address:ETH_USD_FEED,abi:parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']),functionName:'latestRoundData'})]);
     const px=BigInt(rd[1]);if(px<=0n)throw Object.assign(Error('ETH/USD price unavailable; nothing was charged. Try again.'),{code:'no_price'});
-    const fee=openingFeeUSDC({gasPriceWei:gp,ethUsd8:px,gas:OPENING_WITH_FIRST_KEY_GAS}).fee;const feeTxt=fmtOpeningFeeUSDC(fee);const seed=OPENING_VAULT_SEED;/* t1185u §6#86: owner's own gas reserve in his vault */const need=fee+dep+seed;
+    const fee=openingFeeUSDC({gasPriceWei:gp,ethUsd8:px,gas:OPENING_WITH_FIRST_KEY_GAS}).fee;const feeTxt=fmtOpeningFeeUSDC(fee);const seed=OPENING_VAULT_SEED;/* t1185 decision 86: owner's own gas reserve in his vault */const need=fee+dep+seed;
     let bal=0n;try{bal=BigInt(await pub.readContract({address:cfg.token,abi:parseAbi(['function balanceOf(address) view returns (uint256)']),functionName:'balanceOf',args:[owner]}));}catch{bal=0n;}
     if(bal<need)throw Object.assign(Error(dep>0n
       ?('USDC 不够。开通和这台手机钥匙需要约 '+feeTxt+' USDC，另加 '+(Number(dep)/1e6)+' USDC 充值和 '+fmtOpeningFeeUSDC(seed)+' USDC 放进你钱包的手续费备用金。已停止，没有扣钱。 / Not enough USDC for opening and this phone key (about '+feeTxt+' USDC) plus '+(Number(dep)/1e6)+' USDC to deposit and '+fmtOpeningFeeUSDC(seed)+' USDC into your wallet\'s fee reserve. Stopped. Nothing was charged.')
       :('USDC 不够付开户和这台手机钥匙这一笔（约 '+feeTxt+' USDC，另加 '+fmtOpeningFeeUSDC(seed)+' USDC 放进你钱包的手续费备用金）。已停止，没有扣钱。 / Not enough USDC for opening and this phone key (about '+feeTxt+' USDC, plus '+fmtOpeningFeeUSDC(seed)+' USDC into your wallet\'s fee reserve). Stopped. Nothing was charged.')),{code:'needs_usdc',fee:fee.toString(),deposit:dep.toString(),vaultSeed:seed.toString(),balance:bal.toString(),need:need.toString()});
     calls.unshift(feeRepayCall(fee),...(dep>0n?[depositCall(W,dep)]:[]),...(ug?[approveCall()]:[]));
-    calls.push(vaultSeedCall(vault,seed));/* t1185u §6#86: LAST step, after registerPermission opened the vault: 0.15 USDC of the owner's own money from his Base Account into his vault */
+    calls.push(vaultSeedCall(vault,seed));/* t1185 decision 86: LAST step, after registerPermission opened the vault: 0.15 USDC of the owner's own money from his Base Account into his vault */
     kv.put(K(id),{...o,state:'prepared',kind:'new',wallet:W,owner,vault,approver:a.address,...(seat?{seat:seat.address,keyVersion:cfg.seatV2?'seat2':SEAT_VERSION}:{}),permission:pl.permission,fromBlock:String(await pub.getBlockNumber()),
       callsHash:callsHash(calls),calls,allowed:[CB_FACTORY,DETERMINISTIC_DEPLOYER,W,USDC_BASE],duesSlot:false,usdcGas:ug,feeRepay:fee.toString(),deposit:dep.toString(),vaultSeed:seed.toString(),includesPhoneApprover:true},ttlMs);
     try{noteFirstKey?.({x:o.x,y:o.y,approver:a.address,...(seat?{seat:seat.address,version:cfg.seatV2?'seat2':SEAT_VERSION}:{})});}catch{}
-    // paymaster always for same-tx repay (t1022u); fee is in the batch so Kipurse nets $0
+    // paymaster always for same-tx repay (t1022); fee is in the batch so Kipurse nets $0
     const repayOk=!!(sponsor?.enabled&&o.expect===owner&&(typeof sponsor.sameTxRepayAvailable==='function'?sponsor.sameTxRepayAvailable(owner):sponsor.available?.(owner)));
     const paymaster=repayOk?`${base()}/onboard/new/paymaster?id=${id}`:null;
     if(paymaster&&client&&sponsor?.onboardOn)rlInc('rl:spons:'+client+':'+day(),2*86400e3);
@@ -125,7 +125,7 @@ export function createNewWalletOnboarding({executorFor,enabled,kv,pub,cfg,policy
   // t796 M4: mode 'sponsor' = Kipurse pays the first setup ONLY for a genuine-app attestation; without one the user still opens the wallet (pays the fee), never locked out
   const attestOk=o=>!appAttest||!['sponsor','require'].includes(appAttest.mode)||o.attested===true;
   const willSponsor=o=>{try{return !!(!sponsor?.usdcGas&&sponsor?.onboardOn&&sponsor?.enabled&&attestOk(o)&&o.expect&&!reg.byOwner(o.expect)[0]&&sponsor.available(o.expect));}catch{return false;}};
-  // 0A.1/t1026u: willSponsor false while sponsor off. Fee card shows the quoted actual-network-fee amount (passed in).
+  // 0A.1/t1026: willSponsor false while sponsor off. Fee card shows the quoted actual-network-fee amount (passed in).
   const feeCard=(o,t,feeUSDC)=>willSponsor(o)
     ?`<div class=c id=fee data-sponsored=1><b>${t('开通手续费约 '+feeUSDC+' USDC（按实时报价），在这次确认里从你的 Coinbase 钱包余额扣，Kipurse 不出这笔钱。','Opening fee about '+feeUSDC+' USDC (actual network cost), taken from your Coinbase wallet balance in this confirmation. Kipurse does not pay it.')}</b><br><span id=seed>${t(vaultSeedNote().zh,vaultSeedNote().en)}</span></div>`
     :`<div class=c id=fee data-sponsored=0><b>${t('开通手续费约 '+feeUSDC+' USDC（按实时报价），在这次确认里从你的 Coinbase 钱包余额扣，Kipurse 不出这笔钱。','Opening fee about '+feeUSDC+' USDC (actual network cost), taken from your Coinbase wallet balance in this confirmation. Kipurse does not pay it.')}</b><br><span id=seed>${t(vaultSeedNote().zh,vaultSeedNote().en)}</span></div>`;
@@ -153,7 +153,7 @@ ${feeCard(o,t,feeUSDC)}
         if(!vLimit(clientOf(req))){json(429,{error:'rate_limited',verified:false,reason:'rate_limited',guide:CBV_GUIDE});return true;}
         const key=getAddress(ow);let r=vCache.get(key);if(!r){r=await cbv(key);if(r.reason!=='unavailable')vCache.set(key,r);}json(200,{verified:!!r.verified,reason:r.reason,schema:CBV.schema,attester:CBV.attester,verifyUrl:CBV.verifyUrl,guide:CBV_GUIDE});return true;}
       if(p==='/onboard/new/quote'&&req.method==='GET'){const ow=String(u.searchParams.get('owner')??'');const q=await quote(ow);
-        // t1026u: quote already has feeUSDC from live gas→USDC (+buffer, capped). Surface the same amount as openingFee + feeNote.
+        // t1026: quote already has feeUSDC from live gas→USDC (+buffer, capped). Surface the same amount as openingFee + feeNote.
         const feeAtomic=(()=>{try{const s=String(q.feeUSDC??'');const [w,f='']=s.split('.');return BigInt(w||'0')*1_000_000n+BigInt((f+'000000').slice(0,6));}catch{return OPENING_FEE_CAP_USDC;}})();
         const note=openingFeeNote(feeAtomic);
         Object.assign(q,{sponsoredByKipurse:false,sponsored:false,includesPhoneApprover:true,feePaidBy:'user_usdc',gasToken:'USDC',openingFeeUSDC:String(feeAtomic),openingFeeCapUSDC:String(OPENING_FEE_CAP_USDC),feeTo:KIPURSE_FEE_TO,feeNote:note,vaultSeedUSDC:String(OPENING_VAULT_SEED),vaultSeedNote:vaultSeedNote(),strangerCaps:STRANGER_CAPS_API/* t1281 */});json(200,q);return true;}

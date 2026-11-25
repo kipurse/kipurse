@@ -1,4 +1,4 @@
-// FORK-ONLY (throwaway anvil fork of Base, never broadcasts, no real money). t603u/t604u: a brand-new user whose Base Account holds
+// FORK-ONLY (throwaway anvil fork of Base, never broadcasts, no real money). t603/t604: a brand-new user whose Base Account holds
 // ZERO ETH onboards (sponsored), then sets the FIRST AI limit authorization for free (onboarding sponsorship, once per owner), and a
 // LATER change is paid in USDC by his Base Account at actual cost. ETH balance of the Base Account stays 0 the whole time.
 // Bundler/paymaster are simulated: the EntryPoint (impersonated) executes the Base Account's batch; a local mock stands in for the
@@ -58,7 +58,7 @@ test('zero-ETH Base Account: first limits authorization free (sponsored), later 
     const T='/t/'+W.toLowerCase();
     // 2. FIRST limits authorization: free. Page says so and states the later per-change fee in USDC.
     const page=await (await fetch(GU+T+'/owner/limits?single=3&daily=6&term=30')).text();if(process.env.PAGEDBG)console.log('PAGEDBG',page.length,page.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(-1300));
-    /* t796 KYC-on reality: onboarding already lands the first (sponsored) authorization, so this page is a paid change */step('limits page: change fee stated in USDC, no ETH ask',/手续费|Network fee/.test(page)&&/USDC/.test(page)&&!/需要 ETH|need ETH/i.test(page));
+    /* t796 KYC-on reality: onboarding already lands the first (sponsored) authorization, so this page is a paid change */step('limits page: change fee stated in USDC, no ETH ask',/[zh]|Network fee/.test(page)&&/USDC/.test(page)&&!/[zh] ETH|need ETH/i.test(page));
     /* t796: the old 'first change sponsored' block is gone; under KYC-on the first authorization is the sponsored onboarding batch (asserted above, paymaster gate covered by onboard-fork). Every later change is paid in USDC: */
     // 3. LATER change, wallet has 0 USDC: 402 wallet_needs_topup BEFORE any signing page, beginner explanation, never ETH
     const fund=async(to,amt)=>{const h=await createWalletClient({chain:base,transport:vh(RPC),account:whale}).writeContract({address:USDC,abi:ERC20,functionName:'transfer',args:[to,amt]});await pub.waitForTransactionReceipt({hash:h});};

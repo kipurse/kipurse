@@ -1,6 +1,6 @@
 import XCTest
 
-/// §6#114 (t1244) read-only UI audit: screenshots of every main screen (zh + en, dark default), demo data only.
+/// decision 114 (t1244) read-only UI audit: screenshots of every main screen (zh + en, dark default), demo data only.
 /// A tool, not a gate: never fails on a missing screen. Attachments are named "<lang>-<screen>".
 final class T1244AuditShotsUITests: XCTestCase {
   var app: XCUIApplication!
@@ -34,13 +34,13 @@ final class T1244AuditShotsUITests: XCTestCase {
 
   @MainActor func walk() {
     continueAfterFailure = true
-    // AI 生活
+    // AI [zh]
     go("main", "life"); scrollShots("life", 3)
     go("main", "life", ["-kpLifeDemo"]); scrollShots("life-rich", 3)
     go("main-new", "life"); scrollShots("life-empty", 2)
     go("main-connect", "life"); shot("life-connect-request")
     go("main", "life", ["-kpHold"]); shot("life-hold")
-    // AI 智能体 + one AI detail
+    // AI [zh] + one AI detail
     go("main", "life"); if tap("life.manage") { scrollShots("agents", 2) }
     go("main-all", "agents", ["-kpSiriOn"]); scrollShots("agents-all", 1)
     if tap("agent.grok-bot") { scrollShots("agent-detail", 2) }
@@ -48,7 +48,7 @@ final class T1244AuditShotsUITests: XCTestCase {
     go("main", "agents"); if tap("agent.claude") { scrollShots("connect-ai", 1) }
     go("main-connect", nil, ["-kpConnectClaude"]); shot("connect-claude")
     go("main", nil, ["-openURL", "kipurse://approve-connect?id=demoGrokBotReq01"]); shot("connect-approve")
-    // AI 花钱上限 / 信任的商家 / 暂停
+    // AI [zh]
     go("main", "life"); if tap("life.aiLimit") { scrollShots("ai-limit", 3) }
     go("main", "life"); if tap("life.trusted") { scrollShots("trusted", 1) }
     go("main", "life"); if tap("safety.pause") { shot("pause-dialog") }
@@ -61,7 +61,7 @@ final class T1244AuditShotsUITests: XCTestCase {
     // TxDetail receipt
     go("main", "life", ["-kpLifeDemo"]); if tap("life.tx.0") { scrollShots("txdetail", 1) }
     go("main", "life"); if tap("life.tx.0") { shot("txdetail-plain") }
-    // 钱包
+    // [zh]
     go("main", "home"); scrollShots("wallet", 2)
     go("main", "home"); filters("wallet-filter")
     go("main", "home"); if tap("home.allActivity") { shot("activity"); filters("activity"); app.swipeUp(); shot("activity-s1") }
@@ -70,7 +70,7 @@ final class T1244AuditShotsUITests: XCTestCase {
     go("main", "home"); if tap("wallet.totalLimit") { scrollShots("wallet-limit", 2) }
     go("main-zero", "home"); scrollShots("zero-home", 1)
     go("main-new", "home"); scrollShots("new-home", 1)
-    // 设置
+    // [zh]
     go("main", "settings"); scrollShots("settings", 4)
     go("main", "settings"); if tap("settings.usageGuide") { scrollShots("usage-guide", 3) }
     go("main", "settings"); if tap("settings.lostPhone") { scrollShots("lost-phone", 2) }

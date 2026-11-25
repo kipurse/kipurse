@@ -6,8 +6,8 @@ import {KipurseAdapterV54} from "../../src/KipurseAdapterV54.sol";
 import {KipurseTrustV54} from "../../src/KipurseTrustV54.sol";
 import {KipurseKeySeatV1} from "../../src/KipurseKeySeatV1.sol";
 
-/// Stateful handler for the LIVE Face ID key seat (KipurseKeySeatV1, handbook §6#108) on a V5.4 wallet created with owners
-/// [owner, seat, SPM] (t1214 §6#118). Random key changes (only via the wallet), clears, stranger attempts, and P-256
+/// Stateful handler for the LIVE Face ID key seat (KipurseKeySeatV1, decision 108) on a V5.4 wallet created with owners
+/// [owner, seat, SPM] (t1214 decision 118). Random key changes (only via the wallet), clears, stranger attempts, and P-256
 /// signatures by current / old / never-set keys over the five Kipurse kinds, mutated hashes, other kinds and arbitrary
 /// hashes, checked both directly on the seat and end-to-end through the wallet's ERC-1271 and a real V5.4 payment.
 /// I-6 (only the five kinds, only this wallet / domain), I-7 (setKey / clearKey kill old signatures at once).

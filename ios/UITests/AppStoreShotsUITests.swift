@@ -16,10 +16,10 @@ final class AppStoreShotsUITests: XCTestCase {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", lang]; app.launch()
       XCTAssertTrue(app.buttons["home.deposit"].waitForExistence(timeout: 10)); sleep(1); shot(app, "\(lang)-2-home")
       app.terminate()
-      // t803: 智能体 and 设置 are pages inside the two tabs now (t665), not tab-bar icons
+      // t803: [zh] are pages inside the two tabs now (t665), not tab-bar icons
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "agents", "-kp.lang", lang]; app.launch(); sleep(2); shot(app, "\(lang)-3-agents")
       app.terminate()
-      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang]; app.launch()   // §6#110: pause lives on AI 生活
+      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang]; app.launch()   // decision 110: pause lives on AI 生活
       let pz = app.descendants(matching: .any)["safety.pause"].firstMatch; XCTAssertTrue(pz.waitForExistence(timeout: 8)); for _ in 0..<8 where !pz.isHittable { app.swipeUp() }; shot(app, "\(lang)-4-safety")
       app.terminate()
     }

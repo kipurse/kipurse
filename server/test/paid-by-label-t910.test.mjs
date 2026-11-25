@@ -9,7 +9,7 @@ const mkPub=(wal,own)=>({readContract:async({functionName,args})=>functionName==
   getBalance:async()=>0n,getGasPrice:async()=>6000000n,getCode:async()=>'0x'});
 const kvMap=()=>{const m=new Map();return {get:k=>m.get(k),put:(k,v)=>m.set(k,v)};};
 function mk({sponsorOn=true,wal=14304957n,own=0n,fetchImpl}={}){const kv=kvMap();
-  const sp=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008u)*/cfg:sponsorOn?{url:'https://pm.example',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25}:{url:null},kv,reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:()=>null,gasPrice:async()=>6000000n,fetchImpl});
+  const sp=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008)*/cfg:sponsorOn?{url:'https://pm.example',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25}:{url:null},kv,reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:()=>null,gasPrice:async()=>6000000n,fetchImpl});
   const S={phone:{pending:{},active:null}};
   const E=createPhoneEnrollment({S,save:()=>{},pub:mkPub(wal,own),wallet:W,trust:'0x6b91dcb27cf3d69b1d9a6fddeb06ed1af2ed0bf9',owner:O,chainId:8453,base:()=>'https://pay.kipurse.com',caps:()=>({single:0n,daily:0n}),script:()=>'',approverVersion:'v3',
     feeTo:FEE,sponsor:{available:()=>sp.withdrawAvailable(),register:async(id,a)=>{const s=sp.registerEnroll(id,a);return s?'https://pay.kipurse.com/onboard/new/paymaster?id='+s:null;}}});

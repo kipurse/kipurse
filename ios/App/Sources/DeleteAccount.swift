@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import KipurseCore
 
-/// Delete account: 1 what it means + balances → 2 先全部提现 (strongly offered) + ledger export → 3 type 删除我的账户 → 4 Face ID → 5 countdown → delete.
+/// Delete account: 1 what it means + balances → 2 [zh] (strongly offered) + ledger export → 3 type [zh] → 4 Face ID → 5 countdown → delete.
 struct DeleteAccountView: View {
   @EnvironmentObject var m: AppModel
   @Environment(\.dismiss) private var dismiss
@@ -153,7 +153,7 @@ private struct Bullet: LabelStyle {
   func makeBody(configuration c: Configuration) -> some View { HStack(alignment: .firstTextBaseline, spacing: 8) { Text("•"); c.title.fixedSize(horizontal: false, vertical: true) } }
 }
 
-/// After deletion: 手机丢了怎么办 (also saved as a PDF in the app's Documents and shareable).
+/// After deletion: [zh] (also saved as a PDF in the app's Documents and shareable).
 struct RecoveryGuideView: View {
   let g: RecoveryGuide
   @State private var pdf: URL?
@@ -198,7 +198,7 @@ enum RecoveryStore {
   static func save(_ g: RecoveryGuide) { if let d = try? JSONEncoder().encode(g) { UserDefaults.standard.set(d, forKey: key) }; _ = pdfURL(g) }
   static func load() -> RecoveryGuide? { UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(RecoveryGuide.self, from: $0) } }
   static func clear() { UserDefaults.standard.removeObject(forKey: key) }
-  /// Renders (once) and returns Documents/手机丢了怎么办-<wallet>.pdf.
+  /// Renders (once) and returns Documents/[zh]-<wallet>.pdf.
   static func pdfURL(_ g: RecoveryGuide) -> URL? {
     let docs = FileManager.default.temporaryDirectory
     let u = docs.appendingPathComponent(L("手机丢了怎么办-\(g.wallet.prefix(10)).pdf"))

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1214 (§6#102 / §6#101): the owner's "switch to V5.4" page (and its rollback, ?mode=rollback). Opened ONLY from the developer/test App,
+// t1214 (decision 102 / decision 101): the owner's "switch to V5.4" page (and its rollback, ?mode=rollback). Opened ONLY from the developer/test App,
 // which decoded and checked the batch first and put its SHA-256 commitment in the link (#vh=, never sent to a server). The KPVH guard
 // refuses any batch that differs by one byte. The owner's Base Account confirms once in Coinbase; the fee is the actual cost in USDC from
 // the Kipurse wallet inside the same batch (Kipurse's paymaster fronts the gas for that exact batch only). Never ETH, no auto-retry.

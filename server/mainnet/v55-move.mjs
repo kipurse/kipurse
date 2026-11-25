@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119, option A): PRINT the ONE batch the owner's Base Account would confirm to open his NEW V5.5 wallet
+// t1250 (decision 119, option A): PRINT the ONE batch the owner's Base Account would confirm to open his NEW V5.5 wallet
 // [Base Account, KipurseKeySeatV2, SPM] and exit his V5.4 wallet into it (revoke V5.4 permission, V5.4 vault -> wallet, USDC -> new wallet).
 // READ-ONLY: reads the chain, quotes the actual network fee, builds the calls + KPVH commitment. Never signs, sends or broadcasts.
 //   node mainnet/v55-move.mjs --executor 0x<new wallet's server executor> [--rpc …] [--preview]   (--preview: build even before V5.5 is deployed)

@@ -27,7 +27,7 @@ struct SafetyPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       if part != .delete {
-      // t1277 (§6#137): one glass row like LimitEntryRow (icon · "AI 付款" · status) + a small capsule action (暂停 red / 恢复 green). Whole row taps.
+      // t1277 (decision 137): one glass row like LimitEntryRow (icon · "[zh]" · status) + a small capsule action ([zh] green). Whole row taps.
       if part == .chip { pauseChip } else { pauseRow }
       // #9: delete is far from pause / withdraw, at the bottom, and asks twice (dialog, then "type-free" second alert, then Face ID)
       }
@@ -69,7 +69,7 @@ struct SafetyPanel: View {
     }
   }
 
-  /// t1277d (§6#137): top-of-page capsule. On = soft green, green dot, "AI 付款中"; paused = solid red, white "已暂停". Same dialogs + Face ID.
+  /// t1277d (decision 137): top-of-page capsule. On = soft green, green dot, "[zh]"; paused = solid red, white "[zh]". Same dialogs + Face ID.
   private var pauseChip: some View {
     let on = pause == nil
     return Button { Haptics.tap(); if on { askPause = true } else { askResume = true } } label: {
@@ -162,11 +162,11 @@ struct SafetyPanel: View {
     let d = [UInt8](SHA256.hash(data: Data(txt.utf8)))
     guard Hex.encode(d).lowercased() == dg.lowercased(), txt == "Kipurse resume v1\nwallet:" + Operator.wallet.lowercased() + "\nnonce:" + n else { return (0, [:]) }
     guard let k = PhoneKey.existing() else { return (0, [:]) }
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     guard let (r, s) = try? PhoneKey.sign(d, key: k) else { return (0, [:]) }
     return (try? await MainnetSession.authedPost("safety/resume", ["nonce": n, "r": Hex.encode(r), "s": Hex.encode(s)])) ?? (0, [:])
   }
-  /// t1139u (§6#71, owner decision t1139 option a): the whole resume. Face ID first. If the wallet is also paused ON CHAIN the server answers
+  /// t1139 (decision 71, owner decision t1139 option a): the whole resume. Face ID first. If the wallet is also paused ON CHAIN the server answers
   /// 202 with ONE batch (fee leg from the Kipurse wallet + setPaused(false)); this iPhone checks it (RequestVerify.resumeReply), commits to it
   /// (#vh) and opens the pinned sign page; the owner confirms once in Coinbase. ok only when the server has read isPaused(wallet) == false on chain.
   @MainActor static func resumeFlow(_ m: AppModel, waiting: (String) -> Void) async -> (ok: Bool, code: Int, text: String?) {
@@ -223,7 +223,7 @@ struct SafetyPanel: View {
     pause = parsePause(j["paused"] as? [String: Any])
   }
   private func doPause(_ d: String) async {
-    // t1156u: no valid session -> the session Face ID is the one prompt, then the same pause.
+    // t1156: no valid session -> the session Face ID is the one prompt, then the same pause.
     if MainnetSession.load() != nil { guard await Self.faceID(T("暂停 AI 付款", "Pause AI payments")) else { return } }
     busy = T("正在暂停…", "Pausing…"); defer { busy = nil }
     do { let (c, j) = try await MainnetSession.authedPostSigningIn("safety/stop", ["duration": d])
@@ -231,12 +231,12 @@ struct SafetyPanel: View {
         let chain = ((j["chain"] as? [String: Any])?["paused"] as? Bool) == true
         msg = chain ? T("已暂停。链上也已暂停。", "Paused. The wallet is paused on chain too.") : T("已暂停 AI 付款。链上暂停这次没成功，会自动再试。", "AI payments are paused. The on-chain pause didn't go through this time; it will retry.") }
       else { msg = c == 401 ? T("请先用 Face ID 打开钱包再试。", "Open your wallet with Face ID first, then try again.") : T("没有成功（\(c)），请再试一次。", "That didn't work (\(c)). Please try again.") }
-    } catch { msg = MainnetSession.saveErrorText(error) }   // t1156u
+    } catch { msg = MainnetSession.saveErrorText(error) }   // t1156
   }
   private func doResume() async {
     busy = T("正在恢复…", "Resuming…"); defer { busy = nil }
     let r = await Self.resumeFlow(m) { busy = $0 }
-    if r.ok { Haptics.success(); pause = nil; msg = T("已恢复 AI 付款。", "AI payments are back on.") }   // t1139u: only after the chain says not paused
+    if r.ok { Haptics.success(); pause = nil; msg = T("已恢复 AI 付款。", "AI payments are back on.") }   // t1139: only after the chain says not paused
     else { needsBind = r.code == Unbound.notBound; msg = r.text ?? Unbound.resumeFailText(r.code); await loadStatus() }
   }
   private func doDelete() async {
@@ -247,12 +247,12 @@ struct SafetyPanel: View {
 
 /// Payments of 500 USDC or more to a payee not on the trust list wait 10 minutes on the server (handbook §4 #1; server TIER_LIMITS.holdAbove /
 /// principles holdAboveAtomic = 500 USDC). The owner can cancel them here.
-/// t1245 (§6#115 U9/U11): the held payments live in one shared store so the AI 生活 badge can count them and an empty card takes no space.
+/// t1245 (decision 115 U9/U11): the held payments live in one shared store so the AI [zh] badge can count them and an empty card takes no space.
 /// Same server call as before (safety/holds); nothing about cancelling changed.
 @MainActor final class HoldsStore: ObservableObject {
   static let shared = HoldsStore()
   @Published var holds: [HoldsCard.Hold] = []
-  /// The result of a cancel. Shown by AI 生活 itself (the card is gone once the last hold is cancelled).
+  /// The result of a cancel. Shown by AI [zh] itself (the card is gone once the last hold is cancelled).
   @Published var msg: String?
   func load() async {
     #if DEBUG
@@ -275,7 +275,7 @@ struct HoldsCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: KP.Space.cardGap) {
       ForEach(holds) { h in
-        // t1245 (§6#115 U12/U13): same glass card + title size as the other 待你批准 cards; the type shows only in the icon colour.
+        // t1245 (decision 115 U12/U13): same glass card + title size as the other [zh] cards; the type shows only in the icon colour.
         VStack(alignment: .leading, spacing: KP.Space.s) {
           HStack(alignment: .top, spacing: KP.Space.s) {
             PendingIcon(symbol: "hourglass", tint: Brand.negative)

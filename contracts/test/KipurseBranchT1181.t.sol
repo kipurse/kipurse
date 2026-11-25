@@ -8,7 +8,7 @@ import {KipurseTrustV5} from "../src/KipurseTrustV5.sol";
 import {ISpendPermissionManager} from "../src/ISpendPermissionManager.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
-/// t1181u contract BRANCH (NOT deployed): approval used once, session userOps per day, TRUST relay whitelist.
+/// t1181 contract BRANCH (NOT deployed): approval used once, session userOps per day, TRUST relay whitelist.
 contract KipurseBranchT1181Test is V5Base {
     address constant EP = 0x0000000071727De22E5E9d8BAf0edAc6f37da032;
     address constant PM = 0x6C973eBe80dCD8660841D4356bf15c32460271C9;

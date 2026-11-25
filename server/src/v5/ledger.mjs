@@ -15,7 +15,7 @@ export function classify(transfers,{wallet,vault,paymasters=[],names={},owner=nu
     if(wd!==0n){let kind,zh;
       if(wd>0n){kind='deposit';const src=xs.find(x=>lc(x.to)===W);zh=`充值（来自 ${nm(src.from)}）`;}
       else if(paid>0n){kind='payment';const over=-wd-paid;zh=`AI 付款 ${usd(paid)} 给 ${nm(payee[0].to)}`+(over>0n?`（含手续费 ${usd(over)}）`:'');}
-      else{/* t1129u: split the wallet's own USDC network fee (official fee address) from the amount that really left to someone. */
+      else{/* t1129: split the wallet's own USDC network fee (official fee address) from the amount that really left to someone. */
         const outs=xs.filter(x=>lc(x.from)===W&&lc(x.to)!==W&&lc(x.to)!==V);const fee=FEE?outs.filter(x=>lc(x.to)===FEE).reduce((s,x)=>s+x.value,0n):0n;const main=outs.filter(x=>!FEE||lc(x.to)!==FEE);const sent=main.reduce((s,x)=>s+x.value,0n);
         if(fee>0n&&sent===0n){kind='walletfee';zh=`手续费 ${usd(fee)}（钱包操作，用 USDC 付）`;rows.push({tx,block,t,account:'wallet',kind,delta:wd.toString(),zh,detail:{fee:fee.toString()}});}
         else{const dst=main[0]??xs.find(x=>lc(x.from)===W);kind='withdraw';zh=`转出到 ${nm(dst.to)}`+(fee>0n?` ${usd(sent)}，手续费 ${usd(fee)}`:'');rows.push({tx,block,t,account:'wallet',kind,delta:wd.toString(),zh,detail:fee>0n?{sent:sent.toString(),fee:fee.toString()}:undefined});}}
@@ -32,7 +32,7 @@ export function withBalances(rows,current){const bal={wallet:BigInt(current.wall
   for(let i=out.length-1;i>=0;i--){const r=out[i];if(!(r.account in bal)){r.balance=null;continue;}r.balance=bal[r.account].toString();bal[r.account]-=BigInt(r.delta);}
   return {rows:out,opening:{wallet:bal.wallet.toString(),vault:bal.vault.toString()}};}
 /** Incremental scanner. pub: viem public client. Adapts the log range to what the RPC allows. */
-export function createLedger({pub,token,wallet,vault,paymasters,names,owner=null,ownerPaymasters=[],feeTo=null/* t1138u (§6#70): was dropped, so t1129 fee rows never reached the app */,fromBlock,file,minIntervalMs=30000,now=()=>Date.now()}){
+export function createLedger({pub,token,wallet,vault,paymasters,names,owner=null,ownerPaymasters=[],feeTo=null/* t1138 (decision 70): was dropped, so t1129 fee rows never reached the app */,fromBlock,file,minIntervalMs=30000,now=()=>Date.now()}){
   let cache={next:Number(fromBlock),transfers:[]};try{const j=JSON.parse(fs.readFileSync(file,'utf8'));if(j.wallet===lc(wallet)&&j.from===Number(fromBlock)&&(j.owner??null)===(owner?lc(owner):null))cache=j;}catch{}
   cache.transfers=(cache.transfers??[]).map(x=>({...x,value:BigInt(x.value)}));let last=0,busy=null,span=2000n;const tcache=new Map();
   const save=()=>{try{fs.writeFileSync(file+'.tmp',JSON.stringify({...cache,wallet:lc(wallet),owner:owner?lc(owner):null,from:Number(fromBlock),transfers:cache.transfers.map(x=>({...x,value:x.value.toString()}))}));fs.renameSync(file+'.tmp',file);}catch{}};
@@ -44,7 +44,7 @@ export function createLedger({pub,token,wallet,vault,paymasters,names,owner=null
       for(const l of logs){const k=l.transactionHash+':'+l.logIndex;if(seen.has(k))continue;seen.add(k);const bn=Number(l.blockNumber);
         if(!tcache.has(bn))tcache.set(bn,Number((await pub.getBlock({blockNumber:l.blockNumber})).timestamp));
         cache.transfers.push({tx:l.transactionHash,block:bn,t:tcache.get(bn),li:l.logIndex,from:l.args.from,to:l.args.to,value:l.args.value});}
-      cache.next=to+1;if(span<2000n)span*=2n;/* t1129u: grow back after a temporary RPC limit, so the ledger catches up */}
+      cache.next=to+1;if(span<2000n)span*=2n;/* t1129: grow back after a temporary RPC limit, so the ledger catches up */}
     save();}
   async function refresh(){if(now()-last<minIntervalMs)return;if(busy)return busy;busy=scan().then(()=>{last=now();}).finally(()=>{busy=null;});return busy;}
   /** Rows newest first, with balances; current = {wallet,vault} atomic balances right now. */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1238 (handbook §6#108 / §6#109): Face ID KEY SEAT. Coinbase's Base Account popup refuses every owner change (addOwnerAddress,
+// t1238 (decision 108 / decision 109): Face ID KEY SEAT. Coinbase's Base Account popup refuses every owner change (addOwnerAddress,
 // removeOwnerAtIndex, ... even inside wallet.execute). New wallets therefore get ALL their owners when the Coinbase factory creates them:
 // [owner's Base Account, this owner's key seat, SpendPermissionManager]. After that no owner is ever added or removed:
 //   - first phone / new phone / reinstall = wallet.execute(seat, 0, setKey(x, y))

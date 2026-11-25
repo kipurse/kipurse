@@ -78,12 +78,12 @@ enum LiveSpend {
 final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationRouter()
   weak var model: AppModel?
-  // t1220u §6#96: the async versions of these two callbacks finished on a background thread and handed iOS its completion there;
+  // t1220 decision 96: the async versions of these two callbacks finished on a background thread and handed iOS its completion there;
   // UIKit then aborted the App ("closed right after tapping the push"). Completion-handler versions: the work runs on the main
   // thread and iOS is told "done" there, after the App has switched to the right page.
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
     let info = n.request.content.userInfo, body = n.request.content.body
-    Task { @MainActor in AllowanceStore.shared.remember(info, body: body); await AllowanceStore.shared.load() }   // t1220u §6#96: arrives while open -> Home card now
+    Task { @MainActor in AllowanceStore.shared.remember(info, body: body); await AllowanceStore.shared.load() }   // t1220 decision 96: arrives while open -> Home card now
     done([.banner, .sound, .list])
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1138u (§6#70): the app's OWN client checks run on the REAL replies of the production server code (release under test),
+/// t1138 (decision 70): the app's OWN client checks run on the REAL replies of the production server code (release under test),
 /// recorded by the end-to-end flow matrix on a local Base-mainnet fork with throwaway keys (t1138-matrix.e2e.mjs).
 /// Each test = one app guard on one real server reply. Fixture: t1138-e2e-fixtures.json.txt (written by the matrix run).
 final class T1138E2EFlowTests: XCTestCase {
@@ -21,7 +21,7 @@ final class T1138E2EFlowTests: XCTestCase {
   func state(_ k: String) throws -> WalletState { WalletState(try val(k)) }
   func wallet(_ u: String) throws -> String { (try obj(u + ".confirm"))["wallet"] as! String }
   func owner(_ u: String) throws -> String { (try obj(u + ".confirm"))["owner"] as! String }
-  /// t1197u (§6#92): the phone uses THIS wallet's suite (remembered at opening / detected from its on-chain vault). Pin it like the app does.
+  /// t1197 (decision 92): the phone uses THIS wallet's suite (remembered at opening / detected from its on-chain vault). Pin it like the app does.
   @discardableResult func pinSuite(_ u: String) throws -> KipurseSuite {
     let w = try wallet(u), v = try state(u + ".stateAfterOpen").raw["vault"]?["address"]?.string
     let s = try XCTUnwrap(KipurseSuite.forVault(v, wallet: w), "\(u): server vault is not one of this wallet's Kipurse vaults"); KipurseSuite.pin(s); return s }
@@ -41,7 +41,7 @@ final class T1138E2EFlowTests: XCTestCase {
       let newWallet = !((res["existing"] as? Bool) ?? false)
       let rep = BatchVerify.setup(calls: c, wallet: w, owner: o, x: hexBytes(pr["x"] as! String), y: hexBytes(pr["y"] as! String), choice: choice, newWallet: newWallet, vault: res["vault"] as? String)
       XCTAssertTrue(rep.ok, "\(u) setup: \(rep.problems)")
-      let ugs = UsdcGas.split(c, wallet: w, vault: res["vault"] as? String); XCTAssertTrue(ugs.problems.isEmpty, "\(u) usdc: \(ugs.problems)")   // t1197u: as verifiedPage (with the server vault)
+      let ugs = UsdcGas.split(c, wallet: w, vault: res["vault"] as? String); XCTAssertTrue(ugs.problems.isEmpty, "\(u) usdc: \(ugs.problems)")   // t1197: as verifiedPage (with the server vault)
       XCTAssertFalse(newWallet && ugs.feeRepaid == 0 && ugs.approved == 0, "\(u) opening must pay the fee in USDC in this confirmation")
       if ugs.deposit != 0 { XCTAssertEqual(ugs.deposit, Onboard.depositAtomic(pr["deposit"] as! String) ?? 0, u) }
       let url = URL(string: ((st["res"] as! [String: Any])["url"] as! String))!
@@ -55,7 +55,7 @@ final class T1138E2EFlowTests: XCTestCase {
     XCTAssertTrue(Mainnet.validNonce(n))
     XCTAssertEqual(Hex.encode(Mainnet.sessionDigest(wallet: try wallet("U1"), nonce: n)).lowercased(), (c["digest"] as! String).lowercased())
   }
-  // MARK: 记录 / 上限 display after each step
+  // MARK: [zh] display after each step
   func testStateAfterOpeningShowsBalanceLimitsAndNoAIYet() throws {
     let st = try state("U1.stateAfterOpen")
     XCTAssertEqual(st.raw["balance"]?.string, "20000000")
@@ -112,7 +112,7 @@ final class T1138E2EFlowTests: XCTestCase {
     XCTAssertNil(EnrollFee.problem(r, owner: r["owner"] as! String))
     let rep = BatchVerify.enroll(calls: calls(r["calls"]), wallet: r["wallet"] as! String, owner: r["owner"] as! String, x: hexBytes(p["x"] as! String), y: hexBytes(p["y"] as! String), replacing: nil)
     XCTAssertTrue(rep.ok, "\(rep.problems)")
-    let q = (try obj("U1.enrollQuote"))["res"] as! [String: Any]; XCTAssertLessThanOrEqual(Int64(q["fee"] as! String)!, 50_000, "t1128u: <= 0.05 USDC")
+    let q = (try obj("U1.enrollQuote"))["res"] as! [String: Any]; XCTAssertLessThanOrEqual(Int64(q["fee"] as! String)!, 50_000, "t1128: <= 0.05 USDC")
   }
   // MARK: AI connect (in-app oauth/first and AI-initiated) + AI limits
   func checkFirstConnect(_ u: String, _ label: String) throws {

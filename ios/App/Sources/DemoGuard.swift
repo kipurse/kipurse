@@ -1,7 +1,7 @@
 import Foundation
 import KipurseCore
 
-/// Built-in demo ("先看看演示"): sample data only. While active, nothing touches Face ID, the keychain / Secure Enclave key,
+/// Built-in demo ("[zh]"): sample data only. While active, nothing touches Face ID, the keychain / Secure Enclave key,
 /// the network, or this phone's real wallet data. Buttons that would need Face ID show a short note instead.
 enum DemoGuard {
   static var active = false { didSet { if active { URLProtocol.registerClass(DemoNetworkBlock.self) } else { URLProtocol.unregisterClass(DemoNetworkBlock.self) } } }

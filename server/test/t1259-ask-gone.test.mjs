@@ -1,4 +1,4 @@
-// t1259 (handbook §6#129): a payment request that can no longer be paid is closed (request + home-screen card), with a clear reason.
+// t1259 (decision 129): a payment request that can no longer be paid is closed (request + home-screen card), with a clear reason.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {DatabaseSync} from 'node:sqlite';
 import {createOwnerAsks} from '../src/v5/owner-ask.mjs';import {createOwnerAskApproval} from '../src/v5/owner-ask-approve.mjs';
 const P='0x1768000000000000000000000000000000e9fb00';

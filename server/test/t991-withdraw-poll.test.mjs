@@ -1,4 +1,4 @@
-// t991: a withdrawal that already succeeded on chain must never show "这次没有成功" because the status poll was rate limited.
+// t991: a withdrawal that already succeeded on chain must never show "[zh]" because the status poll was rate limited.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {writeLimited,WRITE_LIMITS} from '../src/v5/router.mjs';import {createMemoryKV} from '../src/v5/store.mjs';
 

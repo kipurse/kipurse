@@ -32,7 +32,7 @@ export class V4Ledger{
     // busy timeout FIRST (and at open): `PRAGMA journal_mode=WAL` takes a lock, and with concurrent openers it used to fail
     // immediately with SQLITE_BUSY "database is locked" because busy_timeout was only set after it (flaky 20-thread race test).
     this.db=store?store.openDb(file,{timeout:10000}):new DatabaseSync(file,{timeout:10000});this.leaseMs=leaseMs;
-    /* t1281 (§6#141): {ppm, maxNetworkFee} for the shared cost formula (src/v5/spend-cost.mjs); the V5 engine sets it from the live fee */
+    /* t1281 (decision 141): {ppm, maxNetworkFee} for the shared cost formula (src/v5/spend-cost.mjs); the V5 engine sets it from the live fee */
     this.costParams=()=>({ppm:0n,maxNetworkFee:0n});
     this.db.exec(`PRAGMA busy_timeout=10000;PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS intents(intent_id TEXT PRIMARY KEY, goal TEXT NOT NULL, created_by TEXT NOT NULL, created_at INTEGER NOT NULL);
@@ -117,7 +117,7 @@ export class V4Ledger{
    *  exceptKey omits that purchase so the caller can test "others + this amount". */
   /* t1264: only AI-originated rows count: not the owner's own payments, withdrawals or owner-approved asks (purchase_origin / meta agent
      'owner'), and not a 'claimed' row whose lease ran out before anything was sent (it can never be paid without a new claim). */
-  /* t1281 (§6#141): every row counts amount + protocol fee + network fee (spend-cost.mjs); an open float counts funded + fee reserve + its network fee */
+  /* t1281 (decision 141): every row counts amount + protocol fee + network fee (spend-cost.mjs); an open float counts funded + fee reserve + its network fee */
   _committed(exceptKey){let sum=0n;const keys=new Set();const now=Date.now();const cp=this.costParams();
     for(const r of this.db.prepare(`SELECT p.purchase_key,p.amount,p.state,p.lease_until,p.tx_hash,p.result,o.origin,m.agent_id AS meta_agent FROM purchases p LEFT JOIN purchase_origin o ON o.purchase_key=p.purchase_key LEFT JOIN purchase_meta m ON m.purchase_key=p.purchase_key WHERE p.state IN ('claimed','submitted','prepared','paid')`).all()){
       if((r.origin&&r.origin!=='ai')||r.meta_agent==='owner')continue;

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {openingFeeUSDC,fmtOpeningFeeUSDC,openingFeeNote,feeRepayCall,OPENING_FEE_CAP_USDC,OPENING_FEE_BUFFER_BPS,OPENING_GAS} from '../src/v5/usdc-gas.mjs';
-test('t1026u: opening fee = gas*price+L1 → USDC +20% buffer, hard-capped, never fixed 0.05',()=>{
+test('t1026: opening fee = gas*price+L1 → USDC +20% buffer, hard-capped, never fixed 0.05',()=>{
   // 0.006 gwei (=6e6 wei), ETH=$2500 → wei = 2.3e6 * 6e6 + 1e12 = 1.38e13 + 1e12 = 1.48e13
   // usdc raw = ceil(1.48e13 * 2500e8 / 1e20) = ceil(3.7e24 / 1e20) = ceil(37000) = 37000 (=0.037 USDC)
   // +20% = 44400 (=0.0444)

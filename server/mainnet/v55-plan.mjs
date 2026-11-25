@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): V5.5 contract suite - deterministic CREATE2 deploy PLAN. PLAN ONLY: builds the deterministic deployer's
+// t1250 (decision 119): V5.5 contract suite - deterministic CREATE2 deploy PLAN. PLAN ONLY: builds the deterministic deployer's
 // calldata from the forge build of work/t1214/contracts, predicts every address and (with --check) reads the chain to confirm every
 // predicted address is still empty. It never signs, never sends, never broadcasts.
 //   node mainnet/v55-plan.mjs [--out <contracts/out>] [--gas <measured-gas.json>] [--check <rpc>] [--write mainnet/v55-deploy-plan.json]
@@ -48,7 +48,7 @@ if(import.meta.url===`file://${process.argv[1]}`){
   const out=arg('--out')??new URL('../../contracts/out',import.meta.url).pathname;
   const S=v55Suite({out});const gas=arg('--gas')?JSON.parse(fs.readFileSync(arg('--gas'),'utf8')):null;
   let check=null;if(arg('--check')){const pub=createPublicClient({transport:http(arg('--check'),{timeout:15000})});check={rpc:new URL(arg('--check')).host,block:String(await pub.getBlockNumber()),at:new Date().toISOString(),addresses:await checkEmpty(pub,S)};}
-  const plan={note:'t1250 (handbook §6#119): V5.5 suite, deterministic CREATE2 deploy via the public deterministic deployer. PLAN ONLY: nothing here was signed or sent. Canonical build: work/t1214/contracts (forge 1.10.0, solc 0.8.37, via_ir, optimizer 200, evm cancun; relative remappings, so the bytecode is location independent). The owner\'s Base Account sends the steps (see src/v5/deploy-v55.mjs deployV55Batches); KipurseKeySeatV2 is per wallet (CREATE2 in each opening batch), not part of this plan.',
+  const plan={note:'t1250 (decision 119): V5.5 suite, deterministic CREATE2 deploy via the public deterministic deployer. PLAN ONLY: nothing here was signed or sent. Canonical build: work/t1214/contracts (forge 1.10.0, solc 0.8.37, via_ir, optimizer 200, evm cancun; relative remappings, so the bytecode is location independent). The owner\'s Base Account sends the steps (see src/v5/deploy-v55.mjs deployV55Batches); KipurseKeySeatV2 is per wallet (CREATE2 in each opening batch), not part of this plan.',
     chainId:8453,deployer:DETERMINISTIC_DEPLOYER,
     reused:{feeController:BASE_V55.feeController,spendPermissionManager:BASE_V55.manager,usdc:BASE_V55.usdc,coinbaseSmartWalletFactory:BASE_V55.cbswFactory,entryPointV07:BASE_V55.entryPoint,circlePaymaster:BASE_V55.paymaster,paymaster2:BASE_V55.paymaster2},
     addresses:{factory:S.factory,adapter:S.adapter,trust:S.trust,vaultImpl:S.vaultImpl,floatImpl:S.floatImpl,registryV2:S.registry},

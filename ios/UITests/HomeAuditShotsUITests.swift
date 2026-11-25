@@ -1,6 +1,6 @@
 import XCTest
 
-/// t991 home UI audit: full-page screenshots of 钱包 (zh/en, light/dark) and screens opened from it. Sample demo data only.
+/// t991 home UI audit: full-page screenshots of [zh] (zh/en, light/dark) and screens opened from it. Sample demo data only.
 /// Runs only when KPSHOT_DIR is set (TEST_RUNNER_KPSHOT_DIR), so the normal suite skips it.
 final class HomeAuditShotsUITests: XCTestCase {
   var app: XCUIApplication!
@@ -15,7 +15,7 @@ final class HomeAuditShotsUITests: XCTestCase {
     let dev = ProcessInfo.processInfo.environment["KPSHOT_DEV"] ?? "dev"
     for L in ["zh", "en"] { for C in ["Light", "Dark"] {
       let p = "\(dev)-\(L)-\(C.lowercased())-", base = ["-kp.lang", L, "-kpSkipFaceID", "-tab", "home", "-kp" + C]
-      let life = ["-kp.lang", L, "-kpSkipFaceID", "-tab", "life", "-kp" + C]   // §6#110: 待你批准 (connect / approvals / AI requests / holds) lives on AI 生活
+      let life = ["-kp.lang", L, "-kpSkipFaceID", "-tab", "life", "-kp" + C]   // decision 110: 待你批准 (connect / approvals / AI requests / holds) lives on AI 生活
       go(["-demo", "main"] + base); shot(p + "home-0"); app.swipeUp(); shot(p + "home-1"); app.swipeUp(); shot(p + "home-2")
       go(["-demo", "main-new"] + base); shot(p + "empty-0"); app.swipeUp(); shot(p + "empty-1")
       go(["-demo", "main-connect"] + life); shot(p + "connect-0")

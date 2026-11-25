@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1214 (§6#101): the V5.4 switch screen exists ONLY in the developer/test build (KP_DEV_MIGRATION, Debug) and only on opt-in;
+/// t1214 (decision 101): the V5.4 switch screen exists ONLY in the developer/test build (KP_DEV_MIGRATION, Debug) and only on opt-in;
 /// demo / screenshot runs never show it. The Release build has no such code at all (checked on the binary by the install step).
 final class T1214DevMigrationUITests: XCTestCase {
   var app: XCUIApplication!

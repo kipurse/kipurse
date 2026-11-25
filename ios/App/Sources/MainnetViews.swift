@@ -42,12 +42,12 @@ enum MainnetSession {
     guard let nonce = c["nonce"] as? String, Mainnet.validNonce(nonce) else { throw Failure.server(L("服务器回应不对")) }
     let d = Mainnet.sessionDigest(nonce: nonce)
     guard (c["digest"] as? String)?.lowercased() == Hex.encode(d).lowercased() else { throw Failure.server(L("服务器回应不对")) }  // phone computes what it signs itself
-    if context == nil { await FaceIDUnlock.ensure() }   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    if context == nil { await FaceIDUnlock.ensure() }   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     let (r, s) = try PhoneKey.sign(d, key: k, reusesUnlock: context != nil)
     let j = try await bound { try await PhoneKey.post("phone/session", ["nonce": nonce, "r": Hex.encode(r), "s": Hex.encode(s)]) }
     guard let t = j["token"] as? String else { throw Failure.server(L("服务器回应不对")) }
     save(t, expiresIn: (j["expiresInSec"] as? NSNumber)?.doubleValue ?? 3600)
-    Task { await PushBridge.ensurePermission() }   // t1208u §6#94: a mainnet session now exists -> ask iOS once, then upload the APNs token
+    Task { await PushBridge.ensurePermission() }   // t1208 decision 94: a mainnet session now exists -> ask iOS once, then upload the APNs token
     return t
   }
   /// Delete-everything, server side: the phone signs a fresh erase challenge (Face ID); the server wipes every record it keeps
@@ -59,13 +59,13 @@ enum MainnetSession {
       guard c == 200, let nonce = j["nonce"] as? String, Mainnet.validNonce(nonce) else { return false }
       let d = Mainnet.eraseDigest(nonce: nonce)
       guard (j["digest"] as? String)?.lowercased() == Hex.encode(d).lowercased() else { return false }
-      await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+      await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
       let (r, s) = try PhoneKey.sign(d, key: k)
       let (e, _) = try await authedPost("user/erase", ["nonce": nonce, "phrase": "DELETE", "r": Hex.encode(r), "s": Hex.encode(s)])
       return e == 200
     } catch { return false }
   }
-  /// t1156u: user-initiated save. No valid session -> ONE Face ID (the approval key signs a fresh session), then the same POST.
+  /// t1156: user-initiated save. No valid session -> ONE Face ID (the approval key signs a fresh session), then the same POST.
   /// A 401 (session gone on the server) gets one fresh session and one retry. Only for idempotent saves, never for payments.
   static func authedPostSigningIn(_ path: String, _ body: [String: Any]) async throws -> (Int, [String: Any]) {
     try await SessionRefresh.post(hasSession: { load() != nil }, signIn: { _ = try await signIn() }, clear: { clear() },
@@ -90,7 +90,7 @@ enum MainnetSession {
     }
     return try await SessionRefresh.post(hasSession: { load() != nil }, signIn: { _ = try await signIn(context: context) }, clear: { clear() }, send: once)
   }
-  /// t1156u: calm text for a session save that did not go through (handbook §6#75). Network wording only for real network errors.
+  /// t1156: calm text for a session save that did not go through (decision 75). Network wording only for real network errors.
   static func saveErrorText(_ error: Error) -> String {
     if let f = error as? Failure {
       switch f { case .noKey: return SessionErrorCopy.text(.noApprovalKey); default: return f.errorDescription ?? SessionErrorCopy.text(.network) }
@@ -136,14 +136,14 @@ struct MainnetGate: View {
         Text(OnboardAPI.on ? L("开通 Kipurse") : Unbound.cardTitle).font(.title3.bold()); Text(OnboardAPI.on ? T("用 Coinbase 实名账户连接，选金额充值就开户。", "Connect your verified Coinbase account, then deposit to open.") + " " + T(UsageGuide.openingFeeNoticeZh, UsageGuide.openingFeeNoticeEn) : T("开启后，AI 想付钱时你用 Face ID 点一下就能同意。", "Then when your AI wants to pay, one Face ID tap says yes.")).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24)
         if OnboardAPI.on { NavigationLink { OnboardView() } label: { Text(L("开通")).frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).controlSize(.large).kGlow().padding(.horizontal, 24).accessibilityIdentifier("gate.onboard") }
         else { NavigationLink { PhoneSignerView() } label: { Text(L("开始绑定")).frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).controlSize(.large).padding(.horizontal, 24) }
-        NavigationLink { UsageGuideView(current: 1) } label: { Text(T("使用指引", "How to start")).font(.subheadline.weight(.semibold)) }.tint(Brand.accent).accessibilityIdentifier("gate.usageGuide")
+        NavigationLink { UsageGuideView() } label: { Text(T("使用指引", "How to start")).font(.subheadline.weight(.semibold)) }.tint(Brand.accent).accessibilityIdentifier("gate.usageGuide")
         // App Review / first look (works in Release): sample data only, no server, no chain, nothing signed.
         Button(T("先看看演示（不用登录）", "Try the demo (no sign-in)")) { m.startDemo() }.font(.subheadline.weight(.semibold)).tint(Brand.accent).accessibilityIdentifier("gate.demo")
       } else if let e = m.mainError {
         Text(e).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24)
         BigButton(L("重试"), icon: "arrow.clockwise") { Task { await m.openWallet() } }.padding(.horizontal, 24).accessibilityIdentifier("main.retry")
       } else if m.mainNeedsSignIn {
-        // t1028: no open-lock setting is on → never show the 「打开钱包 / 进入我的钱包」 page; go straight to the wallet home (t1027: no Face ID).
+        // t1028: no open-lock setting is on → never show the "[zh]" page; go straight to the wallet home (t1027: no Face ID).
         ProgressView(L("连接中…")).task { await m.openWallet() }
       } else { ProgressView(L("连接中…")) }
       Spacer()
@@ -184,8 +184,8 @@ struct BindPhoneFlow: View {
   }
 }
 
-/// 充值: address + QR + copy (Coinbase app). While open (and on return to the foreground) the balance is re-read every 5s
-/// for up to 10 min; an increase shows 充值成功 with the amount and the new balance. Read-only refresh, no Face ID.
+/// [zh]: address + QR + copy (Coinbase app). While open (and on return to the foreground) the balance is re-read every 5s
+/// for up to 10 min; an increase shows [zh] with the amount and the new balance. Read-only refresh, no Face ID.
 struct DepositView: View {
   @EnvironmentObject var m: AppModel
   @Environment(\.dismiss) private var dismiss
@@ -212,7 +212,7 @@ struct DepositView: View {
         WarnBox(text: T("充值地址和这台手机登记的钱包不一致，为了安全已停止显示。请联系 Kipurse。", "The deposit address doesn't match the wallet registered on this phone, so it's hidden for safety. Please contact Kipurse."), tone: Brand.negative, icon: "exclamationmark.octagon.fill").accessibilityIdentifier("deposit.mismatch")
       } else if let w = s.wallet {
         StrayNotice(wallet: w)
-        // t932: two ways in ONE place: Apple Pay 充值 (Coinbase Onramp, needs Coinbase Verified, 申请中 until approved) next to Coinbase 充值.
+        // t932: two ways in ONE place: Apple Pay [zh] (Coinbase Onramp, needs Coinbase Verified, [zh] until approved) next to Coinbase [zh].
         Button { Haptics.tap(); applePay = true } label: {
           HStack { Label(T("Apple Pay 充值", "Add money with Apple Pay"), systemImage: "applelogo").font(.headline); Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary) }
             .frame(maxWidth: .infinity, minHeight: 50)
@@ -263,15 +263,15 @@ struct DepositView: View {
   }
 }
 
-/// 上限 on mainnet: the owner picks the numbers; his Coinbase wallet signs one batch on the page (the phone key can't change limits).
+/// [zh] on mainnet: the owner picks the numbers; his Coinbase wallet signs one batch on the page (the phone key can't change limits).
 struct MainLimitsView: View {
-  /// t1038u: .wallet = 钱包总限额 (on-chain floor only, opened from the Wallet tab); .ai = AI 总限额 (agent allowances + everyday, from AI Life).
+  /// t1038: .wallet = [zh] (on-chain floor only, opened from the Wallet tab); .ai = AI [zh] (agent allowances + everyday, from AI Life).
   enum Scope { case all, wallet, ai }
   @EnvironmentObject var m: AppModel
   @Environment(\.dismiss) private var dismiss
   let s: WalletState
   var scope: Scope = .all
-  /// t1245 (§6#115 U23): the AI being connected when this page was opened from a connect (shown in a notice at the top).
+  /// t1245 (decision 115 U23): the AI being connected when this page was opened from a connect (shown in a notice at the top).
   var connectName: String? = nil
   /// Set only when this page was opened to finish a connect. Called after an explicit save, never on back/cancel.
   var onAuthorized: (() -> Void)? = nil
@@ -281,8 +281,8 @@ struct MainLimitsView: View {
   @State private var evSingle = ""; @State private var evDaily = ""; @State private var evTerm = ""; @State private var evMsg: String?; @State private var evSaving = false
   @State private var showTopup = false; @State private var topupNeeded = false
   @State private var advOpen = CommandLine.arguments.contains("-kpLimitsAdvanced")
-  @State private var ops = ""   // t1185u (§6#85): daily on-chain operations (V5.3 vaults only)
-  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (§6#141 ①)
+  @State private var ops = ""   // t1185 (decision 85): daily on-chain operations (V5.3 vaults only)
+  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (decision 141 (1))
   @State private var strangerKnown = false   // t1281 review: today's signed stranger limits were read; without them a change would overwrite them
   /// t1281: shown only when the server takes explicit stranger limits AND reports today's ones (or the offline demo / UI mock); otherwise
   /// the legacy path, unchanged — never send "same as normal" for a wallet whose current stranger limits we have not seen.
@@ -320,7 +320,7 @@ struct MainLimitsView: View {
   var evCostText: String {
     AILimitGate.line(single: evSingle, daily: evDaily, term: evTerm, caps: live.capRead)
   }
-  /// t1245 (§6#115 U18/U19): one card per amount (same layout as the wallet safety limit page); the yellow/green line only after input.
+  /// t1245 (decision 115 U18/U19): one card per amount (same layout as the wallet safety limit page); the yellow/green line only after input.
   @ViewBuilder var everydayCard: some View {
     VStack(alignment: .leading, spacing: KP.Space.cardGap) {
       Text(T(EverydayLimits.aiExplainZh, EverydayLimits.aiExplainEn)).font(.headline).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 2).accessibilityIdentifier("everyday.title")
@@ -387,7 +387,7 @@ struct MainLimitsView: View {
     if CommandLine.arguments.contains("-kpAIAuthFail") {
       evMsg = T("没有通过 Face ID，没有修改。", "Face ID not confirmed. Nothing changed."); return
     }
-    // t1156u UI test: the session step failed in one of these ways (no server involved).
+    // t1156 UI test: the session step failed in one of these ways (no server involved).
     if let i = CommandLine.arguments.firstIndex(of: "-kpSessionFail"), i + 1 < CommandLine.arguments.count {
       let e: Error
       switch CommandLine.arguments[i + 1] {
@@ -419,12 +419,12 @@ struct MainLimitsView: View {
       } else {
         evMsg = (j["error"] as? String) == "above_floor" ? T(EverydayLimits.aboveWalletZh, EverydayLimits.aboveWalletEn) : T("没有保存，请稍后再试。", "Not saved. Try again later.")
       }
-    } catch { evMsg = MainnetSession.saveErrorText(error) }   // t1156u
+    } catch { evMsg = MainnetSession.saveErrorText(error) }   // t1156
   }
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: KP.Space.cardGap) {
-        if firstConnect, let n = connectName {   // t1245 (§6#115 U23): why this page opened in the middle of connecting
+        if firstConnect, let n = connectName {   // t1245 (decision 115 U23): why this page opened in the middle of connecting
           KPNotice { Label(T("先设 AI 花钱上限，保存后继续连接 \(n)", "Set your AI spending limits first; then we continue connecting \(n)"), systemImage: "link.badge.plus").font(KP.Typo.body.weight(.semibold)).foregroundStyle(Brand.accent).fixedSize(horizontal: false, vertical: true) }
             .accessibilityIdentifier("ai.limits.connectNote")
         }
@@ -447,7 +447,7 @@ struct MainLimitsView: View {
             AmountPicker(title: L("总额最多"), presets: ["1000", "5000", "10000", "50000", "100000", "500000"], unit: "USDC", showFooter: false, value: $term).card(padding: 18)
             AmountPicker(title: L("有效期"), presets: ["30", "90", "180", "365"], unit: L("天"), isDays: true, value: $days).card(padding: 18)
             if strangerShown { StrangerCapCard(idPrefix: "limits", same: $strangerSame, single: $strangerSingle, daily: $strangerDaily) }   // t1281
-            if let os = opsState {   // t1185u (§6#85, owner-approved minimal addition): daily on-chain operations, same picker style
+            if let os = opsState {   // t1185 (decision 85, owner-approved minimal addition): daily on-chain operations, same picker style
               VStack(alignment: .leading, spacing: 10) {
                 HStack { Text(T("每天链上操作次数", "On-chain operations per day")).font(.headline); Spacer()
                   InfoTip(title: T("每天链上操作次数", "On-chain operations per day"), text: T(OpsCap.explainZh, OpsCap.explainEn), id: "ops.info") }
@@ -528,7 +528,7 @@ struct MainTrustCard: View {
   }
 }
 
-/// All payments (pushed from 钱包 → 全部).
+/// All payments (pushed from [zh] → [zh]).
 struct ActivityList: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
@@ -554,7 +554,7 @@ struct ActivityList: View {
   }
 }
 
-/// Main wallet card on mainnet: the live caps + real on-chain start/end (phone's local time); 已更新 right after a change.
+/// Main wallet card on mainnet: the live caps + real on-chain start/end (phone's local time); [zh] right after a change.
 struct MainCapsCard: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
@@ -576,7 +576,7 @@ struct MainCapsCard: View {
   }
 }
 
-/// Full-screen 授权中… -> 授权完成 (or failure + retry). Never shows the stale pre-auth form. 授权完成 auto-dismisses to the wallet.
+/// Full-screen [zh]… -> [zh] (or failure + retry). Never shows the stale pre-auth form. [zh] auto-dismisses to the wallet.
 struct AuthOverlay: View {
   @EnvironmentObject var m: AppModel
   @State private var pop = false
@@ -609,7 +609,7 @@ struct AuthOverlay: View {
   }
 }
 
-/// 余额变动: every on-chain USDC change of the wallet (and its fee reserve), with the balance after it. Tap = BaseScan.
+/// [zh]: every on-chain USDC change of the wallet (and its fee reserve), with the balance after it. Tap = BaseScan.
 /// Plain-language title for a ledger row (no "Coinbase wallet" / network-fee jargon); falls back to the server text.
 enum LedgerText {
   /// Fee-type rows (audit #8): folded into one total instead of many small lines.
@@ -630,7 +630,7 @@ enum LedgerText {
     switch r.kind {
     case "deposit": return T("充值", "Deposit")
     case "withdraw":
-      // t1129u: the wallet-paid network fee of the same withdrawal is part of this one row (amount shown = total that left).
+      // t1129: the wallet-paid network fee of the same withdrawal is part of this one row (amount shown = total that left).
       if let f = r.fee { return T("已提现到你的 Coinbase 钱包（含网络费 \(MoneyText.fee(f))）", "Withdrawn to your Coinbase wallet (incl. \(MoneyText.fee(f)) network fee)") }
       return T("已提现到你的 Coinbase 钱包", "Withdrawn to your Coinbase wallet")
     case "walletfee": return T("网络费（钱包操作，从余额扣）", "Network fee (wallet action, from your balance)")
@@ -638,8 +638,8 @@ enum LedgerText {
     case "ownerfee": return T("手续费（你的 Coinbase 付）", "Fee (paid by your Coinbase)")
     case "payment":
       guard Loc.isChinese else { return "AI payment" }
-      // t1245 (§6#115 U41): no amount in the title (the right side shows what left the wallet, fees included) and no stray spaces:
-      // 「AI 付款 0.01 给 你的 Coinbase 钱包（含手续费…）」 -> 「AI 付款给你自己（含手续费）」.
+      // t1245 (decision 115 U41): no amount in the title (the right side shows what left the wallet, fees included) and no stray spaces:
+      // "[zh]" -> "[zh]".
       let withFee = r.zh.contains("手续费")  // i18n-ok: zh-only branch
       var t = r.zh.replacingOccurrences(of: "（[^）]*）", with: "", options: .regularExpression)  // i18n-ok: zh-only branch
       t = t.replacingOccurrences(of: "你的 Coinbase 钱包", with: "你自己")  // i18n-ok
@@ -654,7 +654,7 @@ enum LedgerText {
 }
 struct LedgerRowView: View {
   let r: LedgerRow
-  /// t1245 (§6#115 U26): fee rows use the page's one fee style; every other row is a plain 2-decimal USDC amount.
+  /// t1245 (decision 115 U26): fee rows use the page's one fee style; every other row is a plain 2-decimal USDC amount.
   var feeStyle: MoneyText.FeeStyle? = nil
   @EnvironmentObject var m: AppModel
   private var amountText: String {
@@ -662,7 +662,7 @@ struct LedgerRowView: View {
     if LedgerText.isFee(r) || r.kind == "walletfee" { return (r.delta >= 0 ? "+" : "−") + MoneyText.fee(a, style: feeStyle ?? MoneyText.FeeStyle.page([a])) }
     return MoneyText.signed(r.delta)
   }
-  /// t1276 (§6#136): collapsed = one summary line (title, time, amount, balance); the order details show only when expanded.
+  /// t1276 (decision 136): collapsed = one summary line (title, time, amount, balance); the order details show only when expanded.
   var expanded = false
   var hasDetails: Bool { LedgerRowView.hasOrder(r) }
   static func hasOrder(_ r: LedgerRow) -> Bool { r.kind == "payment" && (r.orderItem != nil || r.orderQuote != nil || r.orderTier != nil || r.payeeName != nil || r.payeeAddress != nil) }
@@ -687,7 +687,7 @@ struct LedgerRowView: View {
       }
       Spacer(minLength: 8)
       VStack(alignment: .trailing, spacing: 3) {
-        // t1276 (§6#136, owner): record amounts are always shown; the eye only hides the wallet total at the top.
+        // t1276 (decision 136, owner): record amounts are always shown; the eye only hides the wallet total at the top.
         Text(amountText).accessibilityValue(r.signed).font(Brand.money(16, .semibold)).foregroundStyle(r.delta >= 0 ? Brand.positive : Color.primary)
         if let b = r.balance { Text(L("余额 \(MoneyText.amount(b))")).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
         else { Text(T("不在钱包里扣", "Not from the wallet")).font(.caption).foregroundStyle(.secondary) }
@@ -696,8 +696,8 @@ struct LedgerRowView: View {
     }.padding(.vertical, 8).contentShape(Rectangle()).assistantRef(.payment(txHash: r.tx))
   }
 }
-/// t1276 (§6#136, owner 2026-11-23): one record as a drawer. Folded by default (state is per screen, so leaving the page folds it again);
-/// tap = show the details + 「在区块浏览器查看」, tap again = fold. The explorer opens only from that button, not from the whole row.
+/// t1276 (decision 136, owner 2026-11-23): one record as a drawer. Folded by default (state is per screen, so leaving the page folds it again);
+/// tap = show the details + "[zh]", tap again = fold. The explorer opens only from that button, not from the whole row.
 struct LedgerItem: View {
   @EnvironmentObject var m: AppModel
   let r: LedgerRow; let explorer: String
@@ -717,8 +717,8 @@ struct LedgerItem: View {
     }
   }
 }
-/// §6#110 (owner 2026-11-21): wallet records split into 入金 (deposits) / 支付 (payments) / 提现 (withdrawals).
-/// 全部 keeps every money movement (incl. wallet network-fee rows); fee rows stay visible as the fee total + fee detail (0A#5).
+/// decision 110 (owner 2026-11-21): wallet records split into [zh] (deposits) / [zh] (payments) / [zh] (withdrawals).
+/// [zh] keeps every money movement (incl. wallet network-fee rows); fee rows stay visible as the fee total + fee detail (0A#5).
 enum LedgerFilter: String, CaseIterable, Identifiable {
   case all, deposit, payment, withdraw
   var id: String { rawValue }
@@ -779,7 +779,7 @@ struct LedgerList: View {
       FeeDetailSection(rows: s.ledger, explorer: s.explorer)   // 0A#5: every fee row stays one tap away under every filter
       SuspiciousToggle(rows: s.ledger.filter(\.suspicious), explorer: s.explorer)
       }.listRowBackground(GlassRowBG()) }
-      // t1245 (§6#115 U8): glass list on the brand background, like the wallet card it is opened from
+      // t1245 (decision 115 U8): glass list on the brand background, like the wallet card it is opened from
       .listStyle(.insetGrouped).kpSectionRhythm().scrollContentBackground(.hidden).background(MockBG())
       .navigationTitle(T("全部记录", "All activity")).navigationBarTitleDisplayMode(.inline)
   }
@@ -790,14 +790,14 @@ struct LedgerList: View {
 /// withdraw screen still works right after an erase). Never written to disk.
 enum WithdrawTarget { static var server: URL?; static var owner: String? }
 
-/// 提现到我的账户 — ONE screen for every way in (安全, home, after deleting the account).
-/// t1116u: amount = any amount the user picks or 「全部」 (everything, incl. the small fee reserve) → to: your Coinbase wallet (fixed) → fee → one button.
+/// [zh] — ONE screen for every way in ([zh], home, after deleting the account).
+/// t1116: amount = any amount the user picks or "[zh]" (everything, incl. the small fee reserve) → to: your Coinbase wallet (fixed) → fee → one button.
 /// After deleting the account (`fullOnly`) the screen keeps the old fixed full-balance row.
-/// Button → confirm → Face ID → the phone checks the prepared batch itself → our page opens with it ready → tap 确认, passkey → back here: done.
+/// Button → confirm → Face ID → the phone checks the prepared batch itself → our page opens with it ready → tap [zh], passkey → back here: done.
 struct MainWithdrawView: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState
-  var fullOnly = false   // t1116u: close-account path stays "everything"
+  var fullOnly = false   // t1116: close-account path stays "everything"
   enum Phase: Equatable { case loading, ready, empty, failed(String), waiting, done(Int64) }
   @State private var phase: Phase = .loading
   @State private var q: Quote?
@@ -806,9 +806,9 @@ struct MainWithdrawView: View {
   @State private var page: WebSheet?
   @State private var poll: Task<Void, Never>?
   @State private var chainTotal: Int64?   // t784: wallet + vault USDC read from the chain by this iPhone
-  @State private var amountText = ""   // t1116u: 「全部」 or the typed / preset amount
+  @State private var amountText = ""   // t1116: 「全部」 or the typed / preset amount
   private var allLabel: String { T("全部", "All") }
-  /// t1116u: what the user is about to withdraw (atomic USDC); nil while the choice is not valid.
+  /// t1116: what the user is about to withdraw (atomic USDC); nil while the choice is not valid.
   private var chosen: Int64? { guard let q else { return nil }; if fullOnly { return q.amount }; return amountProblem == nil ? WithdrawAmount.chosen(text: amountText, allLabel: allLabel, total: q.amount) : nil }
   private var amountProblem: WithdrawAmount.Problem? { guard let q, !fullOnly else { return nil }; return WithdrawAmount.problem(text: amountText, allLabel: allLabel, total: q.amount, fee: q.fee) }
   private func problemText(_ p: WithdrawAmount.Problem, _ q: Quote) -> String {
@@ -850,7 +850,7 @@ struct MainWithdrawView: View {
       if fullOnly {
         row(T("提现金额（全部余额）", "Amount (full balance)")) { Text(q.map { AnswerRules.format($0.amount) + " USDC" } ?? "—").font(Brand.money(22, .semibold)).accessibilityIdentifier("withdraw.amount") }
       } else if let q {
-        // t1116u: any amount or 「全部」; presets above the balance are unavailable (same idea as deposit)
+        // t1116: any amount or "[zh]"; presets above the balance are unavailable (same idea as deposit)
         VStack(alignment: .leading, spacing: 8) {
           AmountPicker(title: T("提现金额", "Amount"), presets: ["1", "5", "10", "50", "100", allLabel], unit: "USDC", maxAtomic: q.amount, idPrefix: "withdraw", value: $amountText)
           if let p = amountProblem { Text(problemText(p, q)).font(.footnote).foregroundStyle(Brand.negative).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("withdraw.amountProblem") }
@@ -943,7 +943,7 @@ struct MainWithdrawView: View {
     q = x; if amountText.isEmpty { amountText = allLabel }; phase = x.amount == 0 ? .empty : .ready
   }
   private func go() async {
-    guard let q0 = q, let amt = chosen, amt > 0 else { return }   // t1116u: exactly the amount the user just confirmed
+    guard let q0 = q, let amt = chosen, amt > 0 else { return }   // t1116: exactly the amount the user just confirmed
     var skip = false
     #if DEBUG && targetEnvironment(simulator)
     skip = m.demoWithdraw != nil && ProcessInfo.processInfo.arguments.contains("-kpSkipFaceID")   // UI tests only
@@ -953,7 +953,7 @@ struct MainWithdrawView: View {
     guard let (c, pl) = try? await Self.post(server, "owner/withdraw/prepare", ["amount": String(amt)]), c == 200, let id = pl["id"] as? String,
           let owner = pl["owner"] as? String, let w = pl["wallet"] as? String, let a = UInt64(pl["amount"] as? String ?? ""),
           let calls = (pl["calls"] as? [[String: Any]])?.map({ $0.compactMapValues { $0 as? String } }) else { phase = .failed(T("准备失败，请再试一次。", "Couldn't prepare it. Please try again.")); return }
-    // t1116u: the plan must be for EXACTLY the confirmed amount (replaces the old "≥ 90% of the full balance" heuristic)
+    // t1116: the plan must be for EXACTLY the confirmed amount (replaces the old "≥ 90% of the full balance" heuristic)
     guard WithdrawAmount.preparedMatches(prepared: a, confirmed: amt) else { phase = .failed(T("提现金额和你刚才确认的不一样，已停止，没有转出任何钱。", "The amount isn't the one you just confirmed. Stopped; nothing was sent.")); return }
     // RequestVerify: rebuild the batch on the phone and refuse anything that isn't "this amount → my own account"
     let mine = knownOwner ?? q0.to
@@ -991,7 +991,7 @@ enum WalletDiscovery {
     guard let nonce = c["nonce"] as? String, Mainnet.validNonce(nonce), let (x, y) = PhoneKey.xy(key) else { throw MainnetSession.Failure.server(L("服务器回应不对")) }
     let d = Mainnet.findDigest(nonce: nonce)
     guard (c["digest"] as? String)?.lowercased() == Hex.encode(d).lowercased() else { throw MainnetSession.Failure.server(L("服务器回应不对")) }
-    if !reusesUnlock { await FaceIDUnlock.ensure() }   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    if !reusesUnlock { await FaceIDUnlock.ensure() }   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     let (r, s) = try PhoneKey.sign(d, key: key, reusesUnlock: reusesUnlock)
     let j = try await post(Mainnet.base, "phone/find", ["nonce": nonce, "x": Hex.encode(x), "y": Hex.encode(y), "r": Hex.encode(r), "s": Hex.encode(s)])
     guard let w = j["wallet"] as? String, w.count == 42, w.hasPrefix("0x") else { throw MainnetSession.Failure.server(L("没有找到这台手机的钱包")) }
@@ -1013,7 +1013,7 @@ enum WalletDiscovery {
   }
 }
 
-// MARK: - 开通 (0A/0B): deposit opens account; user pays ~0.05 USDC fee same-tx; NO Face ID at open; limits optional/auto; ONE Coinbase confirmation.
+// MARK: - [zh] (0A/0B): deposit opens account; user pays ~0.05 USDC fee same-tx; NO Face ID at open; limits optional/auto; ONE Coinbase confirmation.
 enum OnboardAPI {
   static var server: URL {
     #if DEBUG
@@ -1030,7 +1030,7 @@ enum OnboardAPI {
     #endif
     return Onboard.enabled
   }
-  /// t769u: calm Chinese reasons for every onboarding server error; never show raw English server text.
+  /// t769: calm Chinese reasons for every onboarding server error; never show raw English server text.
   static func friendly(_ code: String?, _ status: Int) -> String {
     switch code ?? "" {
     case "not_verified": return T("这个 Coinbase 账户还没有 Coinbase 实名认证证明。请打开 Coinbase 官方验证页 coinbase.com/onchain-verify，用 Coinbase 登录，点 Get verified，连接你登录启付用的同一个钱包，签一次（不花钱）的验证，然后回来重试。没有扣任何钱。", "This Coinbase account doesn't have Coinbase's verified-account proof yet. Open Coinbase's official page coinbase.com/onchain-verify, sign in with Coinbase, tap Get verified, connect the same wallet you use for Kipurse, sign the verification (no charge), then come back and try again. Nothing was charged.")
@@ -1121,7 +1121,7 @@ extension OnboardFlow {
     var owner: String, wallet: String, calls: [[String: Any]], chain = 8453, newWallet: Bool, vault: String? = nil, heldOwner: String?
     if OnboardAPI.isNew {
       guard let o = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey), CoinbaseIdentity.isAddress(o) else { throw stop(T("请先用 Coinbase 登录。", "Please sign in with Coinbase first.")) }
-      var body: [String: Any] = ["id": id, "owner": o, "features": [String]()]   // t1008u: no dues slot (no new dues)
+      var body: [String: Any] = ["id": id, "owner": o, "features": [String]()]   // t1008: no dues slot (no new dues)
       if let d = Onboard.depositAtomic(deposit) { body["deposit"] = String(d) }
       let p = try await OnboardAPI.post("onboard/new/prepare", body)
       guard let c = BatchVerify.calls(p["calls"]), let w = p["wallet"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
@@ -1131,7 +1131,7 @@ extension OnboardFlow {
       guard let c = BatchVerify.calls(r["calls"]), let o = Operator.ownerAccount ?? r["owner"]?.string else { throw stop(T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign.")) }
       owner = o; wallet = Operator.wallet; calls = c; chain = BatchVerify.chainId(r["chainId"]) ?? 8453; newWallet = false; heldOwner = Operator.ownerAccount
     }
-    // t1197u (§6#92): new wallets open on V5.3, older ones stay V5.2. The suite is the one whose vault (computed on this phone) is the
+    // t1197 (decision 92): new wallets open on V5.3, older ones stay V5.2. The suite is the one whose vault (computed on this phone) is the
     // server's vault; the chain must agree (adapter.vaultAddress), and every step is then checked against THAT suite only.
     let suite = KipurseSuite.forVault(vault, wallet: wallet) ?? KipurseSuite.active   // vault is only set for a new Kipurse opening
     if let sv = vault, let pr = VaultCheck.problem(server: sv, chain: await VaultCheck.fetch(adapter: suite.adapter, wallet: wallet)) { throw bad([pr]) }
@@ -1145,7 +1145,7 @@ extension OnboardFlow {
   }
 }
 
-/// t1281 (owner decision §6#141 ①): 付给陌生收款方 — the owner's own limit for payees he has not trusted that are not verified merchants
+/// t1281 (owner decision decision 141 (1)): [zh] — the owner's own limit for payees he has not trusted that are not verified merchants
 /// (policy openSingle / openDaily). Default: the same as the normal limits. Same block on the opening page and the wallet safety limits page.
 struct StrangerCapCard: View {
   let idPrefix: String
@@ -1167,13 +1167,13 @@ struct StrangerCapCard: View {
   }
 }
 
-/// 开通: one screen, one fee page, one signature.
+/// [zh]: one screen, one fee page, one signature.
 struct OnboardView: View {
   @EnvironmentObject var m: AppModel
   @StateObject private var f = OnboardFlow()
   @StateObject private var cbv = CBVerifyModel()
-  @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"; @State private var deposit = ""   // t603u: no preset limits; t1008u: deposit = opening
-  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (§6#141 ①)
+  @State private var single = ""; @State private var daily = ""; @State private var term = ""; @State private var days = "90"; @State private var deposit = ""   // t603: no preset limits; t1008: deposit = opening
+  @State private var strangerSame = true; @State private var strangerSingle = ""; @State private var strangerDaily = ""   // t1281 (decision 141 (1))
   var strangerShown: Bool { f.strangerCaps || OnboardFlow.uiMock }
   var limitsErr: String? { Mainnet.limitsError(single: single, daily: daily, term: term, days: days)
     ?? (strangerShown && !strangerSame ? Mainnet.strangerError(single: single, daily: daily, openSingle: strangerSingle, openDaily: strangerDaily) : nil) }
@@ -1183,7 +1183,7 @@ struct OnboardView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: KP.Space.cardGap) {
         if case .done(let siri) = f.phase { done(siri) }
-        else if CBVerifyModel.applies && cbv.status != .verified { CBVerifyGuide(v: cbv) }   // t624u: new wallets need Coinbase's on-chain verification (server re-checks)
+        else if CBVerifyModel.applies && cbv.status != .verified { CBVerifyGuide(v: cbv) }   // t624: new wallets need Coinbase's on-chain verification (server re-checks)
         else { form }
       }.padding(20)
     }.background(Brand.canvas).amountKeyboardToolbar().navigationTitle(L("开通")).navigationBarTitleDisplayMode(.inline)
@@ -1191,12 +1191,12 @@ struct OnboardView: View {
     .task { if CBVerifyModel.applies { await cbv.check() } }
   }
   @ViewBuilder var form: some View {
-    // t1024u + 0B: deposit opens the account first; one fee sentence; limits are secondary (also changeable after). No Face ID.
+    // t1024 + 0B: deposit opens the account first; one fee sentence; limits are secondary (also changeable after). No Face ID.
     Text(T("充值开户", "Deposit to open")).font(.title2.bold()).accessibilityIdentifier("onboard.step1")
     Text(T("选一个金额，在 Coinbase 里确认一次就开好。", "Pick an amount and confirm once in Coinbase.")).font(.subheadline).foregroundStyle(.secondary)
     AmountPicker(title: T("充值金额", "Deposit"), presets: ["1", "5", "10", "50", "100"], unit: "USDC", value: $deposit).card(padding: 18).accessibilityIdentifier("onboard.deposit")
     Text(Onboard.feeNote(quoted: f.quote?.feeUSDC, seed: f.quote?.vaultSeed)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.feeNote")
-    Text(Onboard.minBaseNote(quoted: f.quote?.feeUSDC, deposit: deposit, seed: f.quote?.vaultSeed)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.minBase")   // t1113u: one added line, existing footnote style
+    Text(Onboard.minBaseNote(quoted: f.quote?.feeUSDC, deposit: deposit, seed: f.quote?.vaultSeed)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.minBase")   // t1113: one added line, existing footnote style
     Text(T("钱包安全上限（每笔、每天、总额都要填；开户后也能改）", "Wallet safety limits (fill in all three; you can change them later)")).font(.headline).padding(.top, 8)
     GuidedSetupCard(single: $single, daily: $daily, term: $term, days: $days)
     DisclosureGroup(T("自己填", "Enter manually")) {
@@ -1208,7 +1208,7 @@ struct OnboardView: View {
     if strangerShown { StrangerCapCard(idPrefix: "onboard", same: $strangerSame, single: $strangerSingle, daily: $strangerDaily) }   // t1281
     if let e = limitsErr ?? f.err { WarnBox(text: e, tone: Brand.caution, icon: "info.circle.fill") }
     BigButton(f.phase == .starting ? T("正在准备…", "Preparing…") : T("充值并开通", "Deposit and open"), icon: "arrow.down.circle.fill", disabled: !Onboard.canOpen(quote: f.quote, starting: f.phase == .starting, deposit: deposit, limitsError: limitsErr)) {
-      // t1113u (§6#59, supersedes 0B.3 "limits never block opening"): no silent default plan; the user's own three limits go into the one opening batch.
+      // t1113 (decision 59, supersedes 0B.3 "limits never block opening"): no silent default plan; the user's own three limits go into the one opening batch.
       guard limitsErr == nil else { return }
       Task { await f.start(m, single: single, daily: daily, term: term, days: days, deposit: deposit, stranger: stranger) }
     }.accessibilityIdentifier("onboard.go")
@@ -1223,7 +1223,7 @@ struct OnboardView: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack { Text(T("开户网络费", "Account opening network fee")).font(.headline); Spacer()
         Text(f.quote.map { "≈ \($0.feeUSDC) USDC" } ?? "…").font(.headline.monospacedDigit()).accessibilityIdentifier("onboard.fee") }
-      // t1008u/t1018u/t1019u/t1022u LOCKED: the user pays the ~0.05 USDC opening fee from the Coinbase wallet balance in the same confirmation as the deposit. Kipurse pays nothing.
+      // t1008/t1018/t1019/t1022 LOCKED: the user pays the ~0.05 USDC opening fee from the Coinbase wallet balance in the same confirmation as the deposit. Kipurse pays nothing.
       Text(Onboard.feeNote(quoted: f.quote?.feeUSDC, seed: f.quote?.vaultSeed)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.feeNote")
       if let q = f.quote, !q.sponsored, !q.userPaysUSDC { Label(T("今天开户名额已满，你的 Coinbase 账户没有任何变化。请明天再试。", "Today's account openings are full. Nothing changed in your Coinbase account. Please try again tomorrow."), systemImage: "clock").font(.footnote).foregroundStyle(Brand.caution) }
       Text(f.laterChangeUSDC.map { T("以后每次修改上限：按实际手续费，现在约 \($0) USDC，用 USDC 付，0 加价，永远不用 ETH。", "Each later limit change: the actual network fee, now about \($0) USDC, paid in USDC at 0% markup. Never ETH.") } ?? T("以后每次修改上限：按实际手续费用 USDC 付，0 加价，永远不用 ETH。", "Each later limit change: the actual network fee in USDC, 0% markup. Never ETH.")).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("onboard.laterFee")
@@ -1236,7 +1236,7 @@ struct OnboardView: View {
       Label(Onboard.feeNote(quoted: f.quote?.feeUSDC, seed: f.quote?.vaultSeed), systemImage: "info.circle").font(.footnote)
       Text(T("下一步：钱包安全上限在钱包页、AI 花钱上限在 AI 生活页，随时可以改；然后逐个连接 AI。", "Next: wallet safety limits are on the Wallet tab and AI spending limits on the AI Life tab; change them any time. Then connect your AIs one by one.")).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("onboard.next")
     }.frame(maxWidth: .infinity, alignment: .leading).card(padding: 18)
-    BigButton(T("进入我的钱包", "Go to my wallet"), icon: "wallet.pass") {   // t1004u: lands in the wallet home; no Face ID setup step
+    BigButton(T("进入我的钱包", "Go to my wallet"), icon: "wallet.pass") {   // t1004: lands in the wallet home; no Face ID setup step
       m.identityVerified(); Task { await m.enterWalletWithoutFaceID() }
     }.accessibilityIdentifier("onboard.open")
   }
@@ -1244,7 +1244,7 @@ struct OnboardView: View {
 
 /// Real per-change fee from the server (/owner/limits/fee): actual network cost in USDC, 0% markup, first authorization free.
 struct LimitsFee: Equatable { let usdcText: String; let firstFree: Bool; let fromWallet: Bool
-  /// t1281: the server takes the owner's own stranger limits (shows the 付给陌生收款方 block; off = older server, legacy path).
+  /// t1281: the server takes the owner's own stranger limits (shows the [zh] block; off = older server, legacy path).
   var strangerCaps = false
   static func load() async -> LimitsFee? {
     guard let (d, resp) = try? await URLSession.shared.data(from: Mainnet.server.appendingPathComponent("owner/limits/fee")), (resp as? HTTPURLResponse)?.statusCode == 200,
@@ -1274,7 +1274,7 @@ extension MainLimitsView {
     do {
       var r = URLRequest(url: Mainnet.server.appendingPathComponent("owner/limits/prepare")); r.setValue(Loc.code, forHTTPHeaderField: "x-kp-lang"); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "content-type")
       var body: [String: Any] = ["single": String(sA), "daily": String(dA), "term": String(tA), "days": Int(days) ?? 0]
-      if let n = opsN { body["opsPerDay"] = n }   // t1185u: only when the owner changed it
+      if let n = opsN { body["opsPerDay"] = n }   // t1185: only when the owner changed it
       if let a = osA, let b = odA { body["openSingle"] = String(a); body["openDaily"] = String(b) }   // t1281: the owner's own stranger limits, atomic
       r.httpBody = try JSONSerialization.data(withJSONObject: body)
       let (d, resp) = try await URLSession.shared.data(for: r)
@@ -1284,11 +1284,11 @@ extension MainLimitsView {
         if code == UsdcGas.insufficientCode { verifyErr = T(UsdcGas.insufficientZH, "The Kipurse balance can't cover the network fee."); return }
         verifyErr = (det?["zh"] as? String).flatMap { z in (det?["en"] as? String).map { T(z, $0) } ?? z } ?? T("手续费约 \(t) USDC，用 USDC 付（永远不用 ETH）。现在 USDC 不够，已停止，没有扣钱。", "The network fee (about \(t) USDC) is paid in USDC (never ETH). There isn't enough USDC now, so nothing was sent or charged."); return }
       if let st = (resp as? HTTPURLResponse)?.statusCode, st != 200, let e = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any], let det = e["detail"] as? [String: Any], let z = det["zh"] as? String {
-        verifyErr = T(z, (det["en"] as? String) ?? z); return }   // t1123u: server stopped (e.g. fee can't be taken from the wallet right now); nothing was charged
+        verifyErr = T(z, (det["en"] as? String) ?? z); return }   // t1123: server stopped (e.g. fee can't be taken from the wallet right now); nothing was charged
       guard let j = try JSONSerialization.jsonObject(with: d) as? [String: Any], let id = j["id"] as? String, let calls = j["calls"] as? [[String: Any]] else { verifyErr = T("服务器回应不对，没有打开确认页。", "Unexpected server reply. Nothing to sign."); return }
       let chain = (j["chainId"] as? Int) ?? Int(j["chainId"] as? String ?? "") ?? 0
       if let o = j["owner"] as? String, let own = Operator.ownerAccount, o.lowercased() != own.lowercased() { verifyErr = T("确认人不是你的 Coinbase 钱包，已停止。", "The signer isn't your Coinbase wallet. Stopped."); return }
-      // t1123u (§6#63): only the wallet-fee batch is signed: [Kipurse wallet -> Kipurse fee address (< 0.01 USDC), your cap change], sent from
+      // t1123 (decision 63): only the wallet-fee batch is signed: [Kipurse wallet -> Kipurse fee address (< 0.01 USDC), your cap change], sent from
       // your Base Account (signs only). The paused relay / Pimlico approve / refund-to-you shapes are refused here, before any page opens.
       let rep = RequestVerify.limitsReply(j, wallet: PhoneTrust.mainnetWallet, owner: Operator.ownerAccount ?? (j["owner"] as? String), choice: choice)
       guard rep.result.ok, let from = rep.from else { verifyErr = T("手机检查发现服务器给的内容和你选的不一致，已停止：", "This iPhone found a mismatch with what you chose. Stopped: ") + rep.result.problems.joined(separator: "; "); return }
@@ -1356,7 +1356,7 @@ struct SuspiciousToggle: View {
 
 // MARK: - UX audit 2026-10-26 additions (copy / layout only; no rule or fee change)
 
-/// Secondary: buy with a Coinbase account (lives under "其他方式").
+/// Secondary: buy with a Coinbase account (lives under "[zh]").
 struct BuyWithCoinbaseAccount: View {
   @EnvironmentObject var m: AppModel
   @State private var busy = false
@@ -1382,7 +1382,7 @@ struct BuyWithCoinbaseAccount: View {
     if let (c, j) = try? await MainnetSession.authedPost("phone/onramp/session", ["redirectUrl": "kipurse://deposit-done"]) { reply = OnrampReply.parse(c, j) }
     switch reply {
     case .open(let u, let ref): m.onrampBaseline = nil; m.onrampBaseline = await OnrampBaseline.read(wallet: Operator.wallet); m.onrampPendingRef = ref; m.openFreePage(u) { _ in false }   // t1278 (A4) / t1279 (R14): balance + chain head before paying
-    case .fallback(let u): m.onrampBaseline = nil; InApp.open(u)   // t785u: stays in the app; t1279: nothing of ours to track
+    case .fallback(let u): m.onrampBaseline = nil; InApp.open(u)   // t785: stays in the app; t1279: nothing of ours to track
     }
   }
 }
@@ -1476,7 +1476,7 @@ struct FeeTotalRow: View {
 }
 
 /// #8: grouped summary on "All activity": added, AI payments, withdrawn, fees.
-/// t1245 (§6#115 U26/U27): one 「AI 付款合计」 line (no 「付给 其他」), the lines follow the filter, amounts use the one money rule
+/// t1245 (decision 115 U26/U27): one "[zh]" line (no "[zh]"), the lines follow the filter, amounts use the one money rule
 /// (2 decimals; fees in the page's fee style).
 struct LedgerSummarySection: View {
   @EnvironmentObject var m: AppModel
@@ -1492,7 +1492,7 @@ struct LedgerSummarySection: View {
     let ok = rows.filter { !$0.suspicious }
     let added = ok.filter { $0.kind == "deposit" }.reduce(Int64(0)) { $0 + $1.delta }
     let paid = ok.filter { $0.kind == "payment" && $0.delta < 0 }.reduce(Int64(0)) { $0 - $1.delta }
-    // t1129u: fees = server fee rows + network fees the wallet paid itself (fee-only rows and the fee inside a withdrawal).
+    // t1129: fees = server fee rows + network fees the wallet paid itself (fee-only rows and the fee inside a withdrawal).
     let fees = ok.filter { LedgerText.isFee($0) }.reduce(Int64(0)) { $0 + abs($1.delta) }
       + ok.filter { $0.kind == "walletfee" }.reduce(Int64(0)) { $0 + abs($1.delta) }
       + ok.filter { $0.kind == "withdraw" }.reduce(Int64(0)) { $0 + ($1.fee ?? 0) }

@@ -6,7 +6,7 @@ import SwiftUI
 enum KP {
   /// 8-pt spacing scale.
   enum Space { static let xxs: CGFloat = 4, xs: CGFloat = 8, s: CGFloat = 12, m: CGFloat = 16, page: CGFloat = 20, l: CGFloat = 24, xl: CGFloat = 32
-    /// t1039u: THE card rhythm. cardGap = between cards in one block; sectionGap = between blocks. No other gaps between cards anywhere.
+    /// t1039: THE card rhythm. cardGap = between cards in one block; sectionGap = between blocks. No other gaps between cards anywhere.
     static let cardGap: CGFloat = s, sectionGap: CGFloat = l, headGap: CGFloat = xs }
   /// Four radii only.
   enum Radius { static let chip: CGFloat = 8, control: CGFloat = 14, card: CGFloat = 20, hero: CGFloat = 26 }
@@ -29,11 +29,11 @@ enum KP {
   }
   static var brandGradient: LinearGradient { LinearGradient(colors: [Color(hex: 0x7C3AED), Color(hex: 0x4F46E5), Color(hex: 0x0891B2)], startPoint: .leading, endPoint: .trailing) }
   static let buttonHeight: CGFloat = 54
-  /// t1040u: inset fill inside glass cards on every sub-page (replaces system grey/white).
+  /// t1040: inset fill inside glass cards on every sub-page (replaces system grey/white).
   static let surface = Color(light: 0xF2F2F7, dark: 0xFFFFFF).opacity(0.06)
 }
 
-/// Section header used on every page (待你批准 / 记录 / …). Aligned with the card edge.
+/// Section header used on every page ([zh] / …). Aligned with the card edge.
 struct KPSectionHeader: View {
   let title: String; var link: String? = nil; var linkID = ""; var action: (() -> Void)? = nil
   var body: some View {
@@ -45,7 +45,7 @@ struct KPSectionHeader: View {
   }
 }
 
-/// Primary (brand gradient) / secondary (tinted) action tile used in pairs, e.g. 充值 | 提现.
+/// Primary (brand gradient) / secondary (tinted) action tile used in pairs, e.g. [zh] | [zh].
 struct KPActionButton: View {
   enum Kind { case primary, secondary }
   let title: String; let icon: String; var kind: Kind = .primary; var disabled = false; let action: () -> Void
@@ -65,7 +65,7 @@ struct KPActionButton: View {
 }
 
 /// Tinted notice row (one style for every inline notice: allowance requests, holds, verification, warnings).
-/// t1066u: clear transparent glass base + tint wash + neon rim.
+/// t1066: clear transparent glass base + tint wash + neon rim.
 struct KPNotice<Content: View>: View {
   var tint: Color = Brand.accent
   @Environment(\.colorScheme) private var scheme
@@ -87,7 +87,7 @@ struct KPNotice<Content: View>: View {
 /// Snapshot tests launch with -kpStill: decorative motion (sheen, mesh, symbol pulses) is frozen, exactly like Reduce Motion.
 enum KPStill { static let on = CommandLine.arguments.contains("-kpStill") }
 
-/// t1039u: grouped lists use the same block gap as the scroll pages.
+/// t1039: grouped lists use the same block gap as the scroll pages.
 extension View {
   @ViewBuilder func kpSectionRhythm() -> some View {
     if #available(iOS 17.0, *) { self.listSectionSpacing(KP.Space.sectionGap) } else { self }

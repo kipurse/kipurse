@@ -48,7 +48,7 @@ const send=(res,code,body,h={})=>{res.writeHead(code,{'content-type':'applicatio
 const readBody=async req=>{let b='';for await(const c of req){b+=c;if(b.length>200000)throw Error('too big');}if(!b)return {};
   if(/application\/x-www-form-urlencoded/.test(req.headers['content-type']??''))return Object.fromEntries(new URLSearchParams(b));return JSON.parse(b);};
 const cookieOf=req=>/(?:^|; )kp=([0-9a-f]{64})/.exec(req.headers.cookie??'')?.[1];
-const OWNER_SESSION_MS=30*86400e3;/* t1280 (§6#140): the server ends a session at the cookie's longest lifetime too (Max-Age is only a hint to the browser) */
+const OWNER_SESSION_MS=30*86400e3;/* t1280 (decision 140): the server ends a session at the cookie's longest lifetime too (Max-Age is only a hint to the browser) */
 const liveSession=c=>{const k=c&&sha(c);const s=k&&S.sessions[k];if(!s)return null;if(!(Number(s.at)>0)||Date.now()-Number(s.at)>(s.via==='webLink'?86400e3:OWNER_SESSION_MS)){delete S.sessions[k];try{save();}catch{}return null;}return s;};
 const isOwner=req=>{const s=liveSession(cookieOf(req));return s&&req.headers['x-kp-csrf']===s.csrf?s:null;};
 const usd=x=>(Number(BigInt(x))/1e6).toString();const atomic=s=>{const e=usdcErrorZh('withdraw',s);if(e)throw Error(e.replace('withdraw','取回金额'));return parseUsdc(s).toString();};
@@ -79,7 +79,7 @@ async function mcpSse(req,res,token,u){const a=agentFromRequest(req,u,token);
   if(!engine)return send(res,503,{error:'wallet not set up yet'});
   const {server}=createV5Mcp(liveAgentEngine(engine,()=>S.agents[a.id]),{agentId:a.id});const t=new SSEServerTransport('/messages',res);
   SSE.set(t.sessionId,{t,agentId:a.id});res.on('close',()=>{SSE.delete(t.sessionId);server.close();});await server.connect(t);}
-async function mcpSseMessage(req,res,u){const s=SSE.get(u.searchParams.get('sessionId')??'');if(!s||!S.agents[s.agentId]||S.agents[s.agentId].revoked){if(s){SSE.delete(u.searchParams.get('sessionId')??'');try{s.t.close?.();}catch{}}return send(res,404,{error:'unknown or expired SSE session'});}/* t1280 (§6#140): a DELETED agent (row gone) is revoked too */
+async function mcpSseMessage(req,res,u){const s=SSE.get(u.searchParams.get('sessionId')??'');if(!s||!S.agents[s.agentId]||S.agents[s.agentId].revoked){if(s){SSE.delete(u.searchParams.get('sessionId')??'');try{s.t.close?.();}catch{}}return send(res,404,{error:'unknown or expired SSE session'});}/* t1280 (decision 140): a DELETED agent (row gone) is revoked too */
   await s.t.handlePostMessage(req,res,await readBody(req));}
 // ---- per-agent pause: a paused agent can still READ (status, limits, history) but every spending / changing call is refused ----
 // receipts: who was paid, in plain words, with a trust badge (trusted by you / registered merchant / new shop)
@@ -291,7 +291,7 @@ http.createServer(async(req,res)=>{try{const u=new URL(req.url,'http://localhost
   if(u.pathname.startsWith('/api/')){if(req.headers.origin&&req.headers.origin!==`http://localhost:${PORT}`&&req.headers.origin!==`http://127.0.0.1:${PORT}`&&!(PUB&&req.headers.origin===PUB))return send(res,403,{error:'origin'});
     if(!isOwner(req))return send(res,401,{error:'login'});const fn=API[u.pathname.slice(5)];if(!fn)return send(res,404,{error:'no'});
     if(!['state','prepare','newAgent','revokeAgent','webLink','agentCatalog','connectAgent','deleteAgent','oauthPending','oauthDecide','deletePreview','exportLedger','deleteStart','deleteAccount','depositOptions','onrampSession','rescueLink','agentPause','disputes'].includes(u.pathname.slice(5))&&!engine)return send(res,409,{error:'not set up'});
-    try{const b=req.method==='POST'?await readBody(req):{};if(b&&typeof b==='object'&&!Array.isArray(b))Object.defineProperty(b,'__lang',{value:res.__lang,enumerable:false});return send(res,200,await fn(b));}catch(e){/* t1279 R6 (§6#139): never a raw upstream message (RPC URLs with keys); validation texts are ours, still scrubbed */const msg=e.errors?e.errors.join('; '):(typeof e?.code==='string'&&/^[A-Za-z0-9_:.-]{1,60}$/.test(e.code)?e.code:(e?.shortMessage??e?.message??'error'));return send(res,400,{error:scrubUrls(msg).slice(0,200)});}}
+    try{const b=req.method==='POST'?await readBody(req):{};if(b&&typeof b==='object'&&!Array.isArray(b))Object.defineProperty(b,'__lang',{value:res.__lang,enumerable:false});return send(res,200,await fn(b));}catch(e){/* t1279 R6 (decision 139): never a raw upstream message (RPC URLs with keys); validation texts are ours, still scrubbed */const msg=e.errors?e.errors.join('; '):(typeof e?.code==='string'&&/^[A-Za-z0-9_:.-]{1,60}$/.test(e.code)?e.code:(e?.shortMessage??e?.message??'error'));return send(res,400,{error:scrubUrls(msg).slice(0,200)});}}
   if(u.pathname==='/rescue'){res.writeHead(301,{location:'/rescue/'});return res.end();}
   if(u.pathname.startsWith('/rescue/')){const rf=u.pathname==='/rescue/'?'index.html':u.pathname.slice(8);if(!['index.html','rescue.js','rescue-config.json'].includes(rf)){res.writeHead(404);return res.end();}
     res.writeHead(200,{'content-type':rf.endsWith('.js')?'text/javascript; charset=utf-8':rf.endsWith('.json')?'application/json':'text/html; charset=utf-8','cache-control':'no-store','cross-origin-opener-policy':'same-origin-allow-popups','referrer-policy':'no-referrer',

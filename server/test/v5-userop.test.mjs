@@ -94,7 +94,7 @@ test('engine userop: owner-action gas is not billed to a payment while the vault
   m.s.bal=1n;const low=await engine.preflight(direct('10000','own-3'));assert.equal(low.quote.networkFee,String(1517n+7105n)); // buffer low -> refill
   assert.equal(engine.gasBook.pendingTopUp(WALLET,'owner'),7105n);});
 
-// t766u: Kipurse dues ride in the vault's owner-set fee slot, capped; marked paid only on success
+// t766: Kipurse dues ride in the vault's owner-set fee slot, capped; marked paid only on success
 import {duesAmount} from '../src/v5/userop.mjs';
 const OPS='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
 test('dues amount: only to the ops account via the fee slot; capped by dues, maxBundlerFee, net cap, free balance after one op of gas',()=>{
@@ -114,4 +114,4 @@ test('userOp writer: fee slot not set to the ops account -> no dues transfer, re
   const pub={readContract:async({functionName})=>functionName==='DOMAIN_SEPARATOR'?'0x'+'ab'.repeat(32):functionName==='bundlerFeeTo'?'0x'+'0'.repeat(40):functionName==='balanceOf'?500000n:0n,estimateFeesPerGas:async()=>({maxFeePerGas:2000000n,maxPriorityFeePerGas:1000000n})};
   const w=createUserOpWriter({cfg:{chainId:84532,token:USDC,bundlerFetch,userOp:{pollMs:1}},pub,session,vault:VAULT,adapter:AD,maxGasPerOp:50000n,dues:{to:OPS,get:()=>30000n,paid:()=>{},blocked:x=>{why=x;}}});
   await w.write('collectFees',[]);const op=sent.find(x=>x.method==='eth_sendUserOperation').params[0];
-  assert.equal(decodeFunctionData({abi:parseAbi(['function execute(address,uint256,bytes)']),data:op.callData}).functionName,'execute');assert.equal(why,null,'t1008u: dues never ride along with a payment');});
+  assert.equal(decodeFunctionData({abi:parseAbi(['function execute(address,uint256,bytes)']),data:op.callData}).functionName,'execute');assert.equal(why,null,'t1008: dues never ride along with a payment');});

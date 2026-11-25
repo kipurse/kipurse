@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t915: orbs open each AI's own app; 在线 only from a real recent call; "最近活动" from the server's last-seen time.
+/// t915: orbs open each AI's own app; [zh] only from a real recent call; "[zh]" from the server's last-seen time.
 final class AgentPresenceT915Tests: XCTestCase {
   func testAppLinksVerified() {
     XCTAssertEqual(AgentBuy.appLink(for: "muse")?.primary.absoluteString, "https://muse.ai/chat")

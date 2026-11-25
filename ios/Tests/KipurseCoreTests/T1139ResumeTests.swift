@@ -1,8 +1,8 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1139u (§6#71, owner decision t1139 option a): resume after an emergency stop also lifts the ON-CHAIN pause with ONE Coinbase (Base Account)
-/// confirmation; network fee from the Kipurse wallet's USDC; the app says 「已恢复 AI 付款」 only after the chain says not paused.
+/// t1139 (decision 71, owner decision t1139 option a): resume after an emergency stop also lifts the ON-CHAIN pause with ONE Coinbase (Base Account)
+/// confirmation; network fee from the Kipurse wallet's USDC; the app says "[zh]" only after the chain says not paused.
 /// Fixture: the REAL 202 /safety/resume reply from the end-to-end matrix on a local Base fork (throwaway keys), and the #vh the built
 /// resume.v1.js page accepted for it (page-sim-resume-t1139.mjs).
 final class T1139ResumeTests: XCTestCase {
@@ -70,7 +70,7 @@ final class T1139ResumeTests: XCTestCase {
   func testNotResumedYetTextIsItsOwn() {
     XCTAssertNotEqual(Unbound.resumeFailText(202), Unbound.resumeFailText(999)); XCTAssertNotEqual(Unbound.resumeFailText(202), Unbound.resumeFailText(0))
   }
-  /// The App says 「已恢复 AI 付款」 only on a 200 from Face ID (server read chain not paused) or after the server confirmed the on-chain unpause.
+  /// The App says "[zh]" only on a 200 from Face ID (server read chain not paused) or after the server confirmed the on-chain unpause.
   func testAppSaysResumedOnlyAfterTheChainSaysSo() throws {
     let src = try String(contentsOf: Self.dir.appendingPathComponent("../../App/Sources/SafetyPanel.swift"), encoding: .utf8)
     XCTAssertTrue(src.contains("if r.ok { Haptics.success(); pause = nil; msg = T(\"已恢复 AI 付款。\""))

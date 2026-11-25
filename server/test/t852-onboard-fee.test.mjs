@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {createOnboardSponsor,ONBOARD_FEE_USDC} from '../src/v5/onboard-sponsor.mjs';import {duesAmount} from '../src/v5/userop.mjs';import {DUES_SLOT,DUES_SLOT_NOTE} from '../src/v5/onboard-new.mjs';
 const mkKv=()=>{const m=new Map();return {get:k=>m.get(k),put:(k,v)=>m.set(k,v),del:k=>m.delete(k)};};
 test('t852: fixed 0.05 USDC opening fee, same for every user, owed once and taken whole in ONE op',()=>{
-  const kv=mkKv();const S=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008u)*/cfg:{url:'https://x.invalid',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25},kv,reg:{byOwner:()=>[]},ethUsd8:async()=>224475500000n});
+  const kv=mkKv();const S=createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008)*/cfg:{url:'https://x.invalid',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25},kv,reg:{byOwner:()=>[]},ethUsd8:async()=>224475500000n});
   for(const [i,usd] of [[1,0.0123],[2,0.2]].entries()){const id='on'+i,o='0x'+String(i+1).repeat(40),w='0x'+String(i+5).repeat(40);
     kv.put('sponsor:op:'+id,{usd:usd[1]});kv.put('sponsor:owner:'+o,{state:'reserved',id,at:Date.now()});S.markDone(id,o,w);assert.equal(S.dues(w),ONBOARD_FEE_USDC,'same fee whatever the gas was');
     S.markDone(id,o,w);assert.equal(S.dues(w),ONBOARD_FEE_USDC,'never owed twice');}

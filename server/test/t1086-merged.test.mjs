@@ -56,7 +56,7 @@ test('opening batch contains the approver and the one quote includes that gas',a
   const caps=checkLimits({single:'2',daily:'5',term:'30',days:90});
   const approver=approverInit({wallet:pr.wallet,trust:TRUST,x:X,y:Y,maxSingle:caps.single,maxDaily:caps.daily,version:'v2'});
   const add=encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[approver.address]}).toLowerCase();
-  /* t1238 §6#106: the first key is added as wallet.execute(wallet,0,addOwnerAddress(approver)); no top-level owner call (Coinbase refuses them) */
+  /* t1238 decision 106: the first key is added as wallet.execute(wallet,0,addOwnerAddress(approver)); no top-level owner call (Coinbase refuses them) */
   assert.ok(pr.calls.some(c=>getAddress(c.to)===getAddress(pr.wallet)&&String(c.data).toLowerCase()===selfCall(pr.wallet,add).data.toLowerCase()));
   assert.deepEqual(ownerUpgradeTopLevel(pr.calls),[]);
   const one=openingFeeUSDC({gasPriceWei:GP,ethUsd8:ETH,gas:OPENING_WITH_FIRST_KEY_GAS});
@@ -99,7 +99,7 @@ test('launch wiring is only the named hooks, on the production usdcGas file',()=
   const s=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
   assert.match(s,/spendAuthorization:/);assert.match(s,/commitSpend:/);assert.match(s,/reserveOAuthAgent/);
   assert.match(s,/includesPhoneApprover:true/);assert.match(s,/OPENING_WITH_FIRST_KEY_GAS/);
-  assert.match(s,/usdcGas/);assert.match(s,/spendOk:\(\)=>EVD\.get\(\)\.authorized===true/);assert.match(fs.readFileSync(new URL('../src/v5/agent-list.mjs',import.meta.url),'utf8'),/connected:!!phoneActive&&ok/);// t1157u: Siri rule lives in agent-list.mjs
+  assert.match(s,/usdcGas/);assert.match(s,/spendOk:\(\)=>EVD\.get\(\)\.authorized===true/);assert.match(fs.readFileSync(new URL('../src/v5/agent-list.mjs',import.meta.url),'utf8'),/connected:!!phoneActive&&ok/);// t1157: Siri rule lives in agent-list.mjs
   assert.doesNotMatch(s,/0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31/);
   const ob=fs.readFileSync(new URL('../src/v5/onboard-new.mjs',import.meta.url),'utf8');
   assert.match(ob,/openingFeeUSDC/);assert.match(ob,/needs_usdc/);assert.doesNotMatch(ob,/先垫付/);

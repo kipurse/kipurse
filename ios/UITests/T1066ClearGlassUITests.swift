@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1066u: cards are clear transparent glass (not frosted) — smoke life / wallet / settings + screenshots.
+/// t1066: cards are clear transparent glass (not frosted) — smoke life / wallet / settings + screenshots.
 final class T1066ClearGlassUITests: XCTestCase {
   var app: XCUIApplication!
   func launch(_ args: [String]) {
@@ -21,7 +21,7 @@ final class T1066ClearGlassUITests: XCTestCase {
     executionTimeAllowance = 180
     launch(["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpSkipFaceID", "-kpLifeDemo"])
     XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 12))
-    // t1065u still: month · AI-online eyebrow gone
+    // t1065 still: month · AI-online eyebrow gone
     XCTAssertFalse(app.descendants(matching: .any)["life.online"].exists, "life.online eyebrow must stay removed")
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "在线打理")).firstMatch.exists)
     sleep(1); shot("t1066-life-zh")

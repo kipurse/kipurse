@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1220u (§6#96): a pushed AI request (kind mandate / owner_ask) is remembered so Home can list it under 「待你批准」 without a
+/// t1220 (decision 96): a pushed AI request (kind mandate / owner_ask) is remembered so Home can list it under "[zh]" without a
 /// live server session; nothing else is remembered, the newest text wins, old ones drop, and the server list replaces them.
 final class T1220PushHintsTests: XCTestCase {
   let now = Date(timeIntervalSince1970: 1_800_000_000)

@@ -1,6 +1,6 @@
 import XCTest
 @testable import KipurseCore
-/// t1125u (handbook §6#64): each fee names its real source; no stale opening / limits / Allowances copy.
+/// t1125 (decision 64): each fee names its real source; no stale opening / limits / Allowances copy.
 final class T1125CopyTests: XCTestCase {
   private var root: URL { URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent() }
   private func src(_ f: String) throws -> String { try String(contentsOf: root.appendingPathComponent(f), encoding: .utf8) }
@@ -40,7 +40,7 @@ final class T1125CopyTests: XCTestCase {
     XCTAssertTrue(lp.contains("开户后再开启 Face ID 批准（重装、换手机或开户时没带）：从你的启付钱包余额扣，按实际网络费、确认前显示实时报价。只改上限不会收 Face ID 的费。"))
     XCTAssertFalse(lp.contains("开户网络费也由你用 USDC 付"))
   }
-  /// t1128u (owner "允许再扣", §6#66): after opening, turning Face ID on may take ONE actual-cost fee from the Kipurse wallet (live quote, <= 0.05).
+  /// t1128 (owner "[zh]", decision 66): after opening, turning Face ID on may take ONE actual-cost fee from the Kipurse wallet (live quote, <= 0.05).
   /// No made-up number; opening copy still says the first enable rides in the opening fee; changing limits alone never charges it.
   func testFaceIDFeeAfterOpeningIsHonest() throws {
     let a = all()

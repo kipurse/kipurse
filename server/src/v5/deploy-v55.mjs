@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): the V5.5 suite deploy, the same practical way as the V5.4 deploy (deploy-v54.mjs): the owner's own Base Account
+// t1250 (decision 119): the V5.5 suite deploy, the same practical way as the V5.4 deploy (deploy-v54.mjs): the owner's own Base Account
 // confirms fixed batches in Coinbase; each batch = deterministic-deployer calls (CREATE2, pinned init code) + a USDC fee leg from the owner's
 // Base Account to the Kipurse fee address. PREPARED ONLY: this module loads + verifies mainnet/v55-deploy-plan.json and builds the batches,
 // their KPVH commitments and a wallet_sendCalls payload. It never signs or sends. The page / sponsor wiring of V5.4 (createDeployV54) is

@@ -1,4 +1,4 @@
-# t1242 (handbook §6#112): Kipurse TEST SHOP - an ordinary ExampleShop-shaped USDC merchant at https://testshop.kipurse.com (via the pay tunnel).
+# t1242 (decision 112): Kipurse TEST SHOP - an ordinary ExampleShop-shaped USDC merchant at https://testshop.kipurse.com (via the pay tunnel).
 # Own system user; it cannot read Kipurse's data / keys (InaccessiblePaths) and Kipurse cannot read its keys (/etc/kipurse-testshop 0750 root:kipurse-testshop,
 # data.key 0400 kipurse-testshop; /var/lib/kipurse-testshop 0700). Public HTTP 127.0.0.1:8661 only; admin API = unix socket /run/kipurse-testshop/admin.sock (0600).
 [Unit]

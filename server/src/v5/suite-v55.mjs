@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): Kipurse V5.5 suite for the gateway. Everything V5.5 is OFF unless KIPURSE_V55=1; with the flag off nothing in
+// t1250 (decision 119): Kipurse V5.5 suite for the gateway. Everything V5.5 is OFF unless KIPURSE_V55=1; with the flag off nothing in
 // this file is imported by a running path and the V5.2 / V5.3 / V5.4 wallets behave exactly as before.
 // What V5.5 changes for the gateway (contracts/V55_CHANGES.md §3):
 //   - new adapter / trust / vault factory / registry V2 addresses (mainnet/v55-deploy-plan.json, pinned below)

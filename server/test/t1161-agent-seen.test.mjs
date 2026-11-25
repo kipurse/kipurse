@@ -1,4 +1,4 @@
-// t1161u (§6#78): every AI's home bead must be honest. Online = really used in the last 5 min; a refused /mcp call says why (reason + agent id only).
+// t1161 (decision 78): every AI's home bead must be honest. Online = really used in the last 5 min; a refused /mcp call says why (reason + agent id only).
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {createHash} from 'node:crypto';
 import {stateAgents,mcpRefusal} from '../src/v5/agent-list.mjs';import {createOAuth} from '../kit/oauth.mjs';
 const sha=x=>createHash('sha256').update(x).digest('hex');const now=1_800_000_000;

@@ -48,7 +48,7 @@ final class T1268PhoneTextsCrossTests: XCTestCase {
   }
 }
 
-/// t1268 (handbook §6#133, locked rule 0A #2): a bind sign-in never prompts Face ID; its key proof is done by turning on Face ID approvals.
+/// t1268 (decision 133, locked rule 0A #2): a bind sign-in never prompts Face ID; its key proof is done by turning on Face ID approvals.
 final class T1268DeferredProofSourceTests: XCTestCase {
   func src(_ f: String) throws -> String { try String(contentsOfFile: #filePath.replacingOccurrences(of: "Tests/KipurseCoreTests/T1268PhoneTextsCrossTests.swift", with: "App/Sources/" + f), encoding: .utf8) }
   func testBindSavesTheProofInsteadOfFaceID() throws {

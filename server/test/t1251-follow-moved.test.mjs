@@ -1,4 +1,4 @@
-// t1251 (handbook §6#120): the legacy entry must follow every owner-signed move (V5.2 -> V5.4 -> V5.5), not just the first hop.
+// t1251 (decision 120): the legacy entry must follow every owner-signed move (V5.2 -> V5.4 -> V5.5), not just the first hop.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {followMoved} from '../src/v5/tenancy.mjs';
 const A='0x5150000000000000000000000000000000000001',B='0x6464000000000000000000000000000000000002',C='0x4494000000000000000000000000000000000003';

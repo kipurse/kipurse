@@ -1,7 +1,7 @@
 import SwiftUI
 import KipurseCore
 
-/// t613u: optional large-text simple mode (Settings switch). Home = three big buttons: 余额, 充值, 暂停.
+/// t613: optional large-text simple mode (Settings switch). Home = three big buttons: [zh] .
 enum SimpleMode { static let key = "kp.simpleMode" }
 
 struct SimpleHome: View {
@@ -63,20 +63,18 @@ struct NoCoinbaseGuide: View {
   }
 }
 
-/// Guided setup: two questions, three SUGGESTED plans. Nothing pre-selected; picking fills the fields, which stay editable.
+/// Guided setup (t1246): daily spend question only (removed what AI mostly buys), three SUGGESTED plans. Nothing pre-selected; picking fills the fields, which stay editable.
 struct GuidedSetupCard: View {
   @Binding var single: String; @Binding var daily: String; @Binding var term: String; @Binding var days: String
-  @State private var use: Beginner.Use?; @State private var spend: Beginner.Spend?
+  @State private var spend: Beginner.Spend?
   @State private var picked: Int? = Beginner.initialSelection
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(T("1. AI 主要帮你买什么？", "1. What will your AI mostly buy?")).font(.headline)
-      ForEach(Beginner.Use.allCases, id: \.rawValue) { u in choice(T(Beginner.useZh[u.rawValue], Beginner.useEn[u.rawValue]), use == u, "guided.use\(u.rawValue)") { use = u; picked = nil } }
-      Text(T("2. 大概每天花多少？", "2. About how much a day?")).font(.headline).padding(.top, 6)
+      Text(T("大概每天花多少？", "About how much a day?")).font(.headline)
       ForEach(Beginner.Spend.allCases, id: \.rawValue) { v in choice(T(Beginner.spendZh[v.rawValue], Beginner.spendEn[v.rawValue]) + " USDC", spend == v, "guided.spend\(v.rawValue)") { spend = v; picked = nil } }
-      if let u = use, let v = spend {
+      if let v = spend {
         Text(T("建议（选一个，或在下面自己填）", "Suggestions (pick one, or fill in your own below)")).font(.headline).padding(.top, 6)
-        ForEach(Array(Beginner.plans(use: u, spend: v).enumerated()), id: \.offset) { i, p in
+        ForEach(Array(Beginner.plans(spend: v).enumerated()), id: \.offset) { i, p in
           choice(T("\(p.zh)：每笔 \(p.single) · 每天 \(p.daily) · 总额 \(p.term) USDC", "\(p.en): per payment \(p.single) · per day \(p.daily) · total \(p.term) USDC"), picked == i, "guided.plan\(i)") {
             picked = i; single = String(p.single); daily = String(p.daily); term = String(p.term); days = String(p.days) }
         }
@@ -91,8 +89,8 @@ struct GuidedSetupCard: View {
   }
 }
 
-/// t619u: the user's OWN address (wallet, Coinbase wallet, phone approver) is shortened by default.
-/// Full only after an explicit 显示完整地址 / 复制 action. (Payee addresses are always shown in full elsewhere.)
+/// t619: the user's OWN address (wallet, Coinbase wallet, phone approver) is shortened by default.
+/// Full only after an explicit [zh] action. (Payee addresses are always shown in full elsewhere.)
 struct OwnAddress: View {
   let address: String; var id: String = "own.addr"; var copyable = true
   @State private var full = false; @State private var copied = false
@@ -107,7 +105,7 @@ struct OwnAddress: View {
   }
 }
 
-/// t620u / t1057u: safety tips use the same KP body typography as other content pages (Legal/Help).
+/// t620 / t1057: safety tips use the same KP body typography as other content pages (Legal/Help).
 struct SafetyTipsView: View {
   var body: some View {
     ScrollView {

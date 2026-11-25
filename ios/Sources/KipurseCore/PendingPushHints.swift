@@ -1,7 +1,7 @@
 import Foundation
 
-/// t1220u (handbook §6#96): an AI payment / allowance request (push kind "mandate" or "owner_ask") must show on Home under
-/// 「待你批准」 even when the App has no live server session (opening the App never asks for Face ID, 0A#2, so the list can't be
+/// t1220 (decision 96): an AI payment / allowance request (push kind "mandate" or "owner_ask") must show on Home under
+/// "[zh]" even when the App has no live server session (opening the App never asks for Face ID, 0A#2, so the list can't be
 /// read then). The push itself names the request: remember it on this phone until the server list can be read again.
 /// A remembered request can never be approved by itself: approving still loads the server's request and checks it (Face ID).
 public struct PendingPushHint: Codable, Equatable {

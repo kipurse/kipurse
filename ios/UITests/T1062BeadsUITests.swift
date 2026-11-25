@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1062/t1063: AI 生活 top four glass beads — horizontal alignment + connected FX fixture + welcome bead recipe.
+/// t1062/t1063: AI [zh] top four glass beads — horizontal alignment + connected FX fixture + welcome bead recipe.
 final class T1062BeadsUITests: XCTestCase {
   var app: XCUIApplication!
   func launch(_ args: [String]) {
@@ -44,7 +44,7 @@ final class T1062BeadsUITests: XCTestCase {
       }
       // Cell accessibility frames can grow slightly for the lit bead's halo; do not gate on cell.minY
       XCTAssertEqual(cellFrames.count, 4)
-      // Grok is online in main demo — accessibility must say Online / 在线
+      // Grok is online in main demo — accessibility must say Online / [zh]
       let grok = app.descendants(matching: .any)["life.agent.grok"].label
       XCTAssertTrue(grok.contains(lang == "zh" ? "在线" : "Online"), "connected fixture grok: \(grok)")
       sleep(1)

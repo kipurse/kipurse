@@ -3,31 +3,31 @@
 // wallet batch for exactly those numbers and the owner sends it from HIS Base Account. Nothing changes unless that batch lands on chain:
 // confirm only swaps the runtime to the new permission once it is valid ON CHAIN. No key here; anyone can open the page, only the owner can sign.
 import {langOf,X,en,zhOnly} from './i18n.mjs';import {randomBytes} from 'node:crypto';
-import {rewritePaymasterBody,sanitizePaymasterResponse,erc20PaymasterURL,paymasterCorsHeaders,LIMITS_RELAY_FEE_FROM,LIMITS_WALLET_FEE_FROM,LIMITS_WALLET_FEE_CAP,limitsWalletFeeCalls,checkLimitsWalletFeeCalls} from './limits-fee.mjs';
+import {LIMITS_WALLET_FEE_FROM,LIMITS_WALLET_FEE_CAP,limitsWalletFeeCalls,checkLimitsWalletFeeCalls} from './limits-fee.mjs';
 const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=a=>{const n=BigInt(a),w=n/1000000n,f=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
 /** "12.5" -> 12500000n ; null if not a positive USDC amount with <= 6 decimals. */
 export const parseUsdc=v=>{const s=String(v??'').trim();if(!/^\d{1,7}(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');const n=BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));return n>0n?n:null;};
 export const LIMITS_MAX_TERM=1000000n*1000000n;
-/** t1281: this server takes the owner's own stranger limits (openSingle/openDaily). The app shows the 付给陌生收款方 block and sends
+/** t1281: this server takes the owner's own stranger limits (openSingle/openDaily). The app shows the [zh] block and sends
  *  explicit values ONLY when the server says so (limits fee + onboarding quote), so a new app on an older server stays on the legacy path. */
 export const STRANGER_CAPS_API=1;
 /** Validates the owner's choice. days: 1..365 (new end = now + days) or undefined (keep the current end). */
 export function checkLimits({single,daily,term,days,opsPerDay,openSingle,openDaily}){const s=parseUsdc(single),d=parseUsdc(daily),t=parseUsdc(term);
-  /* t1185u §6#85: optional owner-set daily on-chain operations (whole number 1..100000) */let ops;if(opsPerDay!==undefined&&opsPerDay!==''&&opsPerDay!==null){ops=Number(opsPerDay);if(!/^\d{1,6}$/.test(String(opsPerDay).trim())||!Number.isInteger(ops)||ops<1||ops>100000)return {error:'bad_ops_per_day',detail:'每天链上操作次数：1–100000 的整数'};}
+  /* t1185 decision 85: optional owner-set daily on-chain operations (whole number 1..100000) */let ops;if(opsPerDay!==undefined&&opsPerDay!==''&&opsPerDay!==null){ops=Number(opsPerDay);if(!/^\d{1,6}$/.test(String(opsPerDay).trim())||!Number.isInteger(ops)||ops<1||ops>100000)return {error:'bad_ops_per_day',detail:'[zh]1–100000 [zh]'};}
   if(s===null||d===null||t===null)return {error:'bad_amount',detail:'每笔、每天、总额都要是正数（最多 6 位小数）'};
   if(s>d)return {error:'single_above_daily',detail:'每笔不能大于每天'};if(d>t)return {error:'daily_above_term',detail:'每天不能大于总额'};
   if(t>LIMITS_MAX_TERM)return {error:'term_too_high',detail:'总额最多 1,000,000 USDC（一百万）'};
   let dd;if(days!==undefined&&days!==''&&days!==null){dd=Number(days);if(!Number.isInteger(dd)||dd<1||dd>365)return {error:'bad_days',detail:'期限 1–365 天'};}
-  /* t1281 (§6#141 ①): optional owner-chosen stranger limits (USDC amounts like single/daily). Absent = an older app (legacy formula). */
+  /* t1281 (decision 141 (1)): optional owner-chosen stranger limits (USDC amounts like single/daily). Absent = an older app (legacy formula). */
   const has=v=>v!==undefined&&v!==null&&String(v).trim()!=='';let open={};
   if(has(openSingle)||has(openDaily)){const a=parseUsdc0(openSingle),b=parseUsdc0(openDaily);
     const e=strangerChoiceError({single:s,daily:d,openSingle:has(openSingle)?(a??'x'):undefined,openDaily:has(openDaily)?(b??'x'):undefined});if(e)return e;open={openSingle:a,openDaily:b};}
   return {single:s,daily:d,term:t,days:dd,...(ops!==undefined?{opsPerDay:ops}:{}),...open};}
 /** Like parseUsdc but 0 is allowed (so a stranger limit of 0 gets its own clear refusal). */
 const parseUsdc0=v=>{const s=String(v??'').trim();if(!/^\d{1,7}(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));};
-/* ---- t1281 (owner decision §6#141 ①): THE stranger sub-limit formula. Phone mirror: RequestVerify.subCaps / strangerChoiceError
+/* ---- t1281 (owner decision decision 141 (1)): THE stranger sub-limit formula. Phone mirror: RequestVerify.subCaps / strangerChoiceError
    (Kipurse iOS); cross-test vectors test/t1281-stranger-cap.test.mjs -> IOS Tests/KipurseCoreTests/t1281-stranger-caps.json.txt.
    "Stranger" = a payee the owner has not trusted and that is not registry-listed. Policy word [5] openSingle = per payment (amount only;
    0 would disable strangers and the float); [6] openDaily = per day INCLUDING fees, ONE counter shared by all strangers.
@@ -88,16 +88,15 @@ window.kpDone=j=>{try{const href=(${limitsDoneUrl.toString()})(j);hideForm();
 window.kpDoneMsg=mode=>{try{hideForm();view(OK,L('授权完成','Authorized'),[mode==='enroll'?L('这台手机已成为确认人，以后用 Face ID 批准','This phone is now a signer. Approve with Face ID from now on.'):L('手机确认已撤销','Phone signer revoked')],L('正在回到 Kipurse…','Returning to Kipurse…'));back('kipurse://done?phone='+(mode==='enroll'?'enrolled':'revoked'));}catch(e){}};
 window.kpFail=m=>{try{if(!o)return;view(BAD,L('授权没有完成','Not authorized'),[m||L('还没看到链上结果。','Not on chain yet.')],L('没有扣钱。可以刷新再试，或回到 Kipurse 看结果。','Nothing was charged. Refresh to try again, or go back to Kipurse to check.'));
   const r=btn(L('刷新重试','Refresh and retry'),'#','p');r.onclick=ev=>{ev.preventDefault();location.reload();};btn(L('回到 Kipurse','Back to Kipurse'),'kipurse://done','g');}catch(e){}};})();`;
-/** USDC-only gas (principle gasToken='USDC', t604u): a limits batch is handed out for signing ONLY with the free first-authorization
+/** USDC-only gas (principle gasToken='USDC', t604): a limits batch is handed out for signing ONLY with the free first-authorization
  *  sponsorship (paymaster) or when the owner's Base Account holds enough USDC to pay the fee itself. Never an ETH-funded path. */
-/** Plain-language reason a limit change costs a small fee (t606u). */
+/** Plain-language reason a limit change costs a small fee (t606). */
 export const WHY_FEE={zh:'为什么改上限要一点手续费：上限保存在区块链上，这样连我们也改不了；每改一次要付给网络一点手续费，我们不加价。',en:'Why changing limits costs a small fee: your limits live on the blockchain, so not even we can change them. Each change pays the network a tiny fee, and we add nothing on top.'};
 export function gasRoute({pm,fee}){if(pm)return {route:'sponsored'};if(fee&&fee.canPayUSDC===true)return {route:'usdc'};return {route:null};}
 export const fmtUsdc=a=>{a=BigInt(a);const w=a/1000000n,f=(a%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
-export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=>null,fee=async()=>null,feeQuote=null,refund=null,onConfirmed=()=>{},now=()=>Date.now(),pollMs=3000,pollTries=60,walletPaymaster=()=>null,paymasterFetch=null,erc20URL=null,walletFee=null}){
-  // t1123u: walletFee = {feeTo, available():bool, register:async(id,{owner,wallet,calls,reimburse})->paymasterUrl|null} (existing sponsor, wallet repays in the same batch).
-  const erc20=()=>(erc20URL??erc20PaymasterURL)();
-  const forward=paymasterFetch??(async body=>{const r=await fetch(erc20(),{method:'POST',headers:{'content-type':'application/json','accept':'application/json'},body:JSON.stringify(body)});return await r.json();});
+export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=>null,fee=async()=>null,feeQuote=null,refund=null,onConfirmed=()=>{},now=()=>Date.now(),pollMs=3000,pollTries=60,walletFee=null}){
+  // t1123: walletFee = {feeTo, available():bool, register:async(id,{owner,wallet,calls,reimburse})->paymasterUrl|null} (existing sponsor, wallet repays in the same batch).
+  // t147 (decision 147): the third-party ERC-20 paymaster (Pimlico) proxy /owner/limits/paymaster is removed; that path now answers 404 like any unknown path.
   const prepared=new Map(),hits=new Map(),done=new Map();let pend=null;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const result=(pl,r)=>{const pm=pl?.permission??{},po=pl?.policy??{};return {ok:true,permissionHash:r.permissionHash,single:String(po.single??''),daily:String(po.daily??''),term:String(po.term??''),start:String(pm.start??''),end:String(pm.end??'')};};
   const finish=async id=>{const e=prepared.get(id);if(!e)return done.get(id)??null;const r=await confirm(e.plan.raw);if(!r?.valid)return null;try{onConfirmed({sponsored:!!e.pm&&!e.feeFrom,owner:e.plan.owner});}catch{}const out=result(e.plan.raw,r);done.set(id,out);prepared.delete(id);if(pend?.id===id)pend=null;return out;};
@@ -132,28 +131,19 @@ export function createPublicLimits({plan,confirm,current,script,base,sponsor=()=
       const out={usdc:String(fq.usdc),usdcText:fmtUsdc(fq.usdc),firstFree:!!fq.firstFree,gasToken:'USDC',markupBps:0,paidFrom:fq.fromWallet?'kipurse_wallet_usdc':'kipurse_wallet',why:WHY_FEE,strangerCaps:STRANGER_CAPS_API};
       if(fq.fromWallet){out.feeFrom='kipurse_wallet';out.fromWallet=true;}
       json(200,out);return true;}
-    if(p==='/owner/limits/paymaster'){const cors=paymasterCorsHeaders(req.headers?.origin);
-      const reply=(c,o,extra)=>{res.writeHead(c,{...(cors??{}),'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff',...extra});res.end(o==null?'':J(o));};
-      if(req.method==='OPTIONS'){if(!cors){reply(403,{error:'origin'});return true;}res.writeHead(204,cors);res.end();return true;}
-      if(req.method!=='POST'){reply(405,{error:'method'});return true;}
-      const open=walletPaymaster?.()??null;if(!open||!String(open).endsWith('/owner/limits/paymaster')||String(open).includes('/onboard/')){reply(404,{error:'not_found'});return true;}
-      const b=await readBody(req);if(JSON.stringify(b??null).length>200000){reply(413,{error:'too_large'});return true;}
-      const rw=rewritePaymasterBody(b);if(!rw.ok){reply(400,{error:rw.error});return true;}
-      let up;try{up=await forward(rw.body);}catch{reply(502,{error:'paymaster_unavailable'});return true;}
-      reply(200,sanitizePaymasterResponse(rw.body.method,up));return true;}
     if(req.method!=='POST'){json(405,{error:'method'});return true;}
     const b=await readBody(req);gc();
     try{
       if(p==='/owner/limits/prepare'&&b.plan){const id=String(b.plan),e=prepared.get(id);if(!e||e.submittedAt){json(404,{error:'unknown_plan'});return true;}
           // the app already decoded and checked THIS plan on the phone; the page signs exactly it (no new plan)
-          const extra=e.feeFrom===LIMITS_WALLET_FEE_FROM||e.feeFrom===LIMITS_RELAY_FEE_FROM?{feeFrom:e.feeFrom,wallet:e.plan.wallet,from:e.plan.owner,sponsored:false,...(e.feeTo?{feeTo:e.feeTo}:{})}:{};
+          const extra=e.feeFrom===LIMITS_WALLET_FEE_FROM?{feeFrom:e.feeFrom,wallet:e.plan.wallet,from:e.plan.owner,sponsored:false,...(e.feeTo?{feeTo:e.feeTo}:{})}:{};
           json(200,{id,owner:e.plan.owner,chainId:e.plan.chainId,human:e.plan.human,labels:e.plan.labels,calls:e.plan.calls,pm:e.pm??null,sponsored:!!e.pm,fee:e.fee??null,gasToken:'USDC',...extra});return true;}
       if(p==='/owner/limits/prepare'){/* t1281: optional stranger limits, atomic like single/daily; absent = older app (legacy formula) */const at=v=>v===undefined||v===null||v===''?undefined:/^\d{1,13}$/.test(String(v))?usd(String(v)):'x';
         const c=checkLimits({single:usd(String(b.single??'0')||'0'),daily:usd(String(b.daily??'0')||'0'),term:usd(String(b.term??'0')||'0'),days:b.days??undefined,opsPerDay:b.opsPerDay??undefined,openSingle:at(b.openSingle),openDaily:at(b.openDaily)});
         if(c.error){json(400,{...c,detail:{zh:zhOnly(c.detail),en:en(c.detail)??'Please check the numbers.'}});return true;}if(prepared.size>50){json(429,{error:'slow_down'});return true;}
         let pl=await plan(c);const id=randomBytes(16).toString('hex');
         if(pl?.fromWallet){let f=null;try{f=await fee(pl);}catch{f=null;}
-          // t1123u (§6#63): fee from the Kipurse wallet's USDC in the SAME batch, t752 withdraw shape. Sent FROM the owner's Base Account
+          // t1123 (decision 63): fee from the Kipurse wallet's USDC in the SAME batch, t752 withdraw shape. Sent FROM the owner's Base Account
           // (signs only, never pre-funds). The existing sponsor fronts gas only for this exact batch; the batch repays it to the fixed fee address.
           const FT=walletFee?.feeTo??null;
           const feeOut=f?{gas:String(f.gas??''),gasPriceWei:String(f.gasPriceWei??''),usdc:String(f.usdc),usdcText:fmtUsdc(f.usdc),walletUSDC:f.walletUSDC==null?null:String(f.walletUSDC),canPayUSDC:false,fromWallet:true,walletPays:true,feeTo:FT,reason:f.reason??null,cap:f.cap==null?null:String(f.cap)}:null;

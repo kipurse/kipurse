@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1185u (handbook §6#85): daily on-chain operations - vault computed on the phone, setOpsPerDay accepted only to YOUR vault with YOUR number.
+/// t1185 (decision 85): daily on-chain operations - vault computed on the phone, setOpsPerDay accepted only to YOUR vault with YOUR number.
 final class OpsCapTests: XCTestCase {
   let adapter53 = "0xb150030be35903AdEE466d7733Bf0841B667033C"
   func vec() throws -> [String: Any] {

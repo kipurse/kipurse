@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 import "./V55Base.t.sol";
 
-/// V5.5 (handbook §6#99/§6#100): owner signs ONE OwnerSignerTrust grant for merchant M's order signer; later orders signed by
+/// V5.5 (decision 99/decision 100): owner signs ONE OwnerSignerTrust grant for merchant M's order signer; later orders signed by
 /// that signer pay the order's own per-order payee (no payee binding) within the grant caps. Everything else as V5.2.
 /// Port of KipurseV54SignerTrust to V5.5; the phone path runs through the V2 key seat (wallet owners [owner, seat, SPM]).
 contract KipurseV55SignerTrustTest is V55Base {

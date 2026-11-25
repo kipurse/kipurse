@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1187 (§6#87): ONE-TIME V5.3 deploy page. The owner's Base Account confirms exactly ONE fixed batch: deployer <- factory init code,
+// t1187 (decision 87): ONE-TIME V5.3 deploy page. The owner's Base Account confirms exactly ONE fixed batch: deployer <- factory init code,
 // deployer <- adapter init code, USDC fee leg (0.20) to the fixed Kipurse fee address. Gas is fronted by Kipurse's paymaster for that exact
 // batch only and repaid in USDC inside it; never ETH. The KPVH guard (link #vh=) refuses any other batch; this script re-checks the pins.
-// t1188 (§6#88): works like the proven sign pages. Another app's built-in browser cannot keep the Coinbase window connected (window.opener),
+// t1188 (decision 88): works like the proven sign pages. Another app's built-in browser cannot keep the Coinbase window connected (window.opener),
 // so there the button is hidden and the page calmly says to open it in Safari (open / copy). The batch is prepared and checked when the page
 // loads, so the tap opens Coinbase right away; no automatic retry, never a loop; every failure is one calm line plus "try again".
-// t1189 (§6#89): Coinbase's bundler cannot estimate the single ~12M-gas batch, so the deploy is TWO confirmations: step 1 = factory + 0.05
+// t1189 (decision 89): Coinbase's bundler cannot estimate the single ~12M-gas batch, so the deploy is TWO confirmations: step 1 = factory + 0.05
 // USDC, step 2 (after the factory is on chain) = adapter + 0.15 USDC. The link carries one commitment per step (#vh1=…&vh2=…); before each
 // send the page points the KPVH guard at that step's commitment, so only those two exact batches can ever be sent, in that order.
 import {createBaseAccountSDK} from '@base-org/account';
@@ -35,8 +35,8 @@ const H=new URLSearchParams(String(location.hash||'').replace(/^#/,'')),VH=[null
 const linkOk=VH[1]&&VH[2]&&/^[0-9a-f]{64}$/i.test(VH[1])&&/^[0-9a-f]{64}$/i.test(VH[2]);
 /** point the KPVH guard (#vh=) at THIS step's commitment from the link; both commitments stay in the link */
 const useStep=k=>{history.replaceState(null,'',location.pathname+location.search+'#vh='+VH[k]+'&vh1='+VH[1]+'&vh2='+VH[2]);};
-const stepUi=k=>{const s1=$('s1');if(s1&&k===2)s1.textContent=s1.textContent.replace(/^①/,'✅');go.textContent=k===2?(KPEN?'Step 2: confirm in Coinbase':'第 2 步：在 Coinbase 里确认'):(KPEN?'Step 1: confirm in Coinbase':'第 1 步：在 Coinbase 里确认');};
-const done=()=>{const s1=$('s1'),s2=$('s2');if(s1)s1.textContent=s1.textContent.replace(/^①/,'✅');if(s2)s2.textContent=s2.textContent.replace(/^②/,'✅');go.style.display='none';help.style.display='none';say(KPEN?'✅ Done. Both V5.3 contracts are on Base. This page is now finished; you can close it.':'✅ 完成。两份 V5.3 合约都已经在 Base 上了。这个页面已经完成任务，可以关掉。','#080');};
+const stepUi=k=>{const s1=$('s1');if(s1&&k===2)s1.textContent=s1.textContent.replace(/^(1)/,'✅');go.textContent=k===2?(KPEN?'Step 2: confirm in Coinbase':'第 2 步：在 Coinbase 里确认'):(KPEN?'Step 1: confirm in Coinbase':'第 1 步：在 Coinbase 里确认');};
+const done=()=>{const s1=$('s1'),s2=$('s2');if(s1)s1.textContent=s1.textContent.replace(/^(1)/,'✅');if(s2)s2.textContent=s2.textContent.replace(/^(2)/,'✅');go.style.display='none';help.style.display='none';say(KPEN?'✅ Done. Both V5.3 contracts are on Base. This page is now finished; you can close it.':'✅ 完成。两份 V5.3 合约都已经在 Base 上了。这个页面已经完成任务，可以关掉。','#080');};
 const ERR={not_owner:KPEN?'This is a different Coinbase account. Please sign in with your own Base Account ':'这是另一个 Coinbase 账户。请用你自己的 Base 账户登录 ',needs_usdc:KPEN?'Your Base Account does not have enough USDC for this step’s fee. Add some USDC and refresh this page.':'你的 Base 账户里的 USDC 不够付这一步的手续费。先放一点 USDC，再刷新这个页面。',
   partial:KPEN?'The on-chain state is not what this page expects. Nothing was submitted.':'链上状态和预期不一致，没有提交任何内容。',unavailable:KPEN?'Paying the fee in USDC is not possible right now. Nothing was submitted. Please try again later.':'现在暂时没法用 USDC 付手续费，没有提交任何内容。请稍后再试。'};
 const post=async(p,b)=>{const r=await fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});return r.json();};

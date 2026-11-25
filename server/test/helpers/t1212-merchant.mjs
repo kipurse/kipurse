@@ -1,4 +1,4 @@
-// t1212 §6#97: in-memory merchant with the recorded ExampleShop PUBLIC docs shape (t1204 fixture), adapted to the test chain. Never the real merchant.
+// t1212 decision 97: in-memory merchant with the recorded ExampleShop PUBLIC docs shape (t1204 fixture), adapted to the test chain. Never the real merchant.
 import fs from 'node:fs';import {USDC} from './v5-fixture.mjs';
 const F=JSON.parse(fs.readFileSync(new URL('../fixtures/t1204-example-shop-shape.json',import.meta.url)));
 const MAIN_USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';

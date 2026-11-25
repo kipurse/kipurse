@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1238 (handbook §6#109, phase 3): move an EXISTING Kipurse wallet (e.g. the owner's 0x5150 on V5.2) to a NEW key-seat wallet on V5.4.
+// t1238 (decision 109, phase 3): move an EXISTING Kipurse wallet (e.g. the owner's 0x5150 on V5.2) to a NEW key-seat wallet on V5.4.
 // Why a new wallet: Coinbase's Base Account popup refuses every owner change, so a Face ID key for V5.4 can no longer be added to the old
 // wallet. The new wallet is created by the Coinbase factory with ALL its owners [Base Account, key seat, SPM]; the SAME phone key (read from
 // the old approver on chain) is registered in the seat. ONE Base Account confirmation:
@@ -7,7 +7,7 @@
 //               revoke its V5.2 spend permission and pause it on its trust (no AI can spend there any more; the owner keeps full control)
 //   new wallet: created (factory), seat deployed + phone key set, V5.4 spend permission (same limits, same window) approved + registered,
 //               0.15 USDC fee reserve into its vault (his own money), trust records / float cap / denies / opt-out / pause re-applied on V5.4.
-// No call, at any depth, adds or removes an owner (Coinbase rule, §6#108). Nothing here sends anything: it only builds the batch.
+// No call, at any depth, adds or removes an owner (Coinbase rule, decision 108). Nothing here sends anything: it only builds the batch.
 import {encodeFunctionData,getAddress,parseAbi,encodeAbiParameters} from 'viem';
 import {seatInit,seatOwners,setKeyCall} from './key-seat.mjs';
 import {coinbaseRefuses} from './coinbase-rule.mjs';

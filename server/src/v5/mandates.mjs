@@ -28,7 +28,7 @@ export const PURPOSES={
   transfer:{zh:'转账给熟人',en:'Friends & family',alias:['transfer','friends','family','转账','朋友','家人','aa']},
   other:{zh:'其他',en:'Other',alias:['other','misc','其他','其它']},
   all:{zh:'总额度',en:'Overall limit',alias:['all','overall','total','limit','总额度','总限额','付款上限']}};
-/** ONE LIMIT (owner 2026-10-27 t592u): the owner sets ONE overall limit (per payment / per day / total; no monthly cap, owner 2026-10-27 14:23). Categories are labels only,
+/** ONE LIMIT (owner 2026-10-27 t592): the owner sets ONE overall limit (per payment / per day / total; no monthly cap, owner 2026-10-27 14:23). Categories are labels only,
  *  picked automatically for the spending summary; they never limit or allow a payment. */
 export const OVERALL='all';
 export const CATEGORIES=['daily','study','promo','dev','work','other'];
@@ -45,7 +45,7 @@ export function purposeKey(p){const s=String(p??'').trim().toLowerCase().slice(0
   return /^[a-z0-9_\-\u3400-\u9fff ]{1,40}$/.test(s)?s:null;}
 export const purposeName=(k,zh=true)=>PURPOSES[k]?(zh?PURPOSES[k].zh:PURPOSES[k].en):k;
 /** Beginner defaults offered at onboarding (USDC). The owner picks which ones and approves them all with ONE Face ID. */
-export const BEGINNER_DEFAULTS=[{purpose:'all',single:'5',daily:'20',monthly:'100',on:true}]; // ONE overall limit (t592u)
+export const BEGINNER_DEFAULTS=[{purpose:'all',single:'5',daily:'20',monthly:'100',on:true}]; // ONE overall limit (t592)
 const AI_MAX={single:20000000n,daily:50000000n,monthly:300000000n};
 const short=a=>{const s=String(a);return s.slice(0,6)+'…'+s.slice(-4);};
 const PERIOD_MS={day:86400e3,week:7*86400e3,month:30*86400e3,year:365*86400e3};
@@ -72,27 +72,27 @@ export function normalizeItem(x={}){const kind=x.kind??(x.agentId&&!x.purpose?'a
   let recurring=null;if(x.recurring){const r=x.recurring;const p=ADDR.test(String(r.payee??''))?lc(r.payee):bad('recurring_payee_required');const a=atom(r.amount);if(!a)bad('recurring_amount_required');
     const every=['day','week','month','year'].includes(r.every)?r.every:'month';recurring={payee:p,amount:a.toString(),every,name:cleanTxt(r.name,60)||null};}
   let oneOff=null;if(x.oneOff){const o=x.oneOff;const p=ADDR.test(String(o.payee??''))?lc(o.payee):(o.host?null:bad('one_off_payee_required'));
-    oneOff={payee:p,host:o.host?lc(o.host):null,amount:single.toString(),idem:cleanTxt(o.idem,128)||null,remember:o.remember!==false,aiName:cleanTxt(o.aiName,60)||null,...(o.ask===true?{ask:true,note:cleanTxt(o.note,80)||null,...(o.dup===true?{dup:true}:{})}:{})};}/* t1280: dup = suspected duplicate purchase (part of what Face ID signs) *//* t1170u: ask = 'do you know this payee?' card (trust | once | reject) */
+    oneOff={payee:p,host:o.host?lc(o.host):null,amount:single.toString(),idem:cleanTxt(o.idem,128)||null,remember:o.remember!==false,aiName:cleanTxt(o.aiName,60)||null,...(o.ask===true?{ask:true,note:cleanTxt(o.note,80)||null,...(o.dup===true?{dup:true}:{})}:{})};}/* t1280: dup = suspected duplicate purchase (part of what Face ID signs) *//* t1170: ask = 'do you know this payee?' card (trust | once | reject) */
   const ttlDays=Number(x.expiresInDays??(oneOff?1:365));
   return {kind:oneOff?'one_off':recurring?'recurring':'allowance',purpose,label:cleanTxt(x.label,60)||null,single:single.toString(),daily:(recurring?BigInt(recurring.amount):d).toString(),monthly:(recurring?BigInt(recurring.amount)*(recurring.every==='day'?31n:recurring.every==='week'?5n:1n):mo).toString(),
     payees:recurring?[recurring.payee]:oneOff?.payee?[oneOff.payee]:payees,hosts:oneOff?.host?[oneOff.host]:hosts,agents,recurring,oneOff,expiresInDays:Math.max(1/24,Math.min(366,ttlDays||365)),replaces:x.replaces?cleanTxt(x.replaces,40):null};}
 /** Domain-separated digest the phone signer signs (SHA-256 of text; never an EIP-712 / wallet hash). The app shows the same items. */
-/** t1181u (§6#84): with a scope the signed text also names the network + token (appended after items, so the phone's prefix check (build 71) still holds). */
+/** t1181 (decision 84): with a scope the signed text also names the network + token (appended after items, so the phone's prefix check (build 71) still holds). */
 export const proposalText=(wallet,p)=>`Kipurse allowance approval v1\nwallet:${lc(wallet)}\nid:${p.id}\nitems:${JSON.stringify(p.items)}`+(p.scope?`\nchain:${p.scope.chainId}\ntoken:${p.scope.token}`:'');
 export const proposalDigest=(wallet,p)=>'0x'+createHash('sha256').update(proposalText(wallet,p)).digest('hex');
-/** t1170u: the owner's choice (trust | once) is part of what Face ID signs, so a 'once' signature can never be replayed as 'trust'. */
+/** t1170: the owner's choice (trust | once) is part of what Face ID signs, so a 'once' signature can never be replayed as 'trust'. */
 export const ASK_MODES=['trust','once'];
 export const askText=(wallet,p,mode)=>proposalText(wallet,p)+`\nmode:${mode}`;
 export const askDigest=(wallet,p,mode)=>'0x'+createHash('sha256').update(askText(wallet,p,mode)).digest('hex');
-/** t1280 (§6#140): a suspected-duplicate card offers only 'once' (the payee is already known; trusting it means nothing) */
+/** t1280 (decision 140): a suspected-duplicate card offers only 'once' (the payee is already known; trusting it means nothing) */
 export const askModesFor=items=>items?.[0]?.oneOff?.dup===true?['once']:ASK_MODES;
 export const isAskItems=items=>Array.isArray(items)&&items.length===1&&items[0]?.kind==='one_off'&&items[0]?.oneOff?.ask===true&&!!items[0]?.oneOff?.payee;
-/** one-payment cards (one_off only) live 24 h (t1170u decision 3); other proposals keep 7 days */
+/** one-payment cards (one_off only) live 24 h (t1170 decision 3); other proposals keep 7 days */
 const proposalTtl=items=>Array.isArray(items)&&items.length&&items.every(i=>i?.kind==='one_off')?86400e3:7*86400e3;
-/** t1181u (§6#84): `scope` = {chainId, token} of the engine. Every mandate (json) and per-AI cap (side table limit_scope, so
- *  agent_cap keeps its 5 columns and older releases stay rollback-safe) is pinned to it; rows from before t1181u are migrated
+/** t1181 (decision 84): `scope` = {chainId, token} of the engine. Every mandate (json) and per-AI cap (side table limit_scope, so
+ *  agent_cap keeps its 5 columns and older releases stay rollback-safe) is pinned to it; rows from before t1181 are migrated
  *  to it once (same limits, same behaviour). A record of another network / token never covers a payment. */
-/* t1281 (§6#141): costParams() = {ppm, maxNetworkFee}: allowance / per-AI daily + monthly spend counts amount + protocol fee + network fee
+/* t1281 (decision 141): costParams() = {ppm, maxNetworkFee}: allowance / per-AI daily + monthly spend counts amount + protocol fee + network fee
    (spend-cost.mjs), and so does the payment being checked; per-payment (single) caps compare the amount only. */
 export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,onProposal=()=>{},walletCaps=null,scope=null,costParams=()=>({ppm:0n,maxNetworkFee:0n})}){
   const cp=()=>{try{return costParams()??{ppm:0n,maxNetworkFee:0n};}catch{return {ppm:0n,maxNetworkFee:0n};}};
@@ -100,7 +100,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   const SC=scope?makeScope(scope.chainId,scope.token):null;
   db.exec(`CREATE TABLE IF NOT EXISTS mandate(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, approved_at INTEGER, expires_at INTEGER, state TEXT NOT NULL, kind TEXT NOT NULL, purpose TEXT, json TEXT NOT NULL, proposal_id TEXT, uses INTEGER NOT NULL DEFAULT 0)`);
   db.exec(`CREATE TABLE IF NOT EXISTS mandate_proposal(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, state TEXT NOT NULL, by TEXT, reason TEXT, user_request TEXT, items_json TEXT NOT NULL, dedupe TEXT, decided_at INTEGER)`);
-  /* t1210 §6#95: when a pending AI request is pushed again (repeat or remind), at most once per 5 min per request */
+  /* t1210 decision 95: when a pending AI request is pushed again (repeat or remind), at most once per 5 min per request */
   db.exec(`CREATE TABLE IF NOT EXISTS mandate_repush(id TEXT PRIMARY KEY, at INTEGER NOT NULL)`);
   db.exec(`CREATE TABLE IF NOT EXISTS owner_payee(address TEXT PRIMARY KEY, name TEXT, host TEXT, purpose TEXT, approved_at INTEGER NOT NULL, proposal_id TEXT)`);
   db.exec(`CREATE TABLE IF NOT EXISTS agent_cap(agent_id TEXT PRIMARY KEY, daily TEXT, monthly TEXT, stopped INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`);
@@ -118,7 +118,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   const payScope=x=>x&&(x.chainId!==undefined||x.token!==undefined)?{chainId:x.chainId,token:x.token}:null;
   const id=p=>p+'_'+randomBytes(6).toString('hex');
   migrateToOneLimit();
-  /** ONE LIMIT migration (t592u): old per-purpose allowances are ignored (read-only, no ledger writes). The ONE overall limit is the
+  /** ONE LIMIT migration (t592): old per-purpose allowances are ignored (read-only, no ledger writes). The ONE overall limit is the
    *  wallet's existing on-chain limit (per payment / per day / term), so no cap is raised; the AI-unattended day/month totals still apply. */
   // read-only migration: nothing is written to any ledger; old per-purpose rows stay as they are but are ignored (never match, never listed)
   function migrateToOneLimit(){}
@@ -133,7 +133,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   /** atomic spend inside one mandate in the window (paid / in-flight rows only). */
   const spent=(mid,ms)=>{try{const c=cp();return db.prepare(`SELECT o.amount,o.order_json,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).all(now()-ms,'%"mandateId":"'+mid+'"%').reduce((a,x)=>a+costOf(x,c),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fees */
   const countIn=(mid,ms)=>{try{return db.prepare(`SELECT count(*) AS n FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND o.order_json LIKE ?`).get(now()-ms,'%"mandateId":"'+mid+'"%').n;}catch(e){return Number(missingOk(e,0n));}};
-  const usage=m=>{const d=spent(m.id,86400e3),mo=spent(m.id,30*86400e3),lt=maxZ(BigInt(m.daily)-d),lm=maxZ(BigInt(m.monthly)-mo);/* t1166u: decimal USDC + base units side by side */return {today:usd(d),month:usd(mo),leftToday:usd(lt),leftMonth:usd(lm),todayAtomic:String(d),monthAtomic:String(mo),leftTodayAtomic:String(lt),leftMonthAtomic:String(lm)};};
+  const usage=m=>{const d=spent(m.id,86400e3),mo=spent(m.id,30*86400e3),lt=maxZ(BigInt(m.daily)-d),lm=maxZ(BigInt(m.monthly)-mo);/* t1166: decimal USDC + base units side by side */return {today:usd(d),month:usd(mo),leftToday:usd(lt),leftMonth:usd(lm),todayAtomic:String(d),monthAtomic:String(mo),leftTodayAtomic:String(lt),leftMonthAtomic:String(lm)};};
   const maxZ=x=>x<0n?0n:x;
   /** The ONE overall limit: an explicit owner-approved 'all' item (if any) clamped to the wallet's on-chain caps, else the wallet caps. */
   const minB=(a,b)=>a===null?b:b===null?a:(a<b?a:b);
@@ -144,7 +144,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     return [{id:'wallet-limit',state:'active',kind:'allowance',purpose:OVERALL,purposeName:{zh:purposeName(OVERALL,true),en:purposeName(OVERALL,false)},label:null,single:ws.toString(),daily:(d<ws?ws:d).toString(),monthly:(mo<d?d:mo).toString(),payees:[],hosts:[],agents:[],recurring:null,oneOff:null,uses:0,virtual:true}];}
   /** Is this payment inside an owner allowance? Returns {ok:true, mandate} | {ok:false, why, mandate?, detail} | {ok:false, why:'no_mandate'}. */
   function match({purpose,payee,host,amount,agentId,idem,chainId,token,networkFee=0n}){const pk=purposeKey(purpose);
-    /* t1181u: mandates of another network / token never cover this payment */const ps=payScope({chainId,token});let dropped=false;
+    /* t1181: mandates of another network / token never cover this payment */const ps=payScope({chainId,token});let dropped=false;
     const inScope=m=>{if(!ps)return true;const bad=scopeCheck('AI allowance',m,ps,SC);if(bad)dropped=true;return !bad;};
     const ms=active().filter(inScope);
     const forAgent=m=>!m.agents?.length||m.agents.includes(agentId);
@@ -179,7 +179,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
   const agentSpent=(a,ms)=>{try{const c=cp();return db.prepare(`SELECT o.amount,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key LEFT JOIN purchase_origin g ON g.purchase_key=o.purchase_key WHERE o.agent_id=? AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid') AND (g.origin IS NULL OR g.origin='ai')`).all(String(a),now()-ms).reduce((s,x)=>s+costOf(x,c),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fees */
   /* t1278 S4: extra = atomic USDC of this AI not yet in purchase_order (its pending 10-minute holds), added to today's / this month's spend */
   function agentCheck(agentId,amount,scope,extra=0n,{networkFee=0n}={}){if(!agentId||agentId==='owner')return null;const r=agentRow(agentId);if(!r)return null;
-    {const ps=payScope(scope);if(ps&&!r.stopped){const bad=scopeCheck('per-AI limit',agentScopeRow(agentId),ps,SC);if(bad)return bad;}}/* t1181u */
+    {const ps=payScope(scope);if(ps&&!r.stopped){const bad=scopeCheck('per-AI limit',agentScopeRow(agentId),ps,SC);if(bad)return bad;}}/* t1181 */
     if(r.stopped)return {state:'rejected',reason:'AGENT_STOPPED',nothingPaid:true,decision:'refuse',fix:'The owner stopped payments for this AI in the Kipurse app. Do not retry; tell the user.',say_to_user:'没有付款：你已在 Kipurse 里停用了这个 AI 的付款权限。/ Not paid: you turned off payments for this AI in Kipurse.'};
     if(amount===undefined)return null;
     if(r.single&&amount>BigInt(r.single))return {state:'rejected',reason:'AGENT_SINGLE_CAP',nothingPaid:true,capHit:true,detail:`this AI: ${usd(amount)} > ${usd(r.single)} per payment`,say_to_user:`没有付款：这笔超过了这个 AI 的每笔额度（${usd(r.single)} USDC）。/ Not paid: over this AI's per-payment limit (${usd(r.single)} USDC).`};
@@ -189,7 +189,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     return null;}
   const agentStop=(a,stop=true)=>{const r=agentRow(a);if(stop)scopeAgent(a);if(stop)db.prepare(`INSERT INTO agent_cap(agent_id,daily,monthly,stopped,updated_at) VALUES(?,?,?,1,?) ON CONFLICT(agent_id) DO UPDATE SET stopped=1,updated_at=excluded.updated_at`).run(String(a),r?.daily??null,r?.monthly??null,now());return {ok:true,agentId:a,stopped:!!stop};};
   const agents=()=>{try{return db.prepare(`SELECT c.*,s.single AS single FROM agent_cap c LEFT JOIN agent_cap_single s ON s.agent_id=c.agent_id`).all().map(r=>{const st=agentSpent(r.agent_id,86400e3),sm=agentSpent(r.agent_id,30*86400e3);return {agentId:r.agent_id,single:r.single?usd(r.single):null,daily:r.daily?usd(r.daily):null,monthly:r.monthly?usd(r.monthly):null,stopped:!!r.stopped,spentToday:usd(st),spentMonth:usd(sm),
-    /* t1166u */singleAtomic:r.single?String(r.single):null,dailyAtomic:r.daily?String(r.daily):null,monthlyAtomic:r.monthly?String(r.monthly):null,spentTodayAtomic:String(st),spentMonthAtomic:String(sm)};});}catch{return [];}};
+    /* t1166 */singleAtomic:r.single?String(r.single):null,dailyAtomic:r.daily?String(r.daily):null,monthlyAtomic:r.monthly?String(r.monthly):null,spentTodayAtomic:String(st),spentMonthAtomic:String(sm)};});}catch{return [];}};
   // ---- proposals (owner app draft or AI request) -> phone signer approval ----
   function propose({items,by='owner',reason='',user_request='',dedupe=null}){const its=items.map(normalizeItem);if(!its.length||its.length>12)throw Object.assign(Error('1..12 items'),{code:'bad_items'});
     if(by!=='owner'){const recent=db.prepare(`SELECT count(*) AS n FROM mandate_proposal WHERE by<>'owner' AND state='pending' AND created_at>?`).get(now()-3600e3).n;if(recent>=10&&!(dedupe&&db.prepare(`SELECT 1 FROM mandate_proposal WHERE dedupe=? AND state='pending'`).get(dedupe)))throw Object.assign(Error('too many open AI requests; ask the owner to look at the app'),{code:'too_many_requests'});
@@ -200,7 +200,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     /* t1264: a pending request past its lifetime (24 h one-off / 7 d) is closed first, so dedupe never hands back a dead card: a new one is made */
     if(dedupe){for(const r of db.prepare(`SELECT id,created_at,items_json FROM mandate_proposal WHERE dedupe=? AND state='pending'`).all(dedupe)){let its=null;try{its=JSON.parse(r.items_json);}catch{}
         if(now()-r.created_at>proposalTtl(its))db.prepare(`UPDATE mandate_proposal SET state='expired',decided_at=? WHERE id=? AND state='pending'`).run(now(),r.id);}}
-    if(dedupe){const ex=db.prepare(`SELECT * FROM mandate_proposal WHERE dedupe=? AND state='pending' ORDER BY created_at DESC`).get(dedupe);if(ex){const v={...view(ex),idempotent:true};/* t1210 §6#95: same card again (no new request, no money path); only the phone is reminded, max once per 5 min */if(by!=='owner')v.repushed=repush(ex).pushed;return v;}}
+    if(dedupe){const ex=db.prepare(`SELECT * FROM mandate_proposal WHERE dedupe=? AND state='pending' ORDER BY created_at DESC`).get(dedupe);if(ex){const v={...view(ex),idempotent:true};/* t1210 decision 95: same card again (no new request, no money path); only the phone is reminded, max once per 5 min */if(by!=='owner')v.repushed=repush(ex).pushed;return v;}}
     const p={id:id('apr'),items:its};db.prepare(`INSERT INTO mandate_proposal VALUES(?,?,?,?,?,?,?,?,NULL)`).run(p.id,now(),'pending',String(by).slice(0,80),cleanTxt(reason,300),cleanTxt(user_request,500),JSON.stringify(its),dedupe);
     const v=view(db.prepare(`SELECT * FROM mandate_proposal WHERE id=?`).get(p.id));if(by!=='owner')try{onProposal(v);}catch{}return v;}
   function view(r){if(!r)return null;const items=JSON.parse(r.items_json);return {id:r.id,state:r.state,by:r.by,reason:r.reason,user_request:r.user_request,createdAt:r.created_at,decidedAt:r.decided_at,
@@ -213,7 +213,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
       const en=`⚠️ Possible duplicate: ${usd(i.single)} USDC already went to ${sh} in the last 10 minutes (for: ${note??pe}). Nothing has been paid for this one. Tap "Pay again" only if you really want a second one; otherwise tap "Decline"`;
       return {zh,en,newPayee:false,payeeSwap:false,ask:true,dup:true};}
     if(i.kind==='one_off'&&i.oneOff?.ask){const pa=i.payees?.[0];const sh=pa?short(pa):'';const ai=i.oneOff?.aiName;const note=i.oneOff?.note;const swap=ai&&pa?rememberedByName(ai).filter(x=>x!==lc(pa)):[];
-      const who=ai?`“${ai}”`:'这个收款方',whoEn=ai?`"${ai}"`:'this payee';/* t1212 §6#97: say what ONE Face ID does */
+      const who=ai?`“${ai}”`:'这个收款方',whoEn=ai?`"${ai}"`:'this payee';/* t1212 decision 97: say what ONE Face ID does */
       const zh=`⚠️ 新收款方 ${sh}，付 ${usd(i.single)} USDC（用途：${note??pn}）。认识这个收款方吗？超过了 AI 自动付款上限，AI 可能被骗，确认是你要付的人再批准。「认识并信任」：一次 Face ID 就信任${who}并付这笔 ${usd(i.single)} USDC；「只付这一次」：只付这笔，不加入信任`+(ai?`。AI 说它是“${ai}”，未核实`:'')+(swap.length?`。注意：你以前批准的「${ai}」不是这个地址，可能是冒充`:'');
       const en=`⚠️ NEW payee ${sh}, ${usd(i.single)} USDC (for: ${note??pe}). Do you know this payee? It is above the AI auto-pay limit and the AI could be tricked: approve only if you mean to pay them. "Trust this payee": ONE Face ID trusts ${whoEn} and pays this ${usd(i.single)} USDC; "Pay just this once": pays only this one, no trust`+(ai?`. The AI calls it "${ai}" (not verified)`:'')+(swap.length?`. Warning: the "${ai}" you approved before has a DIFFERENT address, this may be an impostor`:'');
       return {zh,en,newPayee:true,payeeSwap:swap.length>0,ask:true};}
@@ -224,7 +224,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
       return {zh,en,newPayee:!known,payeeSwap:swap.length>0};}
     if(i.purpose===OVERALL)return {zh:`AI 付款上限：每笔最多 ${usd(i.single)}，每天 ${usd(i.daily)}，总额 ${usd(i.monthly)} USDC`,en:`AI payment limit: up to ${usd(i.single)} per payment, ${usd(i.daily)} a day, ${usd(i.monthly)} total (USDC)`};
     return {zh:`${pn}：每笔最多 ${usd(i.single)}，每天 ${usd(i.daily)}，每月 ${usd(i.monthly)} USDC${who?'，只限 '+who:''}${i.hosts?.length?'，只限 '+i.hosts.join('、'):''}`,en:`${pe}: up to ${usd(i.single)} per payment, ${usd(i.daily)} a day, ${usd(i.monthly)} a month USDC${i.hosts?.length?', only '+i.hosts.join(', '):''}`};}
-  /* t1210 §6#95: push a still-pending, unexpired request to the phone again. Never approves, never creates anything; gate shared by repeat + remind. */
+  /* t1210 decision 95: push a still-pending, unexpired request to the phone again. Never approves, never creates anything; gate shared by repeat + remind. */
   const REPUSH_GAP=300e3;
   function repush(r,{force=false}={}){if(!r||r.state!=='pending')return {pushed:false,error:'not_pending'};
     if(now()-r.created_at>proposalTtl(JSON.parse(r.items_json)))return {pushed:false,error:'expired'};
@@ -244,7 +244,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
     if(now()-r.created_at>proposalTtl(items)){db.prepare(`UPDATE mandate_proposal SET state='expired' WHERE id=?`).run(r.id);return {ok:false,error:'expired'};}
     const ask=isAskItems(items);if(ask&&!askModesFor(items).includes(mode))return {ok:false,error:'mode_required',modes:askModesFor(items)};if(!ask&&mode!==undefined&&mode!==null)return {ok:false,error:'mode_not_allowed'};
     if(!verify(ask?askDigest(wallet,{id:r.id,items,scope:SC},mode):proposalDigest(wallet,{id:r.id,items,scope:SC})))return {ok:false,error:'not_owner'};
-    if(ask){/* t1170u: the server pays this exact request itself (no reusable one_off allowance).
+    if(ask){/* t1170: the server pays this exact request itself (no reusable one_off allowance).
       t1264: 'trust' no longer remembers the payee here (that was BEFORE any payment); the approval flow remembers it only after the payment
       succeeded AND the trust took effect (rememberAfterTrust). The proposal + the ask claim (`also`) commit together or not at all. */const i=items[0];const t=now();
       db.exec('BEGIN');try{const x=db.prepare(`UPDATE mandate_proposal SET state='approved',decided_at=? WHERE id=? AND state='pending'`).run(t,r.id);if(x.changes!==1){db.exec('ROLLBACK');return {ok:false,error:'not_pending'};}
@@ -265,7 +265,7 @@ export function createMandates({db,wallet='',now=()=>Date.now(),nameOf=()=>null,
       db.prepare(`UPDATE mandate_proposal SET state='approved',decided_at=? WHERE id=?`).run(t,r.id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
     return {ok:true,state:'approved',made};}
   const reject=pid=>{const x=db.prepare(`UPDATE mandate_proposal SET state='rejected',decided_at=? WHERE id=? AND state='pending'`).run(now(),String(pid));return {ok:x.changes>0};};
-  /** t1259 (§6#129): the card's payment request can no longer be paid -> the card leaves the home screen (nothing was approved or paid) */
+  /** t1259 (decision 129): the card's payment request can no longer be paid -> the card leaves the home screen (nothing was approved or paid) */
   const expire=pid=>{const x=db.prepare(`UPDATE mandate_proposal SET state='expired',decided_at=? WHERE id=? AND state='pending'`).run(now(),String(pid));return {ok:x.changes>0};};
   const revoke=mid=>{const x=db.prepare(`UPDATE mandate SET state='revoked' WHERE id=? AND state='active'`).run(String(mid));return {ok:x.changes>0};};
   const list=()=>active().filter(m=>m.kind!=='one_off'||m.uses<1).map(m=>({...m,payeeNames:m.payees.map(a=>nameOf(a)),usage:usage(m),human:human({...m,expiresInDays:0})}));

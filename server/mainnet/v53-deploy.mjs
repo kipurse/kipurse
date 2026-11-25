@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1185u (handbook §6#85): V5.3 contract suite (daily on-chain operations cap, default 500/vault, owner-adjustable) - deterministic
+// t1185 (decision 85): V5.3 contract suite (daily on-chain operations cap, default 500/vault, owner-adjustable) - deterministic
 // CREATE2 deploy data. PLAN ONLY: builds calldata for the public deterministic deployer and predicts every address; it never signs
 // or broadcasts. Mainnet deploy needs the owner's explicit confirmation (handbook §9).
 import fs from 'node:fs';import {encodeAbiParameters,concat,keccak256,toHex,getAddress,getContractAddress} from 'viem';

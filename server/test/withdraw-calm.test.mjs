@@ -5,7 +5,7 @@ import {createOwnerWithdraw} from '../src/v5/owner-withdraw.mjs';
 const W='0x1000000000000000000000000000000000000004',O='0x2000000000000000000000000000000000000002',T='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',F='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31';
 const pub=ob=>({readContract:async({functionName,args})=>functionName==='isOwnerAddress'?true:functionName==='balanceOf'?(args[0]===W?20_000_000n:ob):[0n,300000000000n,0n,0n,0n],estimateGas:async()=>60000n,getGasPrice:async()=>10_000_000n});
 const get=async(M,lang='zh')=>{let b='';await M.handle({method:'GET',headers:{'accept-language':lang==='zh'?'zh-CN':'en-US'}},{writeHead(){},setHeader(){},end(x){b=String(x);}},new URL('https://x/owner/withdraw'),{readBody:async()=>({}),ip:'1'});return b;};
-test('withdraw page (t1120u): never asks to fund the Base Account; plain note when the wallet fee is unavailable; money shown as safe; no red',async()=>{
+test('withdraw page (t1120): never asks to fund the Base Account; plain note when the wallet fee is unavailable; money shown as safe; no red',async()=>{
   const low=await get(createOwnerWithdraw({pub:pub(0n),wallet:W,owner:O,token:T,feed:F,script:()=>''}));
   assert.doesNotMatch(low,/id=kpw-fee/);assert.doesNotMatch(low,/先准备一点手续费/);assert.doesNotMatch(low,/kc warn/);assert.match(low,/id=kpw-nowp/);assert.match(low,/暂时不能从钱包扣手续费/);assert.match(low,/钱一直在你的钱包里/);assert.match(low,/0x1000…0004/);assert.match(low,/0x2000…0002/);
   const ok=await get(createOwnerWithdraw({pub:pub(50_000n),wallet:W,owner:O,token:T,feed:F,script:()=>''}));assert.doesNotMatch(ok,/id=kpw-fee/);assert.doesNotMatch(ok,/先准备一点手续费/);assert.match(ok,/id=kpw-box/);

@@ -10,7 +10,7 @@ public enum AssistantData {
     public let label: String       // nickname > "我的 Coinbase 钱包" > merchant name > "收款方"
     public let last4: String
     public let isOwner: Bool
-    /// t1158u: the owner's own name for a payee on his trust list / approved payees (state.payeeBook). Siri sends this name
+    /// t1158: the owner's own name for a payee on his trust list / approved payees (state.payeeBook). Siri sends this name
     /// (payee_name) and the server resolves it again; nil = a payee only known from payment history (sent as the address).
     public let bookName: String?
     public var display: String { "\(label) …\(last4)" }
@@ -41,7 +41,7 @@ public enum AssistantData {
       out.append(Payee(id: opaqueId("p_", a, salt: salt), address: a, label: label, last4: last4(a), isOwner: own, bookName: book))
     }
     if let o = owner { add(o, nil, own: true) }
-    // t1158u: the owner's trust list / approved payees by name (server-filtered: never a "new" address).
+    // t1158: the owner's trust list / approved payees by name (server-filtered: never a "new" address).
     for b in s?.raw["payeeBook"]?.array ?? [] {
       guard let a = b["address"]?.string, let n = b["name"]?.string, let st = b["status"]?.string, st != "new", let nm = safeName(n) else { continue }
       add(a, nm, own: a.lowercased() == owner?.lowercased(), book: n)
@@ -74,7 +74,7 @@ public enum AssistantData {
     let tail = s.hasPrefix("…") || s.hasPrefix("...") ? String(s.drop { $0 == "…" || $0 == "." }) : s
     let direct = list.filter { $0.label.lowercased().contains(s) || s.contains($0.label.lowercased()) || (tail.count == 4 && $0.last4.lowercased() == tail) }
     if !direct.isEmpty { return direct }
-    // t952 A3: nickname / fuzzy match — filler words dropped, then pinyin (with or without tones) or pinyin initials ("xw" -> 小王).
+    // t952 A3: nickname / fuzzy match — filler words dropped, then pinyin (with or without tones) or pinyin initials ("xw" -> [zh]).
     let q = fuzzyKey(s); guard q.count >= 2 else { return [] }
     return list.filter { p in let k = fuzzyKey(p.label.lowercased()); guard !k.isEmpty else { return false }
       return k.contains(q) || q.contains(k) || pinyin(p.label) == pinyin(q) || (q.allSatisfy(\.isASCII) && (pinyin(p.label).contains(q) || initials(p.label) == q)) }
@@ -85,12 +85,12 @@ public enum AssistantData {
     var s = raw.lowercased(); for f in fillers { s = s.replacingOccurrences(of: f, with: "") }
     return String(s.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init))
   }
-  /// Toneless pinyin, no spaces ("小王" -> "xiaowang"); ASCII passes through.
+  /// Toneless pinyin, no spaces ("[zh]" -> "xiaowang"); ASCII passes through.
   public static func pinyin(_ raw: String) -> String {
     let m = NSMutableString(string: fuzzyKey(raw)); CFStringTransform(m, nil, kCFStringTransformToLatin, false); CFStringTransform(m, nil, kCFStringTransformStripDiacritics, false)
     return (m as String).lowercased().replacingOccurrences(of: " ", with: "")
   }
-  /// Pinyin initials ("小王" -> "xw").
+  /// Pinyin initials ("[zh]" -> "xw").
   public static func initials(_ raw: String) -> String {
     let m = NSMutableString(string: fuzzyKey(raw)); CFStringTransform(m, nil, kCFStringTransformToLatin, false); CFStringTransform(m, nil, kCFStringTransformStripDiacritics, false)
     return (m as String).lowercased().split(separator: " ").compactMap(\.first).map(String.init).joined()

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1238 (handbook §6#109, owner chose ①): after the owner's wallet is moved to a NEW key-seat wallet on V5.4, the phone must (a) compute the
+/// t1238 (decision 109, owner chose (1)): after the owner's wallet is moved to a NEW key-seat wallet on V5.4, the phone must (a) compute the
 /// same new wallet and seat as the server did, from the owner's Coinbase account alone, and (b) treat the new wallet as V5.4 only when the
 /// server's vault is exactly that wallet's V5.4 vault AND the vault has code on chain. Addresses are from the Base-fork rehearsal
 /// (work/t1214/deploy/t1238-move-seat-fork-report.json), built by the server's move-seat.mjs; in this public repo the owner and every derived address are synthetic (never used on chain).

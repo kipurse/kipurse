@@ -4,7 +4,7 @@
 /scripts/guard.config.json @kipurse
 /public-addresses.txt @kipurse
 /private-denylist.sha256 @kipurse
-/spdx-baseline.txt @kipurse
+/scripts/spdx-baseline.txt @kipurse
 /.gitleaks.toml @kipurse
 /.github/ @kipurse
 /CLA.md @kipurse

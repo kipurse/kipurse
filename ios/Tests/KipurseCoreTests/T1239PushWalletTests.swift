@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1239 (handbook §6#109): after the owner's wallet moved, the phone's APNs token (unchanged) must be uploaded again for the new wallet.
+/// t1239 (decision 109): after the owner's wallet moved, the phone's APNs token (unchanged) must be uploaded again for the new wallet.
 final class T1239PushWalletTests: XCTestCase {
   let tok = "ab12", oldW = "0x515010c2e41F98CdDd76B819EE69DC832c0939B6", newW = "0xeF6B64EB64a7f28215b0b97d51a2008458BF0dEb"
   func testSameTokenNewWalletUploadsAgain() {

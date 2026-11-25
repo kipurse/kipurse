@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1255 (handbook §6#124): Face ID locked by iOS gets its own guidance; it is never shown as "cancelled" or "approval key invalid".
+/// t1255 (decision 124): Face ID locked by iOS gets its own guidance; it is never shown as "cancelled" or "approval key invalid".
 final class T1255FaceIDLockoutTests: XCTestCase {
   let la = "com.apple.LocalAuthentication"
   func testLockoutMapsToLockout() {

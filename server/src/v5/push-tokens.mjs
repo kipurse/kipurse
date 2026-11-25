@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The APNs tokens of one wallet (KV push:<wallet>:tokens, at most 5). t1243 (handbook §6#113): a phone that uploads a NEW token names its
+// The APNs tokens of one wallet (KV push:<wallet>:tokens, at most 5). t1243 (decision 113): a phone that uploads a NEW token names its
 // previous one as `replaces`; that old token leaves THIS wallet's list (never another wallet's) so one notification reaches the phone once.
 // The route calling register() requires the phone session (only the owner's own phone can change the list).
 export const TOKEN_RE=/^[0-9a-f]{32,200}$/i;

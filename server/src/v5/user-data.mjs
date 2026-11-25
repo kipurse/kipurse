@@ -6,7 +6,7 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';import {p256VerifyDigest} from './phone-signer.mjs';import {kvKey} from './store.mjs';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 export const eraseDigest=(wallet,nonce)=>'0x'+sha(`Kipurse erase all my data v1\nwallet:${String(wallet).toLowerCase()}\nnonce:${nonce}`);
-// t784 (owner t783u): backups must forget erased users too. Each erase appends a TOMBSTONE (salted SHA-256 of the wallet + time, no address)
+// t784 (owner t783): backups must forget erased users too. Each erase appends a TOMBSTONE (salted SHA-256 of the wallet + time, no address)
 // to a file OUTSIDE data/ (shared/tombstones). On every boot the runtime re-runs the same erase for any tombstoned wallet whose state predates
 // the tombstone (= data restored from an older backup). Backups are kept 7 days, so an erased user is gone from every backup within 7 days.
 /* t1265: v1 tombstones were an UNSALTED sha256 of the address (anyone with the file could test a known address). New tombstones are
@@ -60,7 +60,7 @@ export function revokeAllAgents(S,save,agents,kv=null){const r=new Set((S.revoke
 /** Multi-instance: apply revocations other workers wrote to the shared KV. Returns how many agents were newly disabled. */
 export function reloadRevocations(kv,agents){let n=0;const hs=new Set(kv.list(kvKey('revoked-agent',null,'')).map(e=>e.k.split(':').pop()));
   for(const a of agents??[])if(!a.disabled&&a.tokenSha256&&hs.has(String(a.tokenSha256).toLowerCase())){a.disabled=true;n++;}return n;}
-/** t1247 (§6#117, App Review 5.1.1(v)): KV records keyed by wallet that the erase must also remove — push device tokens (+ the one-time
+/** t1247 (decision 117, App Review 5.1.1(v)): KV records keyed by wallet that the erase must also remove — push device tokens (+ the one-time
  *  move flag) and the Apple Pay onramp verification (email / phone, kept 61 days) with its orders. */
 /** t1265 adds: the sign-in read grant (phone key + owner), Coinbase onramp sessions (onramp:<w>:<ref>), the owner's inline V5.5 trusts,
  *  V5.4 signer grants (+ their signer / list indexes), and the per-wallet migration record (kept only as the permission fields the runtime

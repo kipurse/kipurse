@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1259 (handbook §6#129): a closed (expired / unpayable) request shows a plain reason, never a bare "422".
+/// t1259 (decision 129): a closed (expired / unpayable) request shows a plain reason, never a bare "422".
 final class T1259AskGoneTests: XCTestCase {
   func testGoneIsRecognised() {
     XCTAssertTrue(OwnerAsk.isGone(status: 410, error: "request_gone"))

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// t1238 (handbook §6#108 / §6#109): Face ID KEY SEAT. Coinbase's Base Account popup refuses every wallet owner change, so key-seat
+/// t1238 (decision 108 / decision 109): Face ID KEY SEAT. Coinbase's Base Account popup refuses every wallet owner change, so key-seat
 /// wallets get ALL owners when the Coinbase factory creates them: [your Coinbase wallet, your key seat, SpendPermissionManager].
 /// The phone key lives IN the seat; a new phone / Face ID off is wallet.execute(seat, 0, setKey|clearKey). No owner is ever added or removed.
 /// Everything here is computed on the phone from public code; nothing comes from the server.
@@ -101,7 +101,7 @@ public enum KeySeat {
     "800990099156feffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551a26469706673582212208ed121f5729accb0f7d8122e76f3105f4816e027728b655479a32d8a2878aa9d64736f6c63430008250033",
   ].joined()
   public static let salt = Hex.encode(Keccak.hash(Array("kipurse-key-seat-v1".utf8)))
-  /// t1250 (handbook §6#119): KipurseKeySeatV2 belongs to the V5.5 suite only (its trust is immutable). A seat for the V5.5 trust is ALWAYS V2
+  /// t1250 (decision 119): KipurseKeySeatV2 belongs to the V5.5 suite only (its trust is immutable). A seat for the V5.5 trust is ALWAYS V2
   /// (salt "kipurse-key-seat-v2", V2 creation code); every other trust keeps the V1 seat exactly as before. Same setKey / clearKey ABI.
   public static let saltV2 = Hex.encode(Keccak.hash(Array("kipurse-key-seat-v2".utf8)))
   public static let versionV2 = "seat2"

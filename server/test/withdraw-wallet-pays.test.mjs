@@ -23,14 +23,14 @@ test('quote + page: wallet pays when configured; owner-short fee card disappears
   assert.equal(q.feePaidBy,'wallet');assert.ok(BigInt(q.walletPays.fee)>0n&&BigInt(q.walletPays.fee)<=WITHDRAW_MAX_WALLET_FEE);assert.equal(BigInt(q.walletPays.receive)+BigInt(q.walletPays.fee),20_000_000n);
   const h=(await req(M,'GET','/owner/withdraw')).b;assert.match(h,/你会收到/);assert.match(h,/从钱包里扣/);assert.doesNotMatch(h,/id=kpw-fee/);assert.doesNotMatch(h,/#c81e1e/i);
   // off by default (no fee address) -> old behaviour unchanged
-  const off=mk();const q0=(await req(off,'POST','/owner/withdraw/quote')).j;assert.equal(q0.walletPays,null);assert.equal(q0.feePaidBy,'owner_base_account');{const h=(await req(off,'GET','/owner/withdraw')).b;assert.doesNotMatch(h,/id=kpw-fee/);assert.doesNotMatch(h,/0\.05/);assert.match(h,/id=kpw-nowp/);}   // t1120u: never the Base-funding card
+  const off=mk();const q0=(await req(off,'POST','/owner/withdraw/quote')).j;assert.equal(q0.walletPays,null);assert.equal(q0.feePaidBy,'owner_base_account');{const h=(await req(off,'GET','/owner/withdraw')).b;assert.doesNotMatch(h,/id=kpw-fee/);assert.doesNotMatch(h,/0\.05/);assert.match(h,/id=kpw-nowp/);}   // t1120: never the Base-funding card
   const busy=mk({feeTo:FEE,walletPays:{...wp(),available:()=>false}});assert.equal((await req(busy,'POST','/owner/withdraw/quote')).j.walletPays,null);});
 
 test('prepare: wallet shape only when the page asks AND the sponsor registers it; old pages keep the old shape',async()=>{const reg=[];
   const M=mk({feeTo:FEE,walletPays:wp(reg)});const old=(await req(M,'POST','/owner/withdraw/prepare',{})).j;assert.equal(old.feeFrom,'owner');assert.equal(old.calls.length,1);assert.equal(reg.length,0);
   const n=(await req(M,'POST','/owner/withdraw/prepare',{feeFrom:'wallet',to:EVIL,feeTo:EVIL})).j;assert.equal(n.feeFrom,'wallet');assert.equal(n.feeTo,FEE);assert.equal(n.owner,O);
   assert.match(n.paymaster,/\/onboard\/new\/paymaster\?id=wd-/);assert.equal(checkWalletPaysCalls(n.calls,{wallet:W,owner:O,token:T,feeTo:FEE}),null);assert.equal(reg[0].reimburse,BigInt(n.fee));
-  const no=mk({feeTo:FEE,walletPays:{available:()=>true,register:async()=>null}});{const r=await req(no,'POST','/owner/withdraw/prepare',{feeFrom:'wallet'});assert.equal(r.code,400);assert.equal(r.j.error,'wallet_fee_unavailable','t1120u: sponsor refused -> clear error, no silent owner-pays plan');}});
+  const no=mk({feeTo:FEE,walletPays:{available:()=>true,register:async()=>null}});{const r=await req(no,'POST','/owner/withdraw/prepare',{feeFrom:'wallet'});assert.equal(r.code,400);assert.equal(r.j.error,'wallet_fee_unavailable','t1120: sponsor refused -> clear error, no silent owner-pays plan');}});
 
 test('confirm: wallet-pays succeeds when the owner got amount minus fee',async()=>{const p=pub(0n);const M=mk({pub:p,feeTo:FEE,walletPays:wp()});
   const n=(await req(M,'POST','/owner/withdraw/prepare',{feeFrom:'wallet'})).j;p.set(BigInt(n.receive));const r=(await req(M,'POST','/owner/withdraw/confirm',{id:n.id})).j;
@@ -39,7 +39,7 @@ test('confirm: wallet-pays succeeds when the owner got amount minus fee',async()
 const EXEC=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']);const EP='0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 const op=(cs,o={})=>({sender:O,callData:encodeFunctionData({abi:EXEC,functionName:'executeBatch',args:[cs.map(c=>({target:c.to,value:BigInt(c.value),data:c.data}))]}),callGasLimit:'0x1e8480',verificationGasLimit:'0x30d40',preVerificationGas:'0xc350',maxFeePerGas:'0x5b8d80',...o});
 test('sponsor: withdraw kind fronts gas only for the exact batch that repays at least the gas cost',async()=>{
-  const mkS=(cfg={})=>createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008u)*/cfg:{url:'https://pm.example/x',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25,...cfg},kv:createMemoryKV(),reg:{byOwner:()=>[{wallet:W}]},ethUsd8:async()=>300000000000n,lookup:()=>null,
+  const mkS=(cfg={})=>createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008)*/cfg:{url:'https://pm.example/x',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25,...cfg},kv:createMemoryKV(),reg:{byOwner:()=>[{wallet:W}]},ethUsd8:async()=>300000000000n,lookup:()=>null,
     fetchImpl:async()=>({json:async()=>({result:{paymaster:'0x9',paymasterData:'0x'}})})});
   const c=withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:20_000_000n,fee:50_000n,feeTo:FEE});let s=mkS();
   const id=s.registerWithdraw('p1',{owner:O,wallet:W,calls:c,reimburse:50_000n});assert.match(id,/^wd-/);
@@ -67,15 +67,15 @@ test('page guard: wallet-pays batch allowed only to signer + baked-in fee addres
   const OFF=hdr('')({hash:'',pathname:'/'},{documentElement:{lang:'zh'}},globalThis.crypto);await assert.rejects(OFF.kpVH(send(ok)),'off without a baked-in fee address');
   for(const f of ['owner-sign/static/withdraw.js'])assert.match(fs.readFileSync(f,'utf8'),/kpVHWP/);});
 
-// t763u: Kipurse never keeps a cost
+// t763: Kipurse never keeps a cost
 import {WITHDRAW_REAL_GAS} from '../src/v5/owner-withdraw.mjs';
-test('t763u: withdraw fee >= realistic real cost (300k gas x 1.4) and carries any dues; dues marked paid on confirm',async()=>{
+test('t763: withdraw fee >= realistic real cost (300k gas x 1.4) and carries any dues; dues marked paid on confirm',async()=>{
   let paid=0n;const p=pub(0n);const M=mk({pub:p,feeTo:FEE,walletPays:{...wp(),dues:()=>30_000n,paid:n=>{paid+=n;}}});const q=(await req(M,'POST','/owner/withdraw/quote')).j.walletPays;
   const per=600n/60000n;void per;const sane=(BigInt(q.gasFee));const realNow=WITHDRAW_REAL_GAS*10_000_000n*3000n/10n**12n; // 300k x 0.01 gwei x $3000 in USDC atomic
   assert.ok(sane>=realNow,`gasFee ${sane} >= real ${realNow}`);assert.equal(BigInt(q.fee),BigInt(q.gasFee)+30_000n);assert.equal(q.dues,'30000');
   const n=(await req(M,'POST','/owner/withdraw/prepare',{feeFrom:'wallet'})).j;assert.equal(n.dues,'30000');p.set(BigInt(n.receive));assert.equal((await req(M,'POST','/owner/withdraw/confirm',{id:n.id})).j.ok,true);assert.equal(paid,30_000n);});
-test('t763u: sponsor refuses a withdraw whose fee is below the sane real cost now; onboarding gas becomes wallet dues',async()=>{
-  const mkS=gp=>createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008u)*/cfg:{url:'https://pm.example/x',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25},kv:createMemoryKV(),reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:id=>id==='n1'?{state:'prepared',kind:'new',owner:O,expect:O,wallet:W,callsHash:callsHash(c),allowed:[W]}:null,gasPrice:async()=>gp,
+test('t763: sponsor refuses a withdraw whose fee is below the sane real cost now; onboarding gas becomes wallet dues',async()=>{
+  const mkS=gp=>createOnboardSponsor({onboardOn:true,/*legacy mechanism test; production default off (t1008)*/cfg:{url:'https://pm.example/x',maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25},kv:createMemoryKV(),reg:{byOwner:()=>[]},ethUsd8:async()=>300000000000n,lookup:id=>id==='n1'?{state:'prepared',kind:'new',owner:O,expect:O,wallet:W,callsHash:callsHash(c),allowed:[W]}:null,gasPrice:async()=>gp,
     fetchImpl:async()=>({json:async()=>({result:{paymaster:'0x9',paymasterData:'0x'}})})});
   const c=withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:20_000_000n,fee:20_000n,feeTo:FEE});let s=mkS(10_000_000n); // real now = 300k*0.01gwei*1.1*$3000 = 0.0099
   assert.equal(await s.gate(s.registerWithdraw('a',{owner:O,wallet:W,calls:c,reimburse:20_000n}),'pm_getPaymasterData',[op(c),EP,'0x2105']),null);

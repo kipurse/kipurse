@@ -1,8 +1,8 @@
-// t1097: allowlisted wallets pay a safety-cap change from their own USDC. Everyone else keeps the Base Account float + refund.
+// t1097 / t1123: wallets pay a safety-cap change from their own USDC (t147: the Pimlico allowlist path is removed).
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {createPublicLimits} from '../src/v5/limits-public.mjs';
 import {wrap} from '../owner-sign/guard/apply.mjs';
-import {limitsWalletFee,limitsWalletPaysFee,limitsChangeFee,limitsWalletFeeCap,limitsWalletPaysAllowlist,walletPaysLimits,erc20PaymasterURL,rewritePaymasterBody,sanitizePaymasterResponse,limitsChangeCalls,limitsTokenApprove,limitsPaymasterApprove,parseTokenQuote,LIMITS_REFUND_GAS,ERC20_PAYMASTER,ENTRYPOINT_V06,BASE_USDC,LIMITS_PAYMASTER_METHODS} from '../src/v5/limits-fee.mjs';
+import {limitsWalletFee,limitsChangeFee,limitsWalletFeeCap,limitsChangeCalls,LIMITS_REFUND_GAS,BASE_USDC} from '../src/v5/limits-fee.mjs';
 const O='0x'+'1'.repeat(40),W='0x'+'2'.repeat(40);
 const tiny={callGas:1n,gasPriceWei:1n,ethUsd8:1n};
 async function call(L,path,body,method='POST',headers={}){let code,out='',hdr={};const res={writeHead:(c,h)=>{code=c;hdr=h??{};},end:s=>{out=s??'';}};
@@ -10,37 +10,11 @@ async function call(L,path,body,method='POST',headers={}){let code,out='',hdr={}
 function lim(extra){const calls=[];const L=createPublicLimits({base:()=>'https://x',current:async()=>null,confirm:async()=>({valid:true,permissionHash:'0x1'}),script:()=>'',
   plan:async()=>({owner:O,wallet:W,chainId:8453,human:[],labels:[],calls:[{to:W,value:'0x0',data:'0x34fcd5be'}],raw:{},...extra.plan}),
   sponsor:extra.sponsor??(async()=>null),fee:extra.fee,feeQuote:extra.feeQuote??(async()=>null),refund:extra.refund??(()=>{throw Error('refund');}),
-  walletPaymaster:extra.walletPaymaster??(()=>null),paymasterFetch:extra.paymasterFetch??(async()=>{throw Error('fetch');}),
-  erc20URL:extra.erc20URL??(()=>'https://public.pimlico.io/v2/8453/rpc'),walletFee:extra.walletFee});return {L,calls};}
-test('allowlist empty keeps every wallet off the new path',()=>{
-  assert.deepEqual(limitsWalletPaysAllowlist({KIPURSE_LIMITS_WALLET_PAYS_ALLOWLIST:''}),[]);
-  assert.equal(walletPaysLimits(W,{}),false);
-  assert.equal(walletPaysLimits(W,{KIPURSE_LIMITS_WALLET_PAYS_ALLOWLIST:'not-an-address,,  '}),false);
-  assert.equal(walletPaysLimits(W,{KIPURSE_LIMITS_WALLET_PAYS_ALLOWLIST:' '+W.toUpperCase()+' , 0xzz'}),true);
-  assert.equal(walletPaysLimits(O,{KIPURSE_LIMITS_WALLET_PAYS_ALLOWLIST:W}),false);});
+  walletFee:extra.walletFee});return {L,calls};}
 test('fee cap defaults to 0.01 USDC and is configurable',()=>{
   assert.equal(limitsWalletFeeCap({}),10_000n);
   assert.equal(limitsWalletFeeCap({KIPURSE_LIMITS_WALLET_FEE_CAP:'0.02'}),20_000n);
   assert.equal(limitsWalletFeeCap({KIPURSE_LIMITS_WALLET_FEE_CAP:'nope'}),10_000n);});
-test('erc20 paymaster URL is not the onboarding paymaster',()=>{
-  assert.equal(erc20PaymasterURL({}),'https://public.pimlico.io/v2/8453/rpc');
-  assert.equal(erc20PaymasterURL({KIPURSE_ERC20_PAYMASTER_URL:'https://rpc.example/v2/8453/rpc',KIPURSE_ONBOARD_PAYMASTER_URL:'https://other.example/pm'}),'https://rpc.example/v2/8453/rpc');
-  assert.throws(()=>erc20PaymasterURL({KIPURSE_ERC20_PAYMASTER_URL:'https://same.example/pm',KIPURSE_ONBOARD_PAYMASTER_URL:'https://same.example/pm'}),/onboard paymaster/);});
-test('direct quote has no refund gas and no Base float',()=>{
-  const f=limitsWalletPaysFee({...tiny,walletUSDC:1_000_000n});
-  assert.equal(f.reason,null);assert.equal(f.fromWallet,true);assert.equal(f.walletPays,false);assert.equal(f.floatNeed,undefined);
-  assert.equal(f.gas,1n+150_000n);
-  const old=limitsChangeFee({...tiny,payerUSDC:10n**6n,walletUSDC:10n**6n});
-  assert.equal(old.gas,f.gas+LIMITS_REFUND_GAS);assert.equal(old.reason,null);
-  const cap=limitsWalletPaysFee({...tiny,walletUSDC:100n,cap:1n});assert.equal(cap.usdc,1n);assert.equal(cap.reason,'kipurse_balance_insufficient_for_fee');
-  const under=limitsWalletPaysFee({...tiny,walletUSDC:100n,cap:2n});assert.equal(under.reason,null);
-  const low=limitsWalletPaysFee({...tiny,walletUSDC:0n});assert.equal(low.reason,'kipurse_balance_insufficient_for_fee');
-  const big=limitsWalletPaysFee({callGas:200000n,gasPriceWei:10n**12n,ethUsd8:4000_00000000n,walletUSDC:10n**18n});
-  assert.equal(big.reason,'kipurse_balance_insufficient_for_fee');assert.ok(big.usdc>=10_000n);
-  const sized=limitsTokenApprove({gasWei:10n**15n,gasPriceWei:1n,postOpGas:0n,exchangeRate:5_000n*10n**3n,marginBps:2_000n});
-  assert.equal(sized.ok,true);assert.equal(sized.quote,5_000n);assert.equal(sized.amount,6_000n);
-  const tooBig=limitsTokenApprove({gasWei:10n**18n,gasPriceWei:1n,postOpGas:0n,exchangeRate:10n**18n});
-  assert.equal(tooBig.ok,false);assert.equal(tooBig.reason,'kipurse_balance_insufficient_for_fee');});
 test('cap-change calls drop the approve and the refund when the wallet pays',()=>{
   const change={to:W,data:'0xabc'},approve={to:O,data:'0xapp'};
   assert.deepEqual(limitsChangeCalls({direct:true,approveCall:approve,changeCall:change}),[change]);
@@ -53,10 +27,10 @@ test('old path still 402s for a missing Base float and still appends the refund'
     refund:fee=>{n++;assert.equal(fee,1000n);return {to:W,value:'0x0',data:'0xrefund'};}});
   const b=await call(on.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(b.code,200);assert.equal(b.j.calls.length,2);assert.equal(b.j.calls[1].data,'0xrefund');assert.equal(n,1);assert.equal(b.j.feeFrom,undefined);});
-// t1123u: the t1105 relay (wallet -> owner, approve Pimlico) is replaced by the t752 withdraw shape: wallet -> official fee address, cap change.
+// t1123: the t1105 relay (wallet -> owner, approve Pimlico) is replaced by the t752 withdraw shape: wallet -> official fee address, cap change.
 const WF={feeTo:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',available:()=>true,register:async id=>'https://x/onboard/new/paymaster?id=lw-'+id};
 const change34={to:W,value:'0x0',data:'0x34fcd5be'+'0'.repeat(64)};
-test('new path (t1123u): wallet -> official fee address F, cap change, from the owner, existing sponsor; no Pimlico, nothing to the owner',async()=>{
+test('new path (t1123): wallet -> official fee address F, cap change, from the owner, existing sponsor; no Pimlico, nothing to the owner',async()=>{
   let sponsored=0,refunded=0;
   const {L}=lim({plan:{fromWallet:true,calls:[change34]},fee:async()=>limitsWalletFee({...tiny,walletUSDC:1_000_000n}),
     sponsor:async()=>{sponsored++;return 'https://x/onboard/new/paymaster?id=1';},refund:()=>{refunded++;throw Error('refund');},walletFee:WF});
@@ -85,59 +59,3 @@ test('new path refuses a fee at the cap and a wallet that cannot cover it, with 
   const closed=lim({plan:{fromWallet:true,calls:[change34]},fee:async()=>limitsWalletFee({...tiny,walletUSDC:1_000_000n})});
   const c=await call(closed.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(c.code,503);assert.equal(c.j.error,'wallet_fee_unavailable');assert.equal(c.j.calls,undefined);});
-test('paymaster proxy forwards only the three read methods and forces Base USDC',async()=>{
-  const seen=[];const pm='0x6666666666667849c56f2850848ce1c4da65c68b';
-  const {L}=lim({walletPaymaster:()=>'https://x/owner/limits/paymaster',paymasterFetch:async body=>{seen.push(body);return {jsonrpc:'2.0',id:body.id,result:{paymasterAndData:pm+'ab'.repeat(32)}};}});
-  const bad=await call(L,'/owner/limits/paymaster',{jsonrpc:'2.0',id:1,method:'eth_sendTransaction',params:[{to:O}]});
-  assert.equal(bad.code,400);assert.equal(bad.j.error,'method_not_allowed');assert.equal(seen.length,0);
-  const sponsor=await call(L,'/owner/limits/paymaster',{method:'pm_sponsorUserOperation',params:[]});
-  assert.equal(sponsor.code,400);assert.equal(sponsor.j.error,'method_not_allowed');
-  for(const method of LIMITS_PAYMASTER_METHODS){
-    if(method==='pimlico_getTokenQuotes')continue;
-    const r=await call(L,'/owner/limits/paymaster',{jsonrpc:'2.0',id:7,method,params:[{sender:W},'0xdead',8453,{token:'0x'+'11'.repeat(20)}]});
-    assert.equal(r.code,200,method);assert.equal(r.j.error,undefined,method);
-  }
-  const last=seen.at(-1);assert.equal(last.params[1],ENTRYPOINT_V06);assert.equal(last.params[3].token,BASE_USDC);assert.notEqual(last.params[3].token.toLowerCase(),'0x'+'11'.repeat(20));
-  const quotes=lim({walletPaymaster:()=>'https://x/owner/limits/paymaster',paymasterFetch:async body=>({jsonrpc:'2.0',id:body.id,result:{quotes:[{token:BASE_USDC,exchangeRate:'1'},{token:'0x'+'22'.repeat(20),exchangeRate:'2'}]}})});
-  const q=await call(quotes.L,'/owner/limits/paymaster',{method:'pimlico_getTokenQuotes',params:[{tokens:['0x'+'22'.repeat(20)]}]});
-  assert.equal(q.code,200);assert.equal(q.j.result.quotes.length,1);assert.equal(q.j.result.quotes[0].token,BASE_USDC);
-  const wrong=lim({walletPaymaster:()=>'https://x/owner/limits/paymaster',paymasterFetch:async()=>({jsonrpc:'2.0',id:1,result:{paymaster:'0x'+'11'.repeat(20)}})});
-  const w=await call(wrong.L,'/owner/limits/paymaster',{method:'pm_getPaymasterData',params:[{},ENTRYPOINT_V06,'0x2105',{}]});
-  assert.equal(w.j.error.message,'paymaster');
-  const closed=lim({walletPaymaster:()=>null});
-  assert.equal((await call(closed.L,'/owner/limits/paymaster',{method:'pm_getPaymasterStubData',params:[]})).code,404);
-  const onboard=lim({walletPaymaster:()=>'https://x/onboard/new/paymaster?id=1'});
-  assert.equal((await call(onboard.L,'/owner/limits/paymaster',{method:'pm_getPaymasterStubData',params:[]})).code,404);
-  const rw=rewritePaymasterBody({method:'eth_call',params:[]});assert.equal(rw.error,'method_not_allowed');
-  assert.equal(sanitizePaymasterResponse('pm_getPaymasterStubData',{result:{paymaster:ERC20_PAYMASTER}}).result.paymaster,ERC20_PAYMASTER);});
-test('shipped limits page sends the wallet-pays batch only through the guard',()=>{
-  const consent=fs.readFileSync(new URL('../owner-sign/consent/limits.js',import.meta.url),'utf8');
-  const bundled=fs.readFileSync(new URL('../owner-sign/static/limits.js',import.meta.url),'utf8');
-  assert.equal((consent.match(/wallet_sendCalls/g)??[]).length,2);
-  assert.match(consent,/feeFrom==='kipurse_wallet_relay'/);assert.doesNotMatch(consent,/from:pl\.wallet/);
-  assert.match(bundled,/e\.feeFrom==="kipurse_wallet_relay"/);assert.doesNotMatch(bundled,/from:e\.wallet/);
-  assert.equal(wrap(bundled).n,0);assert.equal(wrap(consent).n,0);
-  const launch=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
-  assert.match(launch,/\/owner\/limits\/paymaster/);assert.match(launch,/limitsWalletPaysFee/);
-  assert.match(launch,/KIPURSE_ONBOARD_PAYMASTER_URL:ONBOARD_PM_URL/);
-  assert.doesNotMatch(launch,/KIPURSE_ERC20_PAYMASTER_URL\s*=\s*process\.env\.KIPURSE_ONBOARD_PAYMASTER_URL/);
-  assert.doesNotMatch(consent,/wallet_addSubAccount/);assert.doesNotMatch(consent,/type:'deployed'/);
-  assert.doesNotMatch(bundled,/type:"deployed",address:e\.wallet/);
-  const pub=fs.readFileSync(new URL('../src/v5/limits-public.mjs',import.meta.url),'utf8');
-  assert.match(pub,/修改钱包安全上限/);assert.doesNotMatch(pub,/修改 AI 付款上限/);
-  const q=rewritePaymasterBody({method:'pimlico_getTokenQuotes',params:[{tokens:['0x'+'11'.repeat(20)]},'0xdead','0x1']});
-  assert.equal(q.body.params[0].tokens[0],BASE_USDC);assert.equal(q.body.params[1],ENTRYPOINT_V06);assert.equal(q.body.params[2],'0x2105');
-  const parsed=parseTokenQuote({result:{quotes:[{token:BASE_USDC,paymaster:ERC20_PAYMASTER,postOpGas:'0x10',exchangeRate:'0x2a'},{token:'0x'+'22'.repeat(20),paymaster:ERC20_PAYMASTER,exchangeRate:'0x1'}]}});
-  assert.equal(parsed.exchangeRate,42n);assert.equal(parsed.postOpGas,16n);});
-test('paymaster proxy answers CORS for the Coinbase wallet and the sign host',async()=>{
-  const {L}=lim({walletPaymaster:()=>'https://x/owner/limits/paymaster',paymasterFetch:async()=>({jsonrpc:'2.0',id:1,result:{paymasterAndData:ERC20_PAYMASTER+'ab'}})});
-  const ok=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://keys.coinbase.com'});
-  assert.equal(ok.code,204);assert.equal(ok.hdr['access-control-allow-origin'],'https://keys.coinbase.com');assert.match(ok.hdr['access-control-allow-methods'],/POST/);
-  const sign=await call(L,'/owner/limits/paymaster',{method:'pm_getPaymasterStubData',params:[{},ENTRYPOINT_V06,'0x2105',{token:'0x'+'11'.repeat(20)}]},'POST',{origin:'https://sign.kipurse.com'});
-  assert.equal(sign.code,200);assert.equal(sign.hdr['access-control-allow-origin'],'https://sign.kipurse.com');
-  const wallet=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://wallet.coinbase.com'});
-  assert.equal(wallet.code,204);assert.equal(wallet.hdr['access-control-allow-origin'],'https://wallet.coinbase.com');
-  const evil=await call(L,'/owner/limits/paymaster',{},'OPTIONS',{origin:'https://evil.example'});
-  assert.equal(evil.code,403);assert.equal(evil.hdr['access-control-allow-origin'],undefined);
-  const page=await call(L,'/owner/limits?single=1&daily=5&term=20',{},'GET',{'x-kp-lang':'zh'});
-  assert.match(page.out,/修改钱包安全上限/);assert.doesNotMatch(page.out,/修改 AI 付款上限/);});

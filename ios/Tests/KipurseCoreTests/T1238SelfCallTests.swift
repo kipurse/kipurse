@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1238 (handbook §6#106): Coinbase refuses top-level owner calls ("Account owner or upgrade calls are not allowed."), so the server
+/// t1238 (decision 106): Coinbase refuses top-level owner calls ("Account owner or upgrade calls are not allowed."), so the server
 /// now sends owner changes as wallet.execute(wallet, 0, addOwnerAddress/removeOwnerAtIndex(...)). The phone must check the INNER call
 /// with exactly the same rules as the old top-level form, and refuse every other self-call.
 final class T1238SelfCallTests: XCTestCase {

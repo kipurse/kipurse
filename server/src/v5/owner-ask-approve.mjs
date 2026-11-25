@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1170u (handbook §6#82): the owner's answer to an owner ask ("do you know this payee?"), from the app card only (phone session).
+// t1170 (decision 82): the owner's answer to an owner ask ("do you know this payee?"), from the app card only (phone session).
 //   prepare {id, mode}  -> what the phone signs, each part re-computed and checked ON THE PHONE before Face ID:
 //       sign  : the card text + mode (sha256, the existing mandate format plus "\nmode:<trust|once>")
 //       pay   : wallet.replaySafeHash(adapter.approvalDigest(purchaseKey, payee, amount, deadline)) - the owner's on-chain approval
@@ -7,7 +7,7 @@
 //               the wallet limits, 90 days
 //   approve {id, mode, r, s, pay:{r,s}, trust:{r,s}} -> ONE Face ID on the phone made all signatures. The server verifies every one,
 //       marks the card approved (a second approval -> already handled), pays THIS request once (derived idempotency key) with the
-//       owner's approval and stores the result for the AI; then (mode trust, t1243 §6#113) adds the trust in the background, after the payment.
+//       owner's approval and stores the result for the AI; then (mode trust, t1243 decision 113) adds the trust in the background, after the payment.
 // The AI can never call any of this (phone session + phone key signatures only).
 import {phonePayWrapper} from './owner-pay.mjs';import {phoneTrustWrapper} from './phone-signer.mjs';import {ownerKey} from './owner-ask.mjs';import {TRUST_DEFAULTS} from './engine.mjs';
 import {parseAbi,getAddress} from 'viem';import {withFeeHeadroom} from './abi.mjs';
@@ -15,7 +15,7 @@ const CBSW=parseAbi(['function replaySafeHash(bytes32 hash) view returns (bytes3
 const J=x=>JSON.parse(JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v));
 const min=(...a)=>a.filter(x=>x!=null).reduce((m,x)=>x<m?x:m);
 const short=a=>{const s=String(a??'');return s.slice(0,6)+'…'+s.slice(-4);};
-/** t1258 (handbook 0A #10, §6#128): THE daily cap a trust carries on chain. V5.4 / V5.5 count amount + protocol fee against every
+/** t1258 (handbook 0A #10, decision 128): THE daily cap a trust carries on chain. V5.4 / V5.5 count amount + protocol fee against every
  *  daily cap, so the owner's daily limit gets fee headroom: withFeeHeadroom(daily, ppm) (ppm = the live fee, <= the 0.1% the owner signed).
  *  Used by the inline (kind 6) path here and mirrored by engine.trustRequest for stored trusts; the iOS check uses the same formula. */
 export const MAX_FEE_PPM=1000n;
@@ -29,14 +29,14 @@ export function createOwnerAskApproval({engine,phone,pub,wallet,everyday,walletC
   const ASK=()=>engine.ownerAsks,M=()=>engine.mandates;const prepared=new Map();const trustJobs=new Map();
   const gc=()=>{for(const [k,v] of prepared)if(now()-v.at>prepTtlMs)prepared.delete(k);};
   const TO=()=>{const o=trustOwner?.();return o?{approve:id=>o.api.approve(o.cap,id),submit:(id,w)=>o.api.submitSignature(o.cap,id,w,{prewrapped:true}),reject:id=>o.api.reject(o.cap,id),list:()=>o.api.list(o.cap)}:null;};
-  /* t1259 (§6#129): the request can no longer be paid (the merchant order expired / is gone): closed, nothing paid, the AI must order again */
+  /* t1259 (decision 129): the request can no longer be paid (the merchant order expired / is gone): closed, nothing paid, the AI must order again */
   const GONE=code=>({error:'request_gone',code,state:'expired',nothingPaid:true,detail:'这笔付款请求已经过期或不能再付（比如商家订单超过了有效期），已经从列表移除，没有付款。请让 AI 重新下单。 / This payment request expired or can no longer be paid (for example the merchant order timed out). It was removed; nothing was paid. Ask the AI to order again.'});
   const dropTrust=c=>{if(c?.trust?.id){try{TO()?.reject(c.trust.id);}catch{}}};
   async function prepare(b){gc();const id=String(b?.id??''),mode=String(b?.mode??'');if(!['trust','once'].includes(mode))return [400,{error:'bad_mode'}];
     const a=ASK().get(id);if(!a)return [404,{error:'unknown_ask'}];if(a.state==='expired'){try{M().expire?.(id);}catch{}return [410,GONE('order_expired')];}if(a.state!=='pending')return [409,{error:'already_handled',state:a.state}];
     const pv=M().getProposal(id);const md=pv?.ask?.modes?.[mode];if(!pv||pv.state!=='pending'||!md)return [409,{error:'already_handled',state:pv?.state??null}];
     const cap=await phone.payCapable();if(!cap?.ok)return [409,{error:cap?.code??'no_phone_signer'}];
-    const ar=await engine.ownerAskApproval(a.spec,{windowSec:600});if(!ar?.ok){try{ASK().expire?.(id);M().expire?.(id);}catch{}log('owner_ask_gone',{code:ar?.code??'not_payable'});return [410,GONE(ar?.code??'not_payable')];}   // t1259 §6#129: close it, nothing paid
+    const ar=await engine.ownerAskApproval(a.spec,{windowSec:600});if(!ar?.ok){try{ASK().expire?.(id);M().expire?.(id);}catch{}log('owner_ask_gone',{code:ar?.code??'not_payable'});return [410,GONE(ar?.code??'not_payable')];}   // t1259 decision 129: close it, nothing paid
     if(lcEq(ar.payee,a.payee)===false||String(ar.amount)!==String(a.amount))return [409,{error:'request_changed'}];
     if(cap.active.maxSingle!=null&&BigInt(ar.amount)>BigInt(cap.active.maxSingle))return [409,{error:'above_phone_ceiling',detail:'这笔超过了手机快速批准的上限，请先在 App 里调高钱包限额 / This is above the phone approval ceiling.'}];
     const digest=await pub.readContract({address:wallet,abi:CBSW,functionName:'replaySafeHash',args:[ar.digest]});
@@ -44,7 +44,7 @@ export function createOwnerAskApproval({engine,phone,pub,wallet,everyday,walletC
     const c={mode,at:now(),fingerprint:cap.active.fingerprint,pay:{digest,approvalDigest:ar.digest,purchaseKey:ar.onchainPurchaseKey,payee:getAddress(ar.payee),amount:String(ar.amount),deadline:String(ar.deadline)},trust:null};
     if(mode==='trust'){const t=TO();if(!t&&!inlineTrust)return [409,{error:'trust_not_configured'}];
       const caps=trustCapsFor({everyday:everyday?.(),wallet:walletCaps?.(),phone:cap.active});if(caps.single<=0n||caps.daily<=0n)return [409,{error:'no_limits',detail:'先在 App 里设好 AI 日常额度 / Set the AI everyday limits first.'}];
-      /* t1240 §6#110: the merchant's order signer, verified by the engine from its signed order + the signer it publishes on its own origin
+      /* t1240 decision 110: the merchant's order signer, verified by the engine from its signed order + the signer it publishes on its own origin
          (never from the AI). With it, ONE "trust" names the merchant (its domain) + that signer, and the same Face ID signs the V5.4 grant
          (kind 5) so later orders with a fresh deposit address are paid within these caps. Without it: exactly as before (this payee only). */
       const sgn=signerGrant&&/^0x[0-9a-fA-F]{40}$/.test(String(a.spec?.signer??''))&&/^[a-z0-9.-]{3,80}$/.test(String(a.spec?.signerMerchant??''))?getAddress(String(a.spec.signer).toLowerCase()):null;
@@ -66,7 +66,7 @@ export function createOwnerAskApproval({engine,phone,pub,wallet,everyday,walletC
       const msg=ap.innerTypedData.message;if(BigInt(msg.single)>BigInt(cap.active.maxSingle??msg.single)||BigInt(msg.daily)>BigInt(cap.active.maxDaily??msg.daily)){try{t.reject(tr.id);}catch{}return [409,{error:'above_phone_ceiling'}];}
       let grant=null;if(sgn){if(!(msg.signers??[]).map(x=>String(x).toLowerCase()).includes(sgn.toLowerCase())){try{t.reject(tr.id);}catch{}return [409,{error:'trust_signer_missing'}];}
         try{grant=await signerGrant.fromTrust(msg);}catch{grant=null;}if(!grant){try{t.reject(tr.id);}catch{}return [409,{error:'signer_grant_unavailable'}];}}
-      /* t1241 §6#111: the signer is Kipurse's attestor for this domain (attested) - the card shows whether the merchant itself signs (unsigned: half caps) */
+      /* t1241 decision 111: the signer is Kipurse's attestor for this domain (attested) - the card shows whether the merchant itself signs (unsigned: half caps) */
       const att=!!sgn&&a.spec?.attested===true;
       c.trust={id:tr.id,inner:ap.innerTypedData,digest:ap.digest,single:caps.single.toString(),daily:caps.daily.toString(),days:caps.days,grant,merchant:sgn?name:null,signer:sgn,attested:att,merchantSigned:att?a.spec?.merchantSigned===true:(sgn?true:null),...(inlineTrust?{kind:1,primaryType:'OwnerTrust'}:{})};}}
     prepared.set(id,c);log('owner_ask_prepare',{mode});
@@ -93,7 +93,7 @@ export function createOwnerAskApproval({engine,phone,pub,wallet,everyday,walletC
     const r=M().approve(id,d=>{try{return p256Verify(act,d,String(b?.r??''),String(b?.s??''));}catch{return false;}},{mode,also:()=>ASK().claim(id,mode)});
     if(!r.ok)return [r.error==='not_owner'?403:409,r.error==='not_pending'?{error:'already_handled',state:r.state??null}:r];
     if(ASK().get(id)?.state!=='executing')return [409,{error:'already_handled'}];prepared.delete(id);
-    /* t1243 §6#113: PAY FIRST (same derived idempotency key, same owner approval - every 0A#7 layer unchanged) and reply as soon as the
+    /* t1243 decision 113: PAY FIRST (same derived idempotency key, same owner approval - every 0A#7 layer unchanged) and reply as soon as the
        payment result is known. The trust (and the V5.4 grant, verified on chain BEFORE it is stored) follows in the background, strictly
        AFTER the payment finished so the vault's userOps never overlap. Its final result is written to the ask record (approval status /
        /safety/mandates); a failure only means the next order asks again. */

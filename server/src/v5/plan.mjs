@@ -74,7 +74,7 @@ export function buildMigrationPlanV5(o0){let o=o0;
       calls.push({to:getAddress(o.zeroReserve.vault),value:0n,data:encodeFunctionData({abi:parseAbi(['function setBundlerFee(address to,uint96 maxPerOp)']),functionName:'setBundlerFee',args:[getAddress(bf.to),BigInt(bf.maxPerOp)]})});
       labels.push(getAddress(bf.to)==='0xf14ef5dc4723245866c22c749a0a84afceba0dd9'?`account-opening fee fronted by Kipurse: ${usd(BigInt(bf.maxPerOp))} taken once with your first AI payment, to the Kipurse ops account ${getAddress(bf.to)}`:`optional bundler fee: allow at most ${usd(BigInt(bf.maxPerOp))} per operation to the bundler operator ${getAddress(bf.to)} (you pay it; off unless you set it)`);}}
   if(o.registryOptOut){calls.push(call(trustC,'setRegistryOptOut',[true]));labels.push('opt out of the Kipurse merchant registry');}
-  // t1185u (§6#85): owner-set daily number of on-chain operations of HIS vault (V5.3 vaults only; the wallet itself calls it, so only this
+  // t1185 (decision 85): owner-set daily number of on-chain operations of HIS vault (V5.3 vaults only; the wallet itself calls it, so only this
   // owner-signed batch can change it). 1..100000; 0 = back to the default (500).
   if(o.opsPerDay!==undefined&&o.opsPerDay!==null){const n=Number(o.opsPerDay);const v=o.opsVault??o.zeroReserve?.vault;
     if(!Number.isInteger(n)||n<0||n>100000)throw Error('PLAN: daily operations must be 0..100000');if(!v)throw Error('PLAN: opsVault (the owner\'s vault) is required to set daily operations');

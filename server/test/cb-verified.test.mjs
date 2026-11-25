@@ -1,4 +1,4 @@
-// t624u/t626u: Coinbase Verified Account gate. Server-side, exact schema + attester + recipient, revoked/expired refused, RPC down fails closed.
+// t624/t626: Coinbase Verified Account gate. Server-side, exact schema + attester + recipient, revoked/expired refused, RPC down fails closed.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {CBV,checkVerified,checkVerifiedMulti} from '../src/v5/cb-verified.mjs';import {createNewWalletOnboarding} from '../src/v5/onboard-new.mjs';import {kvKey} from '../src/v5/store.mjs';
 const A='0x1B1BF0E5D1C6a2b74C3D9E8f07a1b2c3D4e5f606',UID='0x'+'ab'.repeat(32),T='0x'+'0'.repeat(63)+'1';
@@ -29,7 +29,7 @@ test('onboarding gate (server side): new wallet without attestation refused; RPC
   const d=await call(mk(async()=>{throw Error('down');}),'POST','/onboard/new/prepare',{id:'i1',owner:A});assert.equal(d.code,400);assert.equal(d.b.error,'verify_unavailable');assert.match(d.b.detail,/Try again/);
   for(const reason of ['wrong_attester','wrong_schema','revoked','expired','wrong_recipient']){const x=await call(mk(async()=>({verified:false,reason})),'POST','/onboard/new/prepare',{id:'i1',owner:A});assert.equal(x.b.error,'not_verified',reason);}
   const ok=await call(mk(async()=>({verified:true,reason:'ok'})),'POST','/onboard/new/prepare',{id:'i1',owner:A});assert.equal(ok.b.error,'failed','gate passed');assert.equal(ok.b.detail,undefined,'t1265: internal error text is never returned');});
-test('t763u: existing-wallet re-opening is gated too (no skip for current/future versions)',async()=>{
+test('t763: existing-wallet re-opening is gated too (no skip for current/future versions)',async()=>{
   const N=mk(async()=>({verified:false,reason:'none'}),{byOwner:()=>[{wallet:'0x5e4c116dd45edc2dbed826be8b97a72499d03fc8'}]},async()=>({id:'t',calls:[{to:'0x1',data:'0x',value:'0x0'}]}));
   const r=await call(N,'POST','/onboard/new/prepare',{id:'i1',owner:A});assert.notEqual(r.code,200);assert.notEqual(r.b?.existing,true);
   const ok=mk(async()=>({verified:true,reason:'ok'}),{byOwner:()=>[{wallet:'0x5e4c116dd45edc2dbed826be8b97a72499d03fc8'}]},async()=>({id:'t',calls:[{to:'0x1',data:'0x',value:'0x0'}]}));

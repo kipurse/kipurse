@@ -121,7 +121,7 @@ struct GasPreflightSheet: View {
 }
 
 
-/// t877: the wallet's two deposit ways (Apple Pay 充值 / Coinbase 充值), reachable from the Face ID approval sheet.
+/// t877: the wallet's two deposit ways (Apple Pay [zh]), reachable from the Face ID approval sheet.
 struct DepositChoiceSheet: View {
   @EnvironmentObject var m: AppModel
   @Environment(\.dismiss) private var dismiss

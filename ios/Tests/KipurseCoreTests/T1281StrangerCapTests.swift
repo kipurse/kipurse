@@ -2,7 +2,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1281 (owner decision §6#141 ①): the stranger sub-limit is the owner's own choice (付给陌生收款方，单笔 / 每天最多 ___, default = the
+/// t1281 (owner decision decision 141 (1)): the stranger sub-limit is the owner's own choice ([zh] ___, default = the
 /// normal limits). The phone computes the SAME formula as the server (owner rule 0A#10): every vector in t1281-stranger-caps.json.txt
 /// (written by gw test/t1281-stranger-cap.test.mjs from the server's subCaps) must give exactly the server's result here.
 final class T1281StrangerCapTests: XCTestCase {

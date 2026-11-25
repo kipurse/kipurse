@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 import "./V55Base.t.sol";
 
-/// Port of KipurseV54RegressAuditGaps to V5.5 (t1181u binding tests): an OwnerApproval is bound to the chain and to the
+/// Port of KipurseV54RegressAuditGaps to V5.5 (t1181 binding tests): an OwnerApproval is bound to the chain and to the
 /// adapter (EIP-712 domain); a SpendPermission for another token / spender is refused by Scope on every pay entry point;
 /// one owner approval prepares at most one x402 reservation, even after cancel.
 contract KipurseV55AuditGapsTest is V55Base {
@@ -84,7 +84,7 @@ contract KipurseV55AuditGapsTest is V55Base {
     }
 
     // ---------- one owner approval = one x402 reservation (approvalUsed) ----------
-    function test_FIXED_cancelThenReplay_sameOwnerApproval_rejected() public { // t1181u branch: flipped from test_KNOWN_BUG_...
+    function test_FIXED_cancelThenReplay_sameOwnerApproval_rejected() public { // t1181 branch: flipped from test_KNOWN_BUG_...
         KipurseAdapterV5.Auth memory a = auth(stranger, 3e6, 510);
         bytes memory sig = x402ApprovalFor(a);
         vm.prank(executor); (, bytes32 digest,) = adapter.prepareAuthorization(p, a, sig, nf, dl());

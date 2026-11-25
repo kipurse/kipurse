@@ -1,7 +1,7 @@
 import Foundation
 
-/// t1185u (handbook §6#85): daily on-chain operations of the owner's vault (V5.3 vaults). Default 500 per UTC day; the owner changes it
-/// in 钱包安全底线 and confirms it in the SAME Coinbase batch as the wallet limits (wallet -> vault.setOpsPerDay(n)). The server and the AI
+/// t1185 (decision 85): daily on-chain operations of the owner's vault (V5.3 vaults). Default 500 per UTC day; the owner changes it
+/// in [zh] and confirms it in the SAME Coinbase batch as the wallet limits (wallet -> vault.setOpsPerDay(n)). The server and the AI
 /// can never change it. When today's number is used up, AI payments wait calmly until 00:00 UTC (nothing paid, nothing lost).
 public enum OpsCap {
   public static let defaultPerDay = 500, minPerDay = 1, maxPerDay = 100_000

@@ -8,7 +8,7 @@ test('siri: every authenticated Siri call marks it seen; unauthenticated calls n
   await S.handle('/siri/status',{purchaseKey:'k'},{authed:true,seen:id=>seen.push(id)});
   await S.handle('/siri/buy',{item:'x'},{authed:true,seen:id=>seen.push(id)});assert.deepEqual(seen,['siri','siri','siri']);});
 test('wallet state: Siri entry comes from the active phone signer, lastUsed from real calls only',()=>{const s=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
-  // t1157u: the list logic moved to src/v5/agent-list.mjs (Siri listed once); the same rules are checked there + the launcher's inputs.
+  // t1157: the list logic moved to src/v5/agent-list.mjs (Siri listed once); the same rules are checked there + the launcher's inputs.
   const L=fs.readFileSync(new URL('../src/v5/agent-list.mjs',import.meta.url),'utf8');
   assert.match(L,/if\(phoneActive\|\|siriAgent\)/);
   assert.match(L,/connected:!!phoneActive&&ok/,'an enrolled phone is not AI spend permission until an explicit total policy exists');

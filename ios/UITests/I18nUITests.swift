@@ -1,6 +1,6 @@
 import XCTest
 
-/// Owner rule: the app follows the iPhone language. English -> zero Chinese characters on any screen; Chinese -> no "中文 / English" duplicates.
+/// Owner rule: the app follows the iPhone language. English -> zero Chinese characters on any screen; Chinese -> no "[zh]" duplicates.
 /// Sweeps the main screens (demo data) + sign-in + new-user onboarding in both languages and saves screenshots to /tmp/kp-i18n.
 final class I18nUITests: XCTestCase {
   var app: XCUIApplication!
@@ -19,7 +19,7 @@ final class I18nUITests: XCTestCase {
   func check(_ lang: String, _ where_: String) {
     let ls = labels()
     if lang == "en" {
-      // "、" is the separator iOS itself uses when combining accessibility labels on a Chinese-language device; not app text.
+      // "[zh]" is the separator iOS itself uses when combining accessibility labels on a Chinese-language device; not app text.
       let bad = ls.map { $0.replacingOccurrences(of: "\u{3001}", with: ", ") }.filter { s in Self.hasCJK(s) && !Self.userData.contains(where: { s.contains($0) }) }
       XCTAssertEqual(bad, [], "\(where_): Chinese on an English screen")
     } else {

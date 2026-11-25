@@ -4,14 +4,14 @@ import CryptoKit
 import LocalAuthentication
 import KipurseCore
 
-/// ONE LIMIT (owner 2026-10-27 t592u): the wallet's AI payment limit (home card) is the ONLY limit. This screen shows the AI's
+/// ONE LIMIT (owner 2026-10-27 t592): the wallet's AI payment limit (home card) is the ONLY limit. This screen shows the AI's
 /// requests (approve with Face ID), approved renewals, the per-AI stop buttons and spending sorted AUTOMATICALLY into
-/// categories (日常/学习/宣传推广/开发/工作/其他). Categories are labels only, never limits. Approving = the phone signer signs the exact request text (the server re-checks the signature).
+/// categories ([zh]). Categories are labels only, never limits. Approving = the phone signer signs the exact request text (the server re-checks the signature).
 /// Stopping an allowance or one AI only needs Face ID on the phone (it can only make things safer).
 struct AllowanceItem: Identifiable { let id: String; let purpose: String; let name: String; let line: String; let leftToday: String; let leftMonth: String; let kind: String }
-struct ApprovalReq: Identifiable { let id: String; let by: String; let lines: [String]; let digest: String; let signText: String; let reason: String; let userRequest: String; var ask: AskInfo? = nil; var fromPush = false; var details: [AllowanceText.Detail] = [] }   // t1281 §6#141 ③: details only from the parsed SIGNED text   // t1220u §6#96: fromPush = known only from the push (no server session yet)
-/// t1170u (§6#82): "do you know this payee?" card data (new payee above the AI auto limit): full payee address + amount (base units).
-struct AskInfo { let payee: String; let amount: String; var domain: String? = nil; var merchantSigned: Bool? = nil; var dup = false }   // t1280: dup only from the SIGNED text   // t1241 §6#111: trust <domain>, merchant signs or not
+struct ApprovalReq: Identifiable { let id: String; let by: String; let lines: [String]; let digest: String; let signText: String; let reason: String; let userRequest: String; var ask: AskInfo? = nil; var fromPush = false; var details: [AllowanceText.Detail] = [] }   // t1281 decision 141 (3): details only from the parsed SIGNED text   // t1220 decision 96: fromPush = known only from the push (no server session yet)
+/// t1170 (decision 82): "do you know this payee?" card data (new payee above the AI auto limit): full payee address + amount (base units).
+struct AskInfo { let payee: String; let amount: String; var domain: String? = nil; var merchantSigned: Bool? = nil; var dup = false }   // t1280: dup only from the SIGNED text   // t1241 decision 111: trust <domain>, merchant signs or not
 struct AgentCapRow: Identifiable { let id: String; let name: String; let stopped: Bool; let spentToday: String?; var single: String? = nil; var daily: String? = nil; var monthly: String? = nil }   // t899: this AI's own allowance
 struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose: String; let name: String; let single: String; let daily: String; let monthly: String; var on: Bool }
 
@@ -22,7 +22,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
   @Published var agents: [AgentCapRow] = []
   @Published var defaults: [DefaultAllowance] = []
   @Published var overall: String?
-  /// t1245 (§6#115 U16): the same overall limit as numbers, so the sheet and the AI 花钱上限 page read ONE source.
+  /// t1245 (decision 115 U16): the same overall limit as numbers, so the sheet and the AI [zh] page read ONE source.
   @Published var overallAtomic: AISpendLimits.Saved?
   @Published var loaded = false
   @Published var open = false
@@ -30,15 +30,15 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
   @Published var reportTotal = ""
   @Published var csv = ""
   @Published var pendingAsk: (id: String, mode: String)? = nil
-  @Published var focusAsk: (id: String, mode: String)? = nil   // t1246 F9: the card the push opened + the choice tapped there (shown, not signed)   // t1170u: push action 认识并信任 / 只付这一次 -> this card, Face ID in the app
+  @Published var focusAsk: (id: String, mode: String)? = nil   // t1246 F9: the card the push opened + the choice tapped there (shown, not signed)   // t1170: push action 认识并信任 / 只付这一次 -> this card, Face ID in the app
   private var demoFilled = false
-  /// t1220u (§6#96): requests the server pushed (kind mandate / owner_ask), kept until the server list can be read. Opening the App
-  /// never asks for Face ID (0A#2), so without a live session this is the only way Home can show them under 「待你批准」.
+  /// t1220 (decision 96): requests the server pushed (kind mandate / owner_ask), kept until the server list can be read. Opening the App
+  /// never asks for Face ID (0A#2), so without a live session this is the only way Home can show them under "[zh]".
   private static let hintsKey = "kp.pendingPushHints"
   private var hints: [PendingPushHint] { get { PendingPushHints.decode(UserDefaults.standard.data(forKey: Self.hintsKey)) } set { UserDefaults.standard.set(PendingPushHints.encode(newValue), forKey: Self.hintsKey) } }
   private(set) var lastLoadOK = false
   private var lastLoadAt = Date.distantPast
-  /// t1243 (§6#113): the Face ID of a sign-in on an approval path, kept <= 60 s for the approval the owner taps next on the full card (UnlockReuse rules)
+  /// t1243 (decision 113): the Face ID of a sign-in on an approval path, kept <= 60 s for the approval the owner taps next on the full card (UnlockReuse rules)
   let signInUnlock = ReusableUnlock<LAContext>(discard: { $0.invalidate() })
   func remember(_ info: [AnyHashable: Any], body: String, at: Date = Date()) {
     guard let h = PendingPushHints.hint(userInfo: info, body: body, at: at) else { return }
@@ -65,11 +65,11 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
   /// Reload with the wallet refresh (live session only); at most every 20 s.
   func loadIfStale() async { if Date().timeIntervalSince(lastLoadAt) > 20 { await load() } }
   /// A user tap (approve / decline) may ask for Face ID; opening the App never does (0A#2).
-  /// t1243 (§6#113): with the session missing / expired, ONE evaluated LAContext signs the session in and is held (<= 60 s, single use)
+  /// t1243 (decision 113): with the session missing / expired, ONE evaluated LAContext signs the session in and is held (<= 60 s, single use)
   /// so the approval the owner then taps on the full card reuses it instead of a second Face ID. With a session: unchanged.
   /// t1266 (fix 10): a held context is bound to `tag` ("<id>|<mode>") and only that approval may take it.
   private func ensureSession(reason: String? = nil, keepForApproval: Bool = false, tag: String? = nil) async -> Bool {
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     if MainnetSession.load() != nil { return true }
     let ctx = LAContext(); ctx.localizedCancelTitle = T("取消", "Cancel"); var e: NSError?
     guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &e) else { ctx.invalidate(); return (try? await MainnetSession.signIn()) != nil }
@@ -92,7 +92,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
     guard lastLoadOK else { signInUnlock.clear(); return T("暂时读不到这个请求，请稍后再试。", "Couldn't load this request right now. Please try again shortly.") }
     guard let real = approvals.first(where: { $0.id == a.id && !$0.fromPush }) else { signInUnlock.clear(); return T("这个请求已经处理过了，或已过期。", "This request was already handled or has expired.") }
     switch PushedApproval.next(approve: doApprove) {
-    case .showFullCard:   // t1278 (A1): the card now shows the real request's own lines (or 认识并信任 / 只付这一次 / 拒绝 for §6#82); nothing signed yet.
+    case .showFullCard:   // t1278 (A1): the card now shows the real request's own lines (or 认识并信任 / 只付这一次 / 拒绝 for decision 82); nothing signed yet.
       return nil          // the owner's tap there may reuse this sign-in's Face ID (<= 60 s, this request only; t1243 / t1266)
     case .reject:
       signInUnlock.clear()
@@ -125,7 +125,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
       let swap = (p["items"] as? [[String: Any]] ?? []).contains { (($0["human"] as? [String: Any])?["payeeSwap"] as? Bool) == true }   // a warning can only add caution
       shown = AllowanceText.lines(pt, payeeSwap: swap)
       ask?.dup = AllowanceText.askIsDup(pt)
-      details = AllowanceText.details(pt)   // t1281 (§6#141 ③): site / full payee / replaces / remember / validity, from the same signed text
+      details = AllowanceText.details(pt)   // t1281 (decision 141 (3)): site / full payee / replaces / remember / validity, from the same signed text
     } else { shown = [T("服务器给的内容和手机算出的不一致，不能批准。", "Server data doesn't match what the phone computed. This can't be approved.")]; ask = nil }
     return ApprovalReq(id: id, by: by == "owner" ? T("你自己", "You") : by, lines: shown, digest: d, signText: t, reason: s(p["reason"]), userRequest: s(p["user_request"]), ask: ask, details: details)
   }
@@ -176,7 +176,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
     guard PhoneKey.isPresent() else { held?.invalidate(); return T("这台 iPhone 还没开启 Face ID 批准：设置 → Face ID 批准。", "Face ID approvals aren't on for this iPhone yet: Settings → Face ID approvals.") }
     let ctx: LAContext
     if let held { ctx = held } else {
-      await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+      await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
       let c = LAContext(); c.localizedCancelTitle = T("取消", "Cancel"); c.touchIDAuthenticationAllowableReuseDuration = 0
       PromptLog.add("approve"); AuthLog.note("approve", "faceid-1 start")
       guard (try? await c.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: T("用 Face ID 同意", "Approve with Face ID"))) == true else { c.invalidate(); return T("已取消。", "Canceled.") }
@@ -191,7 +191,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
       return c == 403 ? T("确认不对，没有生效。", "The signature didn't match. Nothing changed.") : T("没有成功（\(c)），请再试一次。", "That didn't work (\(c)). Please try again.")
     } catch { return T("已取消。", "Canceled.") }
   }
-  /// t1170u (§6#82): 「认识并信任」 or 「只付这一次」. The phone re-checks every part, then ONE Face ID signs them all:
+  /// t1170 (decision 82): "[zh]" or "[zh]". The phone re-checks every part, then ONE Face ID signs them all:
   /// the card text + choice, the on-chain approval of exactly this payment, and (trust) the trust for exactly this payee.
   /// The server then pays this request once. Returns the text to show.
   /// `userTapped`: the owner tapped the button on this full card (only then may the sign-in Face ID of the last 60 s be reused, t1243).
@@ -212,7 +212,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
     guard let (c, j) = try? await MainnetSession.authedPost("safety/mandates/ask-prepare", ["id": a.id, "mode": mode]) else { return await refuse(T("没有成功，请再试一次。", "That didn't work. Please try again.")) }
     if c != 200 { signInUnlock.clear() }
     if c == 409, Self.s(j["error"]) == "already_handled" { await load(); return T("这个请求已经处理过了。", "This request was already handled.") }
-    if OwnerAsk.isGone(status: c, error: Self.s(j["error"])) { await load(); return T(OwnerAsk.goneZH, OwnerAsk.goneEN) }   // t1259 §6#129: closed by the server, card leaves the list
+    if OwnerAsk.isGone(status: c, error: Self.s(j["error"])) { await load(); return T(OwnerAsk.goneZH, OwnerAsk.goneEN) }   // t1259 decision 129: closed by the server, card leaves the list
     guard c == 200 else { return await refuse(Self.s(j["detail"]).isEmpty ? T("没有成功（\(c)），请再试一次。", "That didn't work (\(c)). Please try again.") : Self.s(j["detail"])) }
     // 1) the card text + choice
     guard let sg = j["sign"] as? [String: Any], let st = sg["signText"] as? String, OwnerAsk.textOK(st, base: a.signText, wallet: Operator.wallet, id: a.id, mode: mode),
@@ -229,14 +229,14 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
       func f(_ k: String) -> String { Self.s(m[k]) }
       let om = OwnerTrustMessage(account: f("account"), merchant: f("merchant"), name: f("name"), epoch: f("epoch"), payees: m["payees"] as? [String] ?? [], signers: m["signers"] as? [String] ?? [],
         single: f("single"), daily: f("daily"), expiry: f("expiry"), nonce: f("nonce"), deadline: f("deadline"))
-      // t1240 (§6#110): a merchant-signed order -> the trust names that merchant's domain + its ONE signer, and the same Face ID signs the
+      // t1240 (decision 110): a merchant-signed order -> the trust names that merchant's domain + its ONE signer, and the same Face ID signs the
       // V5.4 grant (kind 5). The phone recomputes the grant from the trust it checked; anything different stops here.
       let gj = tj["signerGrant"] as? [String: Any], sgn = Self.s(tj["signer"]), mer = Self.s(tj["merchant"])
       if gj != nil, sgn.isEmpty || mer.isEmpty { return await refuse(mismatch) }
       if gj != nil, !SignerGrantDomain.ok(cardDomain: ask.domain, merchant: mer) { return await refuse(mismatch) }   // t1278 (A3): a grant only for the domain this card shows
-      // t1246 (§6#116 F8): also the phone's OWN ceiling (the AI limits shown in the app, else 5 / 20 USDC) — not only the server's numbers.
+      // t1246 (decision 116 F8): also the phone's OWN ceiling (the AI limits shown in the app, else 5 / 20 USDC) — not only the server's numbers.
       let own = OwnerAsk.trustCapProblems(om, localCeiling: ceiling)   // t1275 (#2): never the server's overall / everyday numbers alone
-      if !own.isEmpty { AuthLog.note("trust-caps", "refused single=\(om.single) daily=\(om.daily) ceiling=\(ceiling.map { "\($0.single)/\($0.daily)" } ?? "none-signed-here") overall=\(overallAtomic.map { "\($0.single)/\($0.daily)" } ?? "nil") inline=\(tj["kind"] as? Int ?? 0) why=\(own.joined(separator: "; "))") }   // t1257 §6#126
+      if !own.isEmpty { AuthLog.note("trust-caps", "refused single=\(om.single) daily=\(om.daily) ceiling=\(ceiling.map { "\($0.single)/\($0.daily)" } ?? "none-signed-here") overall=\(overallAtomic.map { "\($0.single)/\($0.daily)" } ?? "nil") inline=\(tj["kind"] as? Int ?? 0) why=\(own.joined(separator: "; "))") }   // t1257 decision 126
       guard own.isEmpty || ceiling != nil else { return await refuse(T(SignedLimitsCopy.noneZH + "可以改选「只付这一次」。", SignedLimitsCopy.noneEN + " You can choose \u{201C}Pay just this once\u{201D} instead.")) }   // t1275 (#2)
       guard own.isEmpty else { return await refuse(T("这次信任的额度超过你在手机上设的 AI 花钱上限，已停止，没有付款。可以改选「只付这一次」。", "This trust is above the AI spending limits set on this phone, so it was stopped and nothing was paid. You can choose \u{201C}Pay just this once\u{201D} instead.")) }
       let issues = PhoneTrust.problems(om, maxSingle: Self.s(ph2["maxSingle"]), maxDaily: Self.s(ph2["maxDaily"])) + OwnerAsk.trustProblems(om, payee: ask.payee, single: Self.s(tj["single"]), signer: gj == nil ? nil : sgn, merchant: gj == nil ? nil : mer)
@@ -253,17 +253,17 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
         gh = gh2; grantName = mer; grantSigned = tj["merchantSigned"] as? Bool
       } else if gj != nil { return await refuse(mismatch) }
       guard PhoneTrust.signerProblems(om, grantVerified: gh != nil).isEmpty else { return await refuse(mismatch) }   // t1275 (#1): same rule on every trust path
-      // t1281 (§6#141 ③): the Face ID prompt names the EXACT signed caps + expiry of the trust just checked (and the any-payee-address grant)
+      // t1281 (decision 141 (3)): the Face ID prompt names the EXACT signed caps + expiry of the trust just checked (and the any-payee-address grant)
       let fr = OwnerAsk.trustFaceIDReason(om, grantName: grantName, grantSigned: grantSigned); trustReason = T(fr.zh, fr.en)
     }
     // ONE Face ID for every signature (the evaluated context is reused by the Secure Enclave key)
-    // t1243 (§6#113): a sign-in just above (session had expired) already ran Face ID: reuse that SAME evaluated context once, only after the
+    // t1243 (decision 113): a sign-in just above (session had expired) already ran Face ID: reuse that SAME evaluated context once, only after the
     // owner's tap on this card, within 60 s (UnlockReuse) and (t1266) only for this same request + choice; otherwise exactly as before.
     let reused = signInUnlock.take(now: Date(), userTapped: userTapped, tag: tag)
     let ctx = reused ?? LAContext(); ctx.localizedCancelTitle = T("取消", "Cancel"); ctx.touchIDAuthenticationAllowableReuseDuration = 0
     defer { ctx.invalidate() }
     var unlocked = reused != nil
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     AuthLog.note("approve", "faceid-1 start")   // t1256
     if !unlocked { unlocked = (try? await ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: mode == "trust" ? (trustReason ?? T("认识并信任，并付这笔", "Trust this payee and pay")) : T("只付这一次", "Pay just this once"))) == true }
     guard unlocked,
@@ -277,7 +277,7 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
       let (c2, j2) = try await MainnetSession.authedPost("safety/mandates/approve", body)
       await load()
       if c2 == 200, Self.s(j2["state"]) == "paid" { Haptics.success()
-        // t1243 (§6#113): the server pays first and replies; the trust lands on chain a few seconds later in the background
+        // t1243 (decision 113): the server pays first and replies; the trust lands on chain a few seconds later in the background
         if mode == "trust", Self.s((j2["trust"] as? [String: Any])?["state"]) == "submitting" {
           if let n = grantName {
             if grantSigned == false { return T("✅ 已付款。信任 \(n) 正在生效，几秒后完成，之后它的订单在你的 AI 日常额度的一半内自动付，超过会先问你。", "✅ Paid. Trusting \(n) is taking effect and finishes in a few seconds; after that its orders go through automatically within half your AI everyday limits (above that you'll be asked).") }
@@ -342,11 +342,11 @@ struct DefaultAllowance: Identifiable { var id: String { purpose }; let purpose:
 }
 
 /// Home card: only pending AI requests (the limit itself lives on the AI payment limit card).
-/// t1245 (§6#115 U11/U12/U35/U36): same glass card + title size as the other 待你批准 cards (type shown by the icon colour only);
+/// t1245 (decision 115 U11/U12/U35/U36): same glass card + title size as the other [zh] cards (type shown by the icon colour only);
 /// shows nothing (and takes no space) when there is no request — the parent loads the store; one short line, the question is in the sheet.
 struct AllowancesCard: View {
   @ObservedObject var st = AllowanceStore.shared
-  /// "新收款方 0x1212…3434，30 USDC" for a new-payee ask; otherwise the request's own first line.
+  /// "[zh]" for a new-payee ask; otherwise the request's own first line.
   static func summary(_ a: ApprovalReq?) -> String {
     guard let a else { return "" }
     if let ask = a.ask, ask.dup, let amt = Int64(ask.amount) { return T("疑似重复购买 \(shortAddr(ask.payee))，\(MoneyText.usdc(amt))", "Possible duplicate \(shortAddr(ask.payee)), \(MoneyText.usdc(amt))") }   // t1280
@@ -384,17 +384,17 @@ struct AllowancesSheet: View {
             ForEach(st.approvals) { a in
               VStack(alignment: .leading, spacing: 6) {
                 ForEach(a.lines, id: \.self) { Text($0).font(.subheadline.weight(.semibold)) }
-                ForEach(Array(a.details.enumerated()), id: \.offset) { Text(T($0.element.zh, $0.element.en)).font(.caption).foregroundStyle(.secondary).textSelection(.enabled).accessibilityIdentifier("allow.detail." + $0.element.id) }   // t1281 §6#141 ③
+                ForEach(Array(a.details.enumerated()), id: \.offset) { Text(T($0.element.zh, $0.element.en)).font(.caption).foregroundStyle(.secondary).textSelection(.enabled).accessibilityIdentifier("allow.detail." + $0.element.id) }   // t1281 decision 141 (3)
                 Text(T("申请的 AI：", "Asked by: ") + a.by).font(.caption).foregroundStyle(.secondary)
                 if !a.userRequest.isEmpty { Text(T("你说的：“", "You said: \u{201C}") + a.userRequest + T("”", "\u{201D}")).font(.caption).foregroundStyle(.secondary) }
-                if let ask = a.ask {   // t1170u (§6#82): new payee above the AI limit -> full address + 认识并信任 / 只付这一次 / 拒绝
+                if let ask = a.ask {   // t1170 (decision 82): new payee above the AI limit -> full address + 认识并信任 / 只付这一次 / 拒绝
                   Text(T("完整地址：", "Full address: ") + OwnerAsk.grouped(ask.payee)).font(.caption.monospaced()).textSelection(.enabled).accessibilityIdentifier("allow.ask.address")
-                  if let ln = OwnerAsk.domainTrustLine(domain: ask.domain, merchantSigned: ask.merchantSigned) { Text(T(ln.zh, ln.en)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("allow.ask.domain") }   // t1241 §6#111
+                  if let ln = OwnerAsk.domainTrustLine(domain: ask.domain, merchantSigned: ask.merchantSigned) { Text(T(ln.zh, ln.en)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("allow.ask.domain") }   // t1241 decision 111
                   if let f = st.focusAsk, f.id == a.id, let h = OwnerAsk.pushChoiceHint(mode: f.mode) {   // t1246 F9
                     Label(T(h.zh, h.en), systemImage: "hand.point.down.fill").font(.caption.weight(.semibold)).foregroundStyle(Brand.caution).accessibilityIdentifier("allow.ask.pushhint")
                   }
-                  // t1245 (§6#115 U14/U15): brand buttons; the two lower choices share the width, same height as the main one.
-                  if ask.dup {   // t1280 (§6#140, owner): suspected duplicate -> no "trust", only pay again (once) / decline
+                  // t1245 (decision 115 U14/U15): brand buttons; the two lower choices share the width, same height as the main one.
+                  if ask.dup {   // t1280 (decision 140, owner): suspected duplicate -> no "trust", only pay again (once) / decline
                     HStack(spacing: KP.Space.s) {
                       BigButton(T("再付一次", "Pay again"), icon: "faceid", disabled: busy) { Task { busy = true; msg = await st.approveAsk(a, mode: "once", userTapped: true, ceiling: nil); busy = false } }.accessibilityIdentifier("allow.ask.again")
                       BigButton(T("拒绝", "Decline"), kind: .danger) { Task { await st.reject(a) } }.accessibilityIdentifier("allow.pending.reject")
@@ -447,12 +447,12 @@ struct AllowancesSheet: View {
       }
       .listRowBackground(GlassRowBG())
       }
-      // t1245 (§6#115 U4/U14): the app's glass list on the brand background; a title that fits in English.
+      // t1245 (decision 115 U4/U14): the app's glass list on the brand background; a title that fits in English.
       .listStyle(.insetGrouped).kpSectionRhythm().scrollContentBackground(.hidden).background(MockBG()).tint(Brand.accent)
       .navigationTitle(T("AI 付款和花费", "AI spending")).navigationBarTitleDisplayMode(.inline)
       .toolbar { Button(T("完成", "Done")) { st.open = false }.bold().accessibilityIdentifier("allow.close") }
       .task { await st.load(); await st.loadReport() }
-      // t1246 (§6#116 F9): a push action only OPENS this card and marks the owner's choice. Face ID and signing start only when the owner
+      // t1246 (decision 116 F9): a push action only OPENS this card and marks the owner's choice. Face ID and signing start only when the owner
       // taps a button here, with the full address and amount on screen (never straight from the lock screen / AI-written push text).
       .task(id: st.pendingAsk?.id ?? "") { if let p = st.pendingAsk, st.approvals.contains(where: { $0.id == p.id && $0.ask != nil }) { st.pendingAsk = nil; st.focusAsk = p } }
       .onReceive(NotificationCenter.default.publisher(for: .kpCloseLocalSheets)) { _ in st.open = false }

@@ -273,7 +273,7 @@ contract V55FuzzTest is V55Base {
         assertEq(a5.pendingFees(), 0);
         assertEq(PayerVaultV55(v).reserved(), 0);
     }
-    /// One x402 owner approval = one reservation, even after the owner cancelled it (t1181u).
+    /// One x402 owner approval = one reservation, even after the owner cancelled it (t1181).
     function testFuzz_x402ApprovalSingleUse(uint256 a) public {
         a = bound(a, 1, SINGLE);
         KipurseAdapterV55.Auth memory au = authV(stranger, a, ++ref_);

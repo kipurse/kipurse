@@ -1,4 +1,4 @@
-// t1139u (§6#71, owner decision t1139 option a): resume after an emergency stop also lifts the ON-CHAIN pause with ONE owner-confirmed
+// t1139 (decision 71, owner decision t1139 option a): resume after an emergency stop also lifts the ON-CHAIN pause with ONE owner-confirmed
 // Base Account batch; network fee from the Kipurse wallet (actual cost, live quote, cap 0.01 USDC); "resumed" only after chain says so.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {encodeFunctionData,parseAbi,decodeFunctionData} from 'viem';

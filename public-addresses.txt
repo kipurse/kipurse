@@ -116,7 +116,6 @@
 0xe635ab8852c3cb3b2125d3cb45018657ef73946b  # seen in ios/Tests/KipurseCoreTests/T1186VaultSeedTests.swift, ios/Tests/KipurseCoreTests/T1197SuiteTests.swift +2
 0x0ebd05a4a2226a59790600a54129f4b0e90fc817  # seen in ios/Tests/KipurseCoreTests/T1186VaultSeedTests.swift, ios/Tests/KipurseCoreTests/T1197SuiteTests.swift +3
 0x08fda35764ea7999e69f644688552ff91b277d42  # seen in ios/Tests/KipurseCoreTests/T1197SuiteTests.swift, ios/Tests/KipurseCoreTests/T1214V54Tests.swift +2
-0x12ac413cb96b5f40983869eba957a0228e6f6773  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift
 0x4b1597a46600fbd610f07229f6396881a2edf075  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift
 0xadb2f2c49f31d59bc46959818e5c445e1c01acb8  # seen in ios/Tests/KipurseCoreTests/T1214V54Tests.swift, ios/Tests/KipurseCoreTests/T1240OwnerAskSignerTests.swift +1
 0xef6b64eb64a7f28215b0b97d51a2008458bf0deb  # seen in ios/Tests/KipurseCoreTests/T1238CacheGuardTests.swift, ios/Tests/KipurseCoreTests/T1238MovedWalletTests.swift +11
@@ -177,3 +176,4 @@
 0x13ab618edbec2f1a22763adc2135251a28bf034e  # seen in server/test/t1213-signer-trust-v54.test.mjs
 0xe05a5ae6c938c2bd72da539d971e34e586c6cc03  # seen in server/test/t1213-signer-trust-v54.test.mjs
 0x2aa8da9fc5e86bf482d91ad496cbca9500e561c8  # seen in server/test/t1238-move-seat.test.mjs
+0x5ee0000000000000000000000000000000005ee0  # synthetic test payee (ios/Tests/KipurseCoreTests/T1214V54Tests.swift)

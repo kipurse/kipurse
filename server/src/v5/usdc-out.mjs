@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// t1166u (handbook §6#80, PERMANENT LOCKED RULE): every AI-facing amount is human-ready USDC.
+// t1166 (decision 80, PERMANENT LOCKED RULE): every AI-facing amount is human-ready USDC.
 // Output shape for each USDC amount field `x` (MCP tools, /v1 agent API, /siri/*):
 //   x          = exact decimal USDC string, e.g. "13.23532"      (never base units)
 //   xDisplay   = "13.24 USDC" (2 decimals; a non-zero amount under 0.01 shows its exact value)
@@ -51,7 +51,7 @@ export function withSummary(o){if(!o||typeof o!=='object'||Array.isArray(o)||o.s
   const b=o.balanceDisplay??o.usdcDisplay??o.wallet?.balanceDisplay??o.wallet?.usdcDisplay;if(!b)return o;return {summary:`余额 ${b} / Balance ${b}`,...o};}
 /** The one entry point for AI-facing JSON: humanize, add the summary and the unit note. */
 export function forAI(o){const h=withSummary(humanize(o));if(h&&typeof h==='object'&&!Array.isArray(h))return {...h,amountsUnit:'USDC',amountsNote:NOTE_EN+' '+NOTE_ZH};return h;}
-/** PERMANENT regression check (handbook §6#80): every problem = a raw base-unit integer as an amount field, or an amount without its Display. */
+/** PERMANENT regression check (decision 80): every problem = a raw base-unit integer as an amount field, or an amount without its Display. */
 export function amountProblems(o,path='$',acc=[],depth=0){
   if(depth>40||!o||typeof o!=='object')return acc;
   if(Array.isArray(o)){o.forEach((x,i)=>amountProblems(x,path+'['+i+']',acc,depth+1));return acc;}

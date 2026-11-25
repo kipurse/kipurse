@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1153u: approve-sheet Face ID guidance (handbook §6#74).
+/// t1153: approve-sheet Face ID guidance (decision 74).
 final class FaceIDNoticeT1153Tests: XCTestCase {
   override func tearDown() { Loc.override = nil }
   let la = "com.apple.LocalAuthentication"

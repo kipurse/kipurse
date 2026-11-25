@@ -11,7 +11,7 @@ const usd=a=>{try{const n=BigInt(a);return (Number(n)/1e6).toString();}catch{ret
 export const rejectMessage=(id,payee)=>`Kipurse: I reject trust request ${id} for payee ${payee}. Nothing is trusted.`;
 export const phoneRejectDigest=(id,payee)=>'0x'+createHash('sha256').update(rejectMessage(id,payee)).digest('hex');
 /** phone: {active:()=>({index,x,y,maxSingle,maxDaily})|null, verifyWrapped:(digest,wrapper)=>Promise<bool> (wallet ERC-1271 on chain), adapter, chainId} */
-/* t1214 (§6#100/#102): signerGrant = optional V5.4 hook (only when KIPURSE_V54_SIGNER_TRUST=1 AND the wallet is on V5.4; else null and nothing
+/* t1214 (decision 100/#102): signerGrant = optional V5.4 hook (only when KIPURSE_V54_SIGNER_TRUST=1 AND the wallet is on V5.4; else null and nothing
    changes). For a trust request that names merchant order signers, the SAME Face ID also signs the kind-5 OwnerSignerTrust (same merchant,
    name, signers, caps, expiry), so later orders from those signers can pay per-order payees within the caps; verified on chain, then stored. */
 export function createPublicTrustApproval({owner,wallet,ownerApi,verifyTypedData,verifyMessage,script,base,phone=null,addressCheck=null,feePpm=null,signerGrant=null,suite=null}){
@@ -66,14 +66,14 @@ button{display:block;width:100%;border:0;border-radius:14px;padding:15px;font-si
           wallet:WALLET,chainId:c.inner.domain?.chainId,phone:{index:a.index,maxSingle:a.maxSingle,maxDaily:a.maxDaily},addressCheck:await (async()=>{try{const v=await addressCheck?.(r.payee);return v?.ok?{status:v.status,verified:v.verified,groups:v.groups,lookalikes:v.lookalikes??[],inbound:v.inbound}:null;}catch{return null;}})()});return true;}
       if(p==='/approve/trust/phone-sign'){const a=phone?.active?.();const c=prepared.get(id);if(!a){json(409,{error:'no_phone_signer'});return true;}if(!c?.inner){json(409,{error:'prepare_first'});return true;}
         if(BigInt(c.inner.message.single)>BigInt(a.maxSingle)||BigInt(c.inner.message.daily)>BigInt(a.maxDaily)){json(403,{error:'above_phone_ceiling',detail:'这次的上限超过手机确认允许的范围，请用 Base Account 批准'});return true;}
-        // t1138u (§6#70): a phone added by the opening batch has no stored owner index; read it from the wallet on chain (like owner pay)
+        // t1138 (decision 70): a phone added by the opening batch has no stored owner index; read it from the wallet on chain (like owner pay)
         let idx=a.index;if(idx==null&&phone.findIndex){try{idx=await phone.findIndex(a.approver);}catch{idx=null;}}if(idx==null||Number(idx)<0){json(409,{error:'phone_not_owner'});return true;}
         let w;try{w=suite==='v5.5'?(await import('./seat-v2.mjs')).trustWrapperV55(idx,c.inner.message,b.r,b.s).wrapper:phoneTrustWrapper(idx,c.inner.message,b.r,b.s);}catch{json(400,{error:'bad_signature'});return true;}   // t1250: V5.5 seat V2
         let ok=false;try{ok=await phone.verifyWrapped(c.digest,w);}catch{ok=false;}
         if(!ok){json(403,{error:'not_owner',detail:'phone signature not accepted by the wallet on chain'});return true;}
         let gw=null;if(c.grant){try{gw=signerGrant.wrapper(idx,c.grant.message,b?.signerGrant?.r,b?.signerGrant?.s);}catch{json(400,{error:'bad_signature',part:'signer_grant'});return true;}}
         const v=await ownerApi.submitSignature(id,w,{prewrapped:true});prepared.delete(id);
-        /* t1240 §6#110: the grant is signed for the epoch the trust has AFTER it lands (signer-trust-v54 fromTrust), so the wallet can only accept it
+        /* t1240 decision 110: the grant is signed for the epoch the trust has AFTER it lands (signer-trust-v54 fromTrust), so the wallet can only accept it
            now; verified on chain before it is stored, else not stored (the trust itself stands) */
         let sg;if(gw){let gok=false;try{gok=v?.status==='trusted'&&await phone.verifyWrapped(c.grant.digest,gw);}catch{gok=false;}
           if(gok){try{signerGrant.store(c.grant.message,gw);sg='stored';}catch{sg='failed';}}else sg='not_accepted';}

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import XCTest
 
-/// t1281 (owner decision §6#141 ①): 付给陌生收款方 — the owner's own stranger limit, on the opening page and the wallet safety limits page.
-/// Default ON (和普通额度一样 / Same as my normal limits); turning it off shows the two pickers (每笔 / 每天). zh + en.
-/// Opening: the simulator onboarding route with no server behind it (the form renders; never taps 充值并开通). Limits: the offline demo
-/// wallet (never taps 去 Coinbase 确认). Nothing is signed or sent.
+/// t1281 (owner decision decision 141 (1)): [zh] — the owner's own stranger limit, on the opening page and the wallet safety limits page.
+/// Default ON ([zh] / Same as my normal limits); turning it off shows the two pickers ([zh]). zh + en.
+/// Opening: the simulator onboarding route with no server behind it (the form renders; never taps [zh]). Limits: the offline demo
+/// wallet (never taps [zh]). Nothing is signed or sent.
 final class T1281StrangerCapUITests: XCTestCase {
   override func setUp() { continueAfterFailure = false }
   private func shot(_ app: XCUIApplication, _ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }

@@ -11,7 +11,7 @@ export function resolveAgent(agents,token){
   return null;
 }
 /** Returns null if within the agent's sub-budget, else a reason code. day = permission day (same as the adapter). */
-/* t1281 (§6#141): the per-payment cap compares the amount; the daily / term budgets compare cost = amount + fee (+ network fee when known),
+/* t1281 (decision 141): the per-payment cap compares the amount; the daily / term budgets compare cost = amount + fee (+ network fee when known),
    against history counted the same way (ledger.agentSpentSince). Callers without a cost keep amount. */
 export function agentBudgetReason(agent,ledger,amount,permission,nowS=Math.floor(Date.now()/1000),cost=amount){
   if(!agent)return null;

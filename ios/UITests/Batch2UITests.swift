@@ -1,11 +1,11 @@
 import XCTest
 
-/// UX audit batch 2: #2 large-payment hold visible (§6#110: on AI 生活, with every pending item) with countdown + cancel; #3 emergency page offline fallback.
+/// UX audit batch 2: #2 large-payment hold visible (decision 110: on AI [zh], with every pending item) with countdown + cancel; #3 emergency page offline fallback.
 final class Batch2UITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }
   func testHoldBannerOnHomeWithCountdownAndCancel() {
-    app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpHold"]; app.launch()   // §6#110: 待你批准 lives on AI 生活
+    app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpHold"]; app.launch()   // decision 110: 待你批准 lives on AI 生活
     let banner = app.descendants(matching: .any)["hold.banner"].firstMatch
     XCTAssertTrue(banner.waitForExistence(timeout: 10), "hold banner on AI 生活")
     let cd = app.staticTexts["hold.countdown"].firstMatch; XCTAssertTrue(cd.exists)
@@ -49,7 +49,7 @@ final class Batch2UITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t635u: no Coinbase Verified Account attestation -> the Apple Pay sheet shows the 4-step guide instead of buying; once verified it continues.
+  /// t635: no Coinbase Verified Account attestation -> the Apple Pay sheet shows the 4-step guide instead of buying; once verified it continues.
   func testApplePayNeedsCoinbaseVerification() throws {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", lang, "-kpApplePayMock", "-kpCBV", "later"]; app.launch()
@@ -87,7 +87,7 @@ final class Batch2UITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t932: Onramp not approved -> honest 申请中 state, no purchase step.
+  /// t932: Onramp not approved -> honest [zh] state, no purchase step.
   func testApplePayApplyingState() throws {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", "zh", "-kpApplePayMock", "-kpApplePayOff"]; app.launch()
     let d = app.buttons["home.deposit"].firstMatch; XCTAssertTrue(d.waitForExistence(timeout: 10)); d.tap()
@@ -95,7 +95,7 @@ final class Batch2UITests: XCTestCase {
     let u = app.descendants(matching: .any)["applepay.unavailable"].firstMatch; XCTAssertTrue(u.waitForExistence(timeout: 8)); XCTAssertTrue(u.label.contains("申请中"), u.label)
     XCTAssertFalse(app.buttons["applepay.agree"].exists); XCTAssertFalse(app.buttons["applepay.order"].exists)
   }
-  /// ONE LIMIT (t592u): home shows ONE AI payment limit with the plain rule; no per-category allowance card; spending shows auto categories.
+  /// ONE LIMIT (t592): home shows ONE AI payment limit with the plain rule; no per-category allowance card; spending shows auto categories.
   func testOneLimitAndAutoCategories() {
     for (lang, rule, dev, other) in [("zh", "Face ID", "开发", "其他"), ("en", "Face ID", "Development", "Other")] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang]; app.launch()   // t1038: AI 总限额 lives on AI 生活
@@ -103,7 +103,7 @@ final class Batch2UITests: XCTestCase {
       let ex = app.descendants(matching: .any)["caps.explain"].firstMatch; XCTAssertTrue(ex.waitForExistence(timeout: 10), lang); XCTAssertTrue(ex.label.contains(rule), ex.label)
       XCTAssertFalse(app.descendants(matching: .any)["allow.card.setup"].exists, "no per-category setup card")
       XCTAssertFalse(app.staticTexts[lang == "zh" ? "给 AI 设零花钱（推荐）" : "Give your AI pocket money (recommended)"].exists)
-      app.tabBars.buttons.element(boundBy: 0).tap()   // §6#110: back to the AI 生活 root, where 待你批准 now lives
+      app.tabBars.buttons.element(boundBy: 0).tap()   // decision 110: back to the AI 生活 root, where 待你批准 now lives
       let card = app.descendants(matching: .any)["allow.card.pending"].firstMatch; XCTAssertTrue(card.waitForExistence(timeout: 8), "pending AI request in 待你批准"); for _ in 0..<4 where !card.isHittable { app.swipeDown() }; card.tap()
       let lim = app.descendants(matching: .any)["allow.limit"].firstMatch; XCTAssertTrue(lim.waitForExistence(timeout: 5), lang)
       XCTAssertTrue(lim.label.contains(lang == "zh" ? "总额" : "total"), lim.label); XCTAssertFalse(lim.label.contains(lang == "zh" ? "每月" : "month"), "no monthly cap")
@@ -113,7 +113,7 @@ final class Batch2UITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t660 confusion fix: the Face ID approvals page says what it is in plain words; no "这台手机（…）" jargon, no approval codes (zh + en).
+  /// t660 confusion fix: the Face ID approvals page says what it is in plain words; no "[zh]" jargon, no approval codes (zh + en).
   func testFaceIDApprovalPageIsPlain() {
     for (lang, nav, bad) in [("zh", "Face ID 批准", ["核对码", "这台手机（", "收款方申请", "解除绑定"]), ("en", "Face ID approvals", ["Approval code", "phone signer", "Unlink"])] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang, "-kpSkipFaceID"]; app.launch()
@@ -124,8 +124,8 @@ final class Batch2UITests: XCTestCase {
       app.terminate()
     }
   }
-  /// Delete account lives in its own danger section at the bottom of 设置, not next to pause / withdraw.
-  /// §6#110: pause moved to AI 生活, so delete and pause are now on different tabs (never side by side).
+  /// Delete account lives in its own danger section at the bottom of [zh], not next to pause / withdraw.
+  /// decision 110: pause moved to AI [zh], so delete and pause are now on different tabs (never side by side).
   func testDeleteInSeparateDangerZone() {
     for (lang, hdr) in [("zh", "危险操作"), ("en", "Danger zone")] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang, "-kpSkipFaceID"]; app.launch()
@@ -148,14 +148,14 @@ final class Batch2UITests: XCTestCase {
   }
   /// t660: opening an approval when Face ID approvals aren't on shows a plain explanation and the fix, not a bare error.
   func testApprovalWithoutFaceIDShowsFix() {
-    app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpSkipFaceID"]; app.launch()   // §6#110: 待你批准 on AI 生活
+    app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpSkipFaceID"]; app.launch()   // decision 110: 待你批准 on AI 生活
     let o = app.buttons["approve.open"].firstMatch; XCTAssertTrue(o.waitForExistence(timeout: 10)); for _ in 0..<4 where !o.isHittable { app.swipeUp() }; o.tap()
     XCTAssertTrue(app.navigationBars["允许 AI 付给新收款方？"].waitForExistence(timeout: 8))
     XCTAssertTrue(app.descendants(matching: .any)["phone.explain"].firstMatch.waitForExistence(timeout: 5))
     let g = app.buttons["trust.goBind"].firstMatch; XCTAssertTrue(g.exists); g.tap()
     XCTAssertTrue(app.navigationBars["Face ID 批准"].waitForExistence(timeout: 8))
   }
-  /// t855: home has "从 Coinbase 充值" next to Apple Pay; it shows this wallet's address, the USDC + Base warning, and opens Coinbase's send page.
+  /// t855: home has "[zh]" next to Apple Pay; it shows this wallet's address, the USDC + Base warning, and opens Coinbase's send page.
   func testHomeCoinbaseDeposit() {
     for (lang, label, warn) in [("zh", "Coinbase 充值", "Base"), ("en", "Coinbase Top Up", "Base network")] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", lang]; app.launch()
@@ -210,7 +210,7 @@ final class Batch2UITests: XCTestCase {
     let fb = app.buttons["cbv.full"].firstMatch; for _ in 0..<4 where !fb.isHittable { app.swipeUp() }; fb.tap(); XCTAssertEqual(app.staticTexts["cbv.address"].firstMatch.label, mine)
     for bad in ["4242b022", "A718", "0x5150"] { XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", bad)).firstMatch.exists, bad) }
   }
-  /// t877: Face ID approval sheet — not enough USDC -> 先充值 + deposit button (both ways); money arrives -> Face ID button appears by itself.
+  /// t877: Face ID approval sheet — not enough USDC -> [zh] + deposit button (both ways); money arrives -> Face ID button appears by itself.
   func testFaceIDSheetLowBalanceDepositThenFaceID() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", "zh", "-kpGasGateLow", "-kpGasArrive"]; app.launch()
     let dep = app.buttons["gas.deposit"].firstMatch; XCTAssertTrue(dep.waitForExistence(timeout: 10), "deposit CTA")
@@ -263,7 +263,7 @@ final class Batch2UITests: XCTestCase {
 }
 
 
-/// t1185u (§6#85): the wallet-limits screen shows today's on-chain operations and lets the owner change the daily number.
+/// t1185 (decision 85): the wallet-limits screen shows today's on-chain operations and lets the owner change the daily number.
 final class OpsCapUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }

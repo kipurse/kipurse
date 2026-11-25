@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// ONE-TIME SETUP ("开通"): ONE owner signature, ONE atomic batch, ONE gas payment, sent from the owner's own Base Account
+// ONE-TIME SETUP ("[zh]"): ONE owner signature, ONE atomic batch, ONE gas payment, sent from the owner's own Base Account
 // (gas in USDC via the Base Account's paymaster, or its ETH; Kipurse never sponsors or refunds). The batch:
 //   1. deploy the phone approver (V2: Face ID trust approvals + owner payments = Siri)  [deterministic deployer, CREATE2]
 //   2. wallet.executeBatch(spend permission + caps plan: revoke old / approve new / register the gas-payer vault)
@@ -32,9 +32,9 @@ export function createOnboarding({verified=null,S,save,pub,wallet,owner,trust,ch
   /** The ordered call list for ONE wallet_sendCalls (atomicRequired) from the Base Account. */
   function batch({approver,plan:pl,remove}){return assertNoTopLevelOwnerCall([{to:DETERMINISTIC_DEPLOYER,value:'0x0',data:approver.deployData,label:'deploy phone approver ('+approverVersion+')'},
     {to:W,value:'0x0',data:pl.walletExecuteBatch.data,label:'spend permission + caps: '+pl.calls.map(c=>c.label).join(' · ')},
-    selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[approver.address]}),'add the phone approver as a scoped owner'),   // t1238 §6#106: self-call
+    selfCall(W,encodeFunctionData({abi:WALLET_ABI,functionName:'addOwnerAddress',args:[approver.address]}),'add the phone approver as a scoped owner'),   // t1238 decision 106: self-call
     ...remove.map(r=>({...phone.removeCall(r),label:'remove dead approver '+r.approver}))]);}
-  // t1109u (0A/0B/t763u): every (re)opening needs the owner's Coinbase Verified Account attestation; fails closed, nothing charged.
+  // t1109 (0A/0B/t763): every (re)opening needs the owner's Coinbase Verified Account attestation; fails closed, nothing charged.
   async function cbvOk(){if(typeof verified!=='function')return {verified:false,reason:'unavailable'};try{return await verified(OWNER);}catch{return {verified:false,reason:'unavailable'};}}
   async function start({x,y,single,daily,term,days,openSingle,openDaily}){gc();
     {const v=await cbvOk();if(!v?.verified)throw Object.assign(Error(v?.reason==='unavailable'?'Coinbase verification check is unavailable; nothing was charged. Try again.':'This Base Account has no Coinbase Verified Account attestation yet. Nothing was charged.'),{code:v?.reason==='unavailable'?'verify_unavailable':'not_verified'});}

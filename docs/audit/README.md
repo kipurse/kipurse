@@ -42,7 +42,23 @@ The vault factory also differs in 64 additional bytes, which we believe are the 
 
 nSLOC counts non-blank, non-comment-only lines; Total is `wc -l`. Every address below is on Base mainnet (chain id 8453).
 
-### 2.1 Live (highest priority)
+### 2.0 V5.5 suite (newest)
+
+New wallets open on V5.5 (owners: Base Account, `KipurseKeySeatV2`, SPM). Runtime bytecode built from this tree matches the chain for every contract below, apart from immutables and the trailing metadata hash (checked 2026-11-25).
+
+| Contract | File | nSLOC / Total | Address(es) |
+|---|---|---|---|
+| `KipurseAdapterV55` | `contracts/src/KipurseAdapterV55.sol` | 487 / 636 | `0x53F99af228A165A312Ed4A7E47447a9137dbf03e` |
+| `KipurseTrustV55` | `contracts/src/KipurseTrustV55.sol` | 169 / 234 | `0xDBb66b5E7a2773e0419093Ea5cf6E70E68A747B4` (created by the adapter) |
+| `PayerVaultFactoryV55` / `PayerVaultV55` | `contracts/src/KipursePayerVaultV55.sol` | 245 / 332 | factory `0xC01C40bBE92D0e959C2730c5f62F2737baEEc248`; vault implementation `0xB0F92441A31CbCB7Baa5659a08228De8De7d2BDf` (EIP-1167 clones) |
+| `KipurseFloatVaultV55` | `contracts/src/KipurseFloatVaultV55.sol` | 63 / 89 | implementation `0x54830Fc7042DBe7A4Eb03928ACf22Cf7B251780b` (clones) |
+| `KipurseKeySeatV2` | `contracts/src/KipurseKeySeatV2.sol` | 105 / 155 | one per wallet (CREATE2 in each opening batch) |
+| `KipurseMerchantRegistryV2` | `contracts/src/KipurseMerchantRegistryV2.sol` | 128 / 185 | `0xB8ce1FfCbF88DBd73C5C6f557b3D68cF0b92Eb68` |
+| `KipurseFeeControllerV5` (reused) | `contracts/src/KipurseFeeControllerV5.sol` | 37 / 50 | `0x8F52D223DF89E388DcB5d39C53f154b9F8F9a67A` |
+
+Deploy plan: `server/mainnet/v55-deploy-plan.json` (deterministic deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C`).
+
+### 2.1 Live (older suites)
 
 | Contract | File | nSLOC / Total | Address(es) | Status |
 |---|---|---|---|---|

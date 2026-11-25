@@ -1,8 +1,8 @@
 import SwiftUI
 import KipurseCore
 
-/// t902 (owner): tapping 连接 Siri first explains what Siri does with the wallet and the 3 steps. The Face ID approval sheet
-/// (with its one-time network fee) opens ONLY from the last step's 下一步 button.
+/// t902 (owner): tapping [zh] Siri first explains what Siri does with the wallet and the 3 steps. The Face ID approval sheet
+/// (with its one-time network fee) opens ONLY from the last step's [zh] button.
 enum SiriPending {   // step 1 choice, applied (one Face ID) once Face ID approval is on
   static let key = "kp.siri.pendingLimits"
   static var value: (String, String)? { guard let a = UserDefaults.standard.array(forKey: key) as? [String], a.count == 2 else { return nil }; return (a[0], a[1]) }
@@ -18,7 +18,7 @@ struct SiriIntroView: View {
   @State private var step1 = SiriPending.value != nil; @State private var step2 = true   // t952 A5: no "say it" step; phrases are info only
   @State private var err: String?; @State private var phrases = false; @State private var deposit = false
   static let maxFee: Int64 = 50_000   // server cap for the one-time approver fee (0.05 USDC); the exact quote shows on the next sheet
-  var enough: Bool { (m.state?.balance ?? 0) >= Self.maxFee }   // t1128u (§6#66): the post-opening enable fee comes from the Kipurse wallet (cap 0.05)
+  var enough: Bool { (m.state?.balance ?? 0) >= Self.maxFee }   // t1128 (decision 66): the post-opening enable fee comes from the Kipurse wallet (cap 0.05)
   var body: some View {
     NavigationStack {
       List {

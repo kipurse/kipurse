@@ -1,4 +1,4 @@
-// FORK-ONLY: one-time setup ("开通") = ONE atomic batch from the owner's Base Account (one signature, one gas payment):
+// FORK-ONLY: one-time setup ("[zh]") = ONE atomic batch from the owner's Base Account (one signature, one gas payment):
 // spend permission + caps, phone approver V2 deploy + addOwner (Face ID + Siri), dead-approver removal. Also a brand-new wallet.
 //   FORK_RPC=http://127.0.0.1:18591 FORK_PERMISSION_JSON='{...}' node --test test/fork/onboard-fork.e2e.mjs
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import http from 'node:http';

@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1133u + t1143u: wallet address lives in the top 启付钱包 card; same eye as the balance hides it to head…tail, open shows the full two-line address; copy always copies the full address.
+/// t1133 + t1143: wallet address lives in the top [zh] card; same eye as the balance hides it to head…tail, open shows the full two-line address; copy always copies the full address.
 final class T1133WalletAddressUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }
@@ -13,7 +13,7 @@ final class T1133WalletAddressUITests: XCTestCase {
     XCTAssertEqual(app.buttons.matching(identifier: "wallet.copyWallet").count, 1, "one copy entry (t930)")
     let full = (cw.value as? String) ?? ""
     XCTAssertTrue(full.hasPrefix("0x"), lang); XCTAssertEqual(full.count, 42, "whole address, not shortened")
-    // the visible text is the whole address (no ellipsis), inside the card above 充值/提现
+    // the visible text is the whole address (no ellipsis), inside the card above [zh]
     XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "····")).firstMatch.exists, lang)
     let dep = app.buttons["home.deposit"]; XCTAssertTrue(dep.waitForExistence(timeout: 5))
     XCTAssertLessThan(cw.frame.maxY, dep.frame.minY, "address sits in the top card")
@@ -32,7 +32,7 @@ final class T1133WalletAddressUITests: XCTestCase {
   func testZh() { run("zh") }
   func testEn() { run("en") }
 
-  /// t1143u: hidden by default (same eye as the balance): short head…tail, a11y value is not the full address; copy still copies; opening the eye shows the full 42-character address.
+  /// t1143: hidden by default (same eye as the balance): short head…tail, a11y value is not the full address; copy still copies; opening the eye shows the full 42-character address.
   func runHiddenShownCopy(_ lang: String) {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-kp.lang", lang, "-kpSkipFaceID", "-tab", "home", "-kpMasked"]; app.launch()
     let zh = lang == "zh"

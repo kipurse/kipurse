@@ -1,4 +1,4 @@
-// t1213 (handbook §6#100): V5.4 signed-merchant decision. Valid signed order from the published + owner-granted signer -> auto; every
+// t1213 (decision 100): V5.4 signed-merchant decision. Valid signed order from the published + owner-granted signer -> auto; every
 // mismatch -> today's card. Flag off / non-V5.4 wallet -> card (the owner's V5.2 wallet is never affected).
 import test from 'node:test';import assert from 'node:assert/strict';
 import {privateKeyToAccount} from 'viem/accounts';import {keccak256,toHex} from 'viem';

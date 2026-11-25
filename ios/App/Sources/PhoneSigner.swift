@@ -100,16 +100,16 @@ enum PhoneKey {
   }
   static func post(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
     var r = URLRequest(url: server.appendingPathComponent(path)); r.setValue(Loc.code, forHTTPHeaderField: "x-kp-lang"); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "content-type")
-    // t1240 (§6#110 F1): "add this phone" needs owner proof - this phone's session (current Face ID phone) or a fresh Coinbase sign-in with this key
+    // t1240 (decision 110 F1): "add this phone" needs owner proof - this phone's session (current Face ID phone) or a fresh Coinbase sign-in with this key
     if path == "phone/enroll", let tok = MainnetSession.load() { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
     r.httpBody = try JSONSerialization.data(withJSONObject: body); let (d, resp) = try await URLSession.shared.data(for: r)
     let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] ?? [:]
     if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw ServerText.error(j, status: h.statusCode) }   // t1275 (#3): only a 2xx is an answer; callers still check its fields
     return j
   }
-  /// 升级确认 / 添加这台手机: create (or reuse) the Secure Enclave key, register it, open the Coinbase wallet page (fee sheet first).
+  /// [zh]: create (or reuse) the Secure Enclave key, register it, open the Coinbase wallet page (fee sheet first).
   @MainActor static func startUpgrade(_ m: AppModel) async {
-    let owed = await OwedSigninProof.fulfill(reason: T("开启 Face ID 批准", "Turn on Face ID approvals"))   // t1268 §6#133: a bind sign-in's key proof, with this action's Face ID
+    let owed = await OwedSigninProof.fulfill(reason: T("开启 Face ID 批准", "Turn on Face ID approvals"))   // t1268 decision 133: a bind sign-in's key proof, with this action's Face ID
     defer { owed?.invalidate() }
     do { let k = try owed.flatMap { existing(context: $0) } ?? create(); guard let (x, y) = xy(k) else { return }
       let r = try await post("phone/enroll", ["x": Hex.encode(x), "y": Hex.encode(y)])
@@ -127,7 +127,7 @@ enum PhoneKey {
   }
 }
 
-/// 设置 → 手机确认（主网）: create the key, show its fingerprint, open the enrollment page (Coinbase wallet signs once), or revoke.
+/// [zh] → [zh]: create the key, show its fingerprint, open the enrollment page (Coinbase wallet signs once), or revoke.
 struct PhoneSignerView: View {
   @EnvironmentObject var m: AppModel
   @State private var fp: String? = nil; @State private var active: [String: Any]? = nil; @State private var err = ""; @State private var errLine = ""; @State private var busy = false
@@ -148,7 +148,7 @@ struct PhoneSignerView: View {
             Text(T("这台手机还没开启 Face ID 批准。开启后，旧手机或旧 App 里的批准会自动失效，你的钱不受影响。", "Face ID approvals aren't on for this phone yet. Turning them on here automatically retires the old phone or app copy. Your money isn't affected.")).foregroundStyle(.secondary).accessibilityIdentifier("phone.replaceNote")
             BigButton(T("在这台手机开启", "Turn on for this phone"), icon: "faceid", disabled: busy) { Task { await enroll(replacing: active?["approver"] as? String) } }.accessibilityIdentifier("phone.replace")
             Text(T("网络费按实时报价从你的启付钱包扣，最多 0.05 USDC。", "The network fee is a live quote from your Kipurse wallet, at most 0.05 USDC.")).font(.footnote).foregroundStyle(.secondary)
-          } else {   // t1245 (§6#115 U29): the main action is a real brand button; the note is whole sentences
+          } else {   // t1245 (decision 115 U29): the main action is a real brand button; the note is whole sentences
             BigButton(Unbound.bindLabel, icon: "faceid", disabled: busy) { Task { await enroll() } }.accessibilityIdentifier("phone.bind")
             Text(T(PhoneEnrollCopy.afterOpeningFeeZH + "开启和关闭都要在你的 Coinbase 账户里确认一次。", PhoneEnrollCopy.afterOpeningFeeEN + ". Turning it on or off is confirmed once in your Coinbase account.")).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }
@@ -177,7 +177,7 @@ struct PhoneSignerView: View {
   }
   func enroll(siri: Bool = false, replacing: String? = nil) async {
     busy = true; defer { busy = false }; err = ""; errLine = ""
-    let owed = await OwedSigninProof.fulfill(reason: T("开启 Face ID 批准", "Turn on Face ID approvals"))   // t1268 §6#133: a bind sign-in's key proof, with this action's Face ID
+    let owed = await OwedSigninProof.fulfill(reason: T("开启 Face ID 批准", "Turn on Face ID approvals"))   // t1268 decision 133: a bind sign-in's key proof, with this action's Face ID
     defer { owed?.invalidate() }
     do { let k = try owed.flatMap { PhoneKey.existing(context: $0) } ?? PhoneKey.create(); guard let (x, y) = PhoneKey.xy(k) else { return }; fp = PhoneTrust.fingerprint(x: x, y: y)
       let r = try await PhoneKey.post("phone/enroll", ["x": Hex.encode(x), "y": Hex.encode(y)])
@@ -196,7 +196,7 @@ struct PhoneApproveTrustSheet: View {
   let req: TrustReq
   @State private var data: [String: Any]? = nil; @State private var msg: OwnerTrustMessage? = nil; @State private var hash: [UInt8]? = nil
   @State private var issues: [String] = []; @State private var state = ""; @State private var done = false; @State private var busy = false; @State private var notBound = false
-  @State private var grant: OwnerSignerTrustMessage? = nil; @State private var grantHash: [UInt8]? = nil   // t1214 §6#102: V5.4 only (server sends it only then)
+  @State private var grant: OwnerSignerTrustMessage? = nil; @State private var grantHash: [UInt8]? = nil   // t1214 decision 102: V5.4 only (server sends it only then)
   var check: [String: Any]? { data?["addressCheck"] as? [String: Any] }
   var checkStatus: String { check?["status"] as? String ?? "" }
   var body: some View {
@@ -259,12 +259,12 @@ struct PhoneApproveTrustSheet: View {
       let ceil0 = SignedLimitsStore.ceiling(app)
       if ceil0 == nil { issues.append(T(SignedLimitsCopy.noneZH, SignedLimitsCopy.noneEN)) }
       else if let ceil0, !OwnerAsk.trustCapProblems(om, ceiling: ceil0).isEmpty { issues.append(T("这次信任的额度超过你在手机上设的 AI 花钱上限，已停止。", "This trust is above the AI spending limits set on this phone, so it was stopped.")) }
-      issues += PhoneTrust.suiteProblems(om)   // t1250 (§6#119): V5.5 wallets only - the KR-05 rules the V5.5 trust contract enforces
+      issues += PhoneTrust.suiteProblems(om)   // t1250 (decision 119): V5.5 wallets only - the KR-05 rules the V5.5 trust contract enforces
       // t1280 (Q4): the epoch must be the merchant's CURRENT trust epoch, read by this phone on chain (two agreeing nodes), not the server's word
       if !(await PhoneTrust.chainEpochMatches(account: om.account, merchant: om.merchant, epoch: om.epoch)) { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) }
       // t1250: on V5.5 a reusable ("remember") trust is OwnerInlineTrust (seat kind 6); else OwnerTrust, as before
       if let d = PhoneTrust.trustDigest(om) { if Hex.encode(d).lowercased() != (j["digest"] as? String ?? "").lowercased() { issues.append(T("服务器给的内容和手机算出的不一致，已停止。", "Server data doesn't match what the phone computed. Stopped.")) } else { hash = PhoneTrust.walletHash(d) } }
-      // t1214 (§6#100/#102): V5.4 wallets only — the same Face ID also signs the merchant-signer grant; the phone recomputes it and it must match the card exactly
+      // t1214 (decision 100/#102): V5.4 wallets only — the same Face ID also signs the merchant-signer grant; the phone recomputes it and it must match the card exactly
       if let gj = j["signerGrant"] as? [String: Any], let gm = gj["message"] as? [String: Any] {
         func g(_ k: String) -> String { if let v = gm[k] as? String { return v }; if let n = gm[k] as? NSNumber { return n.stringValue }; return "" }
         let gr = OwnerSignerTrustMessage(account: g("account"), merchant: g("merchant"), name: g("name"), epoch: g("epoch"), signers: gm["signers"] as? [String] ?? [],
@@ -280,18 +280,18 @@ struct PhoneApproveTrustSheet: View {
   func approve() async {
     if let gh = grantHash, let g = grant { await approveWithGrant(gh, g); return }
     guard let h = hash, let k = PhoneKey.existing() else { return }; busy = true; defer { busy = false }
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     do { let (r, s) = try PhoneKey.sign(h, key: k); state = T("正在核对并上链…（10–30 秒）", "Checking and writing on chain… (10–30 s)")
       let j = try await PhoneKey.post("approve/trust/phone-sign", ["id": req.id, "r": Hex.encode(r), "s": Hex.encode(s)])
       guard TrustSignReply.trusted(j) else { state = T(TrustSignReply.notConfirmedZH, TrustSignReply.notConfirmedEN); return }   // t1275 (#3): no ✅ without the server's "trusted"
       Haptics.success(); done = true; state = (j["inline"] as? Bool == true) ? RequestVerify.rememberedDone(zh: Loc.isChinese) : T("✅ 已允许。AI 现在可以在上限内付给它。", "✅ Allowed. Your AI can now pay it within your limits.")
     } catch { state = error.localizedDescription }
   }
-  /// t1214 (§6#102, V5.4 only): ONE Face ID signs the trust (kind 1) and the merchant-signer grant (kind 5).
+  /// t1214 (decision 102, V5.4 only): ONE Face ID signs the trust (kind 1) and the merchant-signer grant (kind 5).
   func approveWithGrant(_ gh: [UInt8], _ g: OwnerSignerTrustMessage) async {
     guard let h = hash else { return }; busy = true; defer { busy = false }
     let ctx = LAContext(); ctx.localizedCancelTitle = T("取消", "Cancel"); ctx.touchIDAuthenticationAllowableReuseDuration = 0; defer { ctx.invalidate() }
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     guard (try? await ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: T("用 Face ID 批准", "Approve with Face ID"))) == true, let k = PhoneKey.existing(context: ctx) else { state = T("已取消。", "Canceled."); return }
     do { let (r, s) = try PhoneKey.sign(h, key: k, reusesUnlock: true), (gr, gs) = try PhoneKey.sign(gh, key: k, reusesUnlock: true)
       state = T("正在核对并上链…（10–30 秒）", "Checking and writing on chain… (10–30 s)")
@@ -303,7 +303,7 @@ struct PhoneApproveTrustSheet: View {
   func reject() async {
     guard let k = PhoneKey.existing(), let r = data?["request"] as? [String: Any], let payee = r["payee"] as? String else { return }; busy = true; defer { busy = false }
     let d = [UInt8](SHA256.hash(data: Data(PhoneTrust.rejectMessage(id: req.id, payee: payee).utf8)))
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     do { let (rr, ss) = try PhoneKey.sign(d, key: k); let j = try await PhoneKey.post("approve/trust/phone-reject", ["id": req.id, "r": Hex.encode(rr), "s": Hex.encode(ss)])
       guard TrustSignReply.rejected(j) else { state = T(TrustSignReply.notConfirmedZH, TrustSignReply.notConfirmedEN); return }   // t1275 (#3)
       done = true; state = T("已拒绝。", "Rejected.") }
@@ -342,7 +342,7 @@ extension PhoneKey {
     // t1266 (fix 2): only a Kipurse signing page (https, no port, the Kipurse API host, a known signing path)
     guard SignHost.signingPage(url0, serverHost: Mainnet.base.host) != nil else { throw stopErr([T("确认页不是启付的签名页", "the confirmation page isn't a Kipurse signing page")]) }
     let p = try plan(r)
-    // t1128u (§6#66): a post-opening enable is only the wallet-pays shape: live fee <= 0.05 from the Kipurse wallet to Kipurse's fee address.
+    // t1128 (decision 66): a post-opening enable is only the wallet-pays shape: live fee <= 0.05 from the Kipurse wallet to Kipurse's fee address.
     if let e = EnrollFee.problem(r, owner: p.owner) { throw stopErr([e]) }
     let srv = (r["replaces"] as? String)?.lowercased()
     // server may say nothing to replace (old one already off chain); if it names one, it must be the one this phone saw
@@ -383,7 +383,7 @@ struct FaceIDApprovalHeader: View {
   }
 }
 
-/// t1214 (§6#102): the only new words on the existing trust card (V5.4 wallets, when the request names the merchant's order signer).
+/// t1214 (decision 102): the only new words on the existing trust card (V5.4 wallets, when the request names the merchant's order signer).
 enum SignerGrantCopy {
   static func footer(_ name: String) -> String { T("同一次 Face ID 也会信任 \(name) 发来的订单：以后它的订单（每单收款地址可以不同）在上面的上限内自动付。", "The same Face ID also trusts orders from \(name): its future orders (each may use a different payee address) pay within the limits above.") }
   static func done(_ name: String) -> String { T("✅ 已允许。AI 现在可以在上限内付给它；\(name) 以后发来的订单也在上限内自动付。", "✅ Allowed. Your AI can now pay it within your limits; future orders from \(name) also pay within these limits.") }

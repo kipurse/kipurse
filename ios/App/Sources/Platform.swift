@@ -45,7 +45,7 @@ enum BiometricGate {
   static func confirm(reason: String, graceSeconds: TimeInterval = 0, approval: Bool = false) async -> Bool {
     if DemoGuard.active { DemoGuard.say(); return true }   // demo: never scan, just explain
     if graceSeconds > 0, !approval, Date().timeIntervalSince(lastOK) < graceSeconds { return true }
-    if approval { await FaceIDUnlock.ensure() }   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    if approval { await FaceIDUnlock.ensure() }   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     let ctx = LAContext(); ctx.localizedCancelTitle = L("取消"); defer { ctx.invalidate() }
     let policy: LAPolicy = approval ? .deviceOwnerAuthenticationWithBiometrics : .deviceOwnerAuthentication
     var err: NSError?
@@ -60,7 +60,7 @@ enum BiometricGate {
   /// context makes the Secure Enclave refuse the key (the "only Kipurse fails Face ID" report). A locked Face ID is unlocked first.
   static func unlockContext(reason: String) async -> LAContext? {
     if DemoGuard.active { DemoGuard.say(); return LAContext() }   // demo: no scan (the context is never used for a real key)
-    await FaceIDUnlock.ensure()   // t1255 §6#124: passcode only unlocks a locked Face ID (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: passcode only unlocks a locked Face ID (approves nothing)
     let ctx = LAContext(); ctx.localizedCancelTitle = L("取消"); ctx.touchIDAuthenticationAllowableReuseDuration = 0
     var err: NSError?
     let policy: LAPolicy = .deviceOwnerAuthenticationWithBiometrics
@@ -134,7 +134,7 @@ struct SignPage: View {
   }
 }
 
-/// t785u: every web page opened from the app stays INSIDE the app (SFSafariViewController on top of the current screen).
+/// t785: every web page opened from the app stays INSIDE the app (SFSafariViewController on top of the current screen).
 /// Kipurse signing pages are routed through the pinned sign host first. Non-web schemes (other apps: shortcuts://, agent apps,
 /// kipurse://) go to the system as before. Exception kept on purpose: the Coinbase App hand-off links (see report t785).
 enum InApp {
@@ -179,7 +179,7 @@ enum InApp {
     while let p = top.presentedViewController { top = p }
     top.present(v, animated: true) { if let banner { InApp.showBanner(banner) } }
   }
-  /// t1040u: Safari sheet chrome matches the dark glass look.
+  /// t1040: Safari sheet chrome matches the dark glass look.
   @MainActor static func style(_ v: SFSafariViewController) { v.preferredBarTintColor = UIColor(red: 0.04, green: 0.04, blue: 0.09, alpha: 1); v.preferredControlTintColor = UIColor(red: 0.13, green: 0.83, blue: 0.93, alpha: 1); v.overrideUserInterfaceStyle = .dark }
   /// SwiftUI Link / openURL -> in-app
   static var action: OpenURLAction { OpenURLAction { url in Task { @MainActor in InApp.open(url) }; return .handled } }
@@ -247,7 +247,7 @@ enum LocalWipe {
     BGTaskScheduler.shared.cancelAllTaskRequests()
     try? await CSSearchableIndex.default().deleteAllSearchableItems()   // Spotlight: indexed payees (PayeeEntity) and anything else
     try? await INInteraction.deleteAll()
-    SiriCredential.clear()   // t1158u: Siri's pay-only credential (Keychain, this device)
+    SiriCredential.clear()   // t1158: Siri's pay-only credential (Keychain, this device)
     await AssistantHooks.wipe?()   // Siri module: its entities in Spotlight, every intent donation, its caches, App Shortcut parameters
   }
   /// Delete every key item except the ones with the given application tag.
@@ -257,7 +257,7 @@ enum LocalWipe {
     guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let items = out as? [[String: Any]] else { return }
     for i in items where (i[kSecAttrApplicationTag as String] as? Data) != keep { if let r = i[kSecValuePersistentRef as String] as? Data { SecItemDelete([kSecValuePersistentRef as String: r] as CFDictionary) } }
   }
-  /// What a fresh install has: nothing. Used by the factory-reset self-check (Settings → 关于 / tests).
+  /// What a fresh install has: nothing. Used by the factory-reset self-check (Settings → [zh] / tests).
   static func remnants(includePhoneKey: Bool = false) -> [String] {
     var r: [String] = []
     if SessionVault.load() != nil { r.append(L("钥匙串登录")) }
@@ -271,12 +271,26 @@ enum LocalWipe {
   }
 }
 
-/// Auth / session errors with their real domain + code, appended to Documents/kp-auth.log (read with devicectl / Files). No secrets logged.
+/// Auth / session errors with their real domain + code, appended to Library/Application Support/kp-auth.log (read with devicectl from the
+/// app data container). No secrets logged.
 /// t1275 (#4): capped (over 256 KB it rotates to kp-auth.old.log, so at most ~512 KB on the phone); the system log copy (NSLog) is Debug only.
-/// The file stays in Documents because the owner reads it through Files / Finder and the app has no other way to show it.
+/// t147 (decision 147): moved out of Documents (Documents is visible in Files / Finder and backed up as user content). A copy left in Documents
+/// by an older build is moved here on the first write.
 enum AuthLog {
-  static var url: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("kp-auth.log") }
-  static var oldURL: URL { url.deletingLastPathComponent().appendingPathComponent("kp-auth.old.log") }
+  static var dir: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] }
+  static var url: URL { dir.appendingPathComponent("kp-auth.log") }
+  static var oldURL: URL { dir.appendingPathComponent("kp-auth.old.log") }
+  private static var migrated = false
+  private static func migrateFromDocuments(_ fm: FileManager) {
+    if migrated { return }; migrated = true
+    try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+    let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    for n in ["kp-auth.log", "kp-auth.old.log"] {
+      let from = docs.appendingPathComponent(n), to = dir.appendingPathComponent(n)
+      guard fm.fileExists(atPath: from.path) else { continue }
+      if fm.fileExists(atPath: to.path) { try? fm.removeItem(at: from) } else { try? fm.moveItem(at: from, to: to) }
+    }
+  }
   static let maxBytes = 256 * 1024
   private static let lock = NSLock()
   static func record(_ phase: String, _ e: Error) {
@@ -284,7 +298,7 @@ enum AuthLog {
     if let u = n.userInfo[NSUnderlyingErrorKey] as? NSError { line += " under=\(u.domain)/\(u.code)" }
     append(line)
   }
-  /// t1256 (§6#125): one step of a Face ID / signing flow (no secrets: only step names, counts and error codes).
+  /// t1256 (decision 125): one step of a Face ID / signing flow (no secrets: only step names, counts and error codes).
   static func note(_ phase: String, _ msg: String) { append("\(ISO8601DateFormatter().string(from: Date())) \(phase) \(msg)") }
   private static func append(_ line: String) {
     #if DEBUG
@@ -292,10 +306,11 @@ enum AuthLog {
     #endif
     let d = Data((line + "\n").utf8), fm = FileManager.default
     lock.lock(); defer { lock.unlock() }
+    migrateFromDocuments(fm)
     if let sz = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, sz + d.count > maxBytes {   // t1275: rotate, keep one old file
       try? fm.removeItem(at: oldURL); try? fm.moveItem(at: url, to: oldURL) }
     if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: url, options: .completeFileProtectionUntilFirstUserAuthentication) }
-    // t1280 (L3): the log (and its rotated copy) stays in Documents for the owner, but encrypted until the first unlock after boot
+    // t1280 (L3): the log (and its rotated copy) is encrypted until the first unlock after boot
     for f in [url, oldURL] where fm.fileExists(atPath: f.path) { try? fm.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: f.path) }
   }
   static func isUserCancel(_ e: Error) -> Bool {

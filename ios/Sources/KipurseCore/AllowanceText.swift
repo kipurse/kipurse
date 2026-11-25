@@ -6,7 +6,7 @@ import Foundation
 ///   wallet:<lowercase wallet>
 ///   id:<proposal id>
 ///   items:<JSON.stringify(normalized items)>
-///   [chain:<chainId>\ntoken:<lowercase token>]   (t1181u scope)
+///   [chain:<chainId>\ntoken:<lowercase token>]   (t1181 scope)
 ///   [mode:trust|once]                             (askText only)
 /// Anything else (extra / missing / reordered lines, another wallet or id, another network or token) -> nil = refuse.
 public enum AllowanceText {
@@ -87,7 +87,7 @@ public enum AllowanceText {
       let ai = name(o["aiName"]).map { T("。AI 说它是“\($0)”，未核实", ". The AI calls it \"\($0)\" (not verified)") } ?? ""
       let swap = payeeSwap ? T("。注意：你以前批准的同名收款方不是这个地址，可能是冒充", ". Warning: the payee with this name you approved before has a DIFFERENT address, this may be an impostor") : ""
       let note = name(o["note"])
-      if (o["dup"] as? Bool) == true {   // t1280 (§6#140): suspected duplicate purchase - the flag is in the signed text
+      if (o["dup"] as? Bool) == true {   // t1280 (decision 140): suspected duplicate purchase - the flag is in the signed text
         return T("⚠️ 疑似重复购买：10 分钟内已经给 \(target) 付过同样的 \(usdc(i["single"])) USDC（\(note.map { "用途：\($0)" } ?? pz)）。这次还没付，确实要再买一次才点「再付一次」",
                  "⚠️ Possible duplicate: \(usdc(i["single"])) USDC already went to \(target) in the last 10 minutes (\(note.map { "for: \($0)" } ?? pe)). Nothing has been paid for this one; tap \"Pay again\" only if you really want a second one")
       }
@@ -102,7 +102,7 @@ public enum AllowanceText {
     }
   }
 
-  // MARK: t1281 (handbook §6#141 ③): the signed-but-hidden terms, shown under the card lines
+  // MARK: t1281 (decision 141 (3)): the signed-but-hidden terms, shown under the card lines
   /// One extra row on an approval card. `id` is the row kind: site / payee / replaces / remember / expires (UI id allow.detail.<id>).
   public struct Detail: Equatable { public let id: String, zh: String, en: String
     public init(id: String, zh: String, en: String) { self.id = id; self.zh = zh; self.en = en } }
@@ -157,7 +157,7 @@ public enum AllowanceText {
   }
   /// a host as the gateway normalizes it (/^[a-z0-9.-]{3,253}$/ after lowercasing)
   static func isHost(_ h: String) -> Bool { h.count >= 3 && h.count <= 253 && h.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "." || $0 == "-") } }
-  /// expiresInDays (gateway: 1/24 ... 366) -> "90 天" / "90 days"; under a day in hours. Anything else -> nil (row not shown).
+  /// expiresInDays (gateway: 1/24 ... 366) -> "[zh]" / "90 days"; under a day in hours. Anything else -> nil (row not shown).
   static func validity(_ v: Any?) -> (zh: String, en: String)? {
     guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
     let d = n.doubleValue; guard d.isFinite, d > 0, d <= 366 else { return nil }

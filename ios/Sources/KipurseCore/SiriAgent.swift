@@ -12,9 +12,9 @@ public enum SiriAgentAnswer {
   }
 }
 
-/// t1158u (§6#77): Siri pays like every other AI. Its pay-only credential ("ksc_" + 43 url-safe chars) comes from the Face ID
+/// t1158 (decision 77): Siri pays like every other AI. Its pay-only credential ("ksc_" + 43 url-safe chars) comes from the Face ID
 /// Siri connect approval; the phone session is used when alive, else the credential. Neither -> a spoken reason, money untouched.
-/// t1161u (§6#78): a Siri intent that reached the app marks Siri used (POST siri/allowances with the phone session; read-only, never moves money).
+/// t1161 (decision 78): a Siri intent that reached the app marks Siri used (POST siri/allowances with the phone session; read-only, never moves money).
 /// Throttled so a burst of Siri questions sends one marker; a failed marker is retried next time (never pretends Siri was seen).
 public enum SiriSeenRule {
   public static let path = "siri/allowances"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1214 (§6#102, owner t1230u; §6#101 owner t1227u): the owner's wallet switch from the V5.2 suite to V5.4 ("换合约"), PREPARED ONLY.
+// t1214 (decision 102, owner t1230; decision 101 owner t1227): the owner's wallet switch from the V5.2 suite to V5.4 ("[zh]"), PREPARED ONLY.
 // The owner's own Base Account confirms ONE batch in Coinbase. The wallet address and its money stay where they are; the owner keeps
 // view / stop / revoke / withdraw-all the whole time (his Base Account stays owner[0]; withdraw never involves any adapter).
 //   0. close anything still open on V5.2 (float session -> wallet.reconcileFloat path, x402 reservations -> wallet.cancelReservation)
@@ -10,7 +10,7 @@
 //   5. wallet.execute(SPM, revoke(P))                        the V5.2 permission stops working in the same batch
 //   6. wallet.removeOwnerAtIndex(i, approverV3)             the V5.2-bound phone approver leaves
 //   7. adapterV54.registerPermission(P')                     creates the V5.4 payer vault, session = Policy.executor (same as today)
-//   8. wallet.execute(USDC, transfer(vaultV54, 0.15))         fee reserve in his own vault (his money; §6#86; back on withdraw)
+//   8. wallet.execute(USDC, transfer(vaultV54, 0.15))         fee reserve in his own vault (his money; decision 86; back on withdraw)
 //   9. re-apply the owner's own V5.2 choices on the V5.4 trust: stored trusts (same name/payees/signers/caps/expiry), float cap,
 //      denied payees / signers, registry opt-out, pause (pause last).
 // Rollback (owner signs, any time before V5.4 is used): fee leg, approve a NEW V5.2 permission (a revoked hash can never come back),
@@ -34,7 +34,7 @@ export const MIGRATE_V54_GAS=2_750_000n;        // fee-quote gas = real x 1.1 (t
 export const ROLLBACK_V54_REAL_GAS=330_000n;    // fork-measured 323,330
 export const ROLLBACK_V54_GAS=363_000n;
 export const MIGRATE_V54_L1_WEI=2_000_000_000_000n; // L1 data allowance (~2.7 KB of calldata + approver init code ~8 KB)
-export const VAULT_SEED=150_000n;               // §6#86 fee reserve, his own money
+export const VAULT_SEED=150_000n;               // decision 86 fee reserve, his own money
 const ART=JSON.parse(fs.readFileSync(new URL('./phone-approver-v4-artifact.json',import.meta.url)));
 const P_T={type:'tuple',components:[{name:'account',type:'address'},{name:'spender',type:'address'},{name:'token',type:'address'},{name:'allowance',type:'uint160'},{name:'period',type:'uint48'},{name:'start',type:'uint48'},{name:'end',type:'uint48'},{name:'salt',type:'uint256'},{name:'extraData',type:'bytes'}]};
 export const ABI=parseAbi([
@@ -135,7 +135,7 @@ export async function readMigrationState(pub,{wallet,known}){const W=getAddress(
     openReservations:known.openReservations??[],serverInFlight:!!known.serverInFlight,alreadyMigrated:false,newPermissionPreview:v54Perm};}
 
 /* ---------------- t1214: /migrate-v54 endpoints (flag KIPURSE_MIGRATE_V54=1, the operator wallet only; default OFF) ----------------
- * The developer/test App (§6#101: never the public App) reads /migrate-v54/plan, decodes + checks every call itself, computes the KPVH
+ * The developer/test App (decision 101: never the public App) reads /migrate-v54/plan, decodes + checks every call itself, computes the KPVH
  * commitment and opens  <base>/migrate-v54?mode=migrate#vh=<commitment>  in Safari. That page asks /migrate-v54/prepare for the SAME
  * batch (fresh chain read, live fee quote), the guard refuses anything else, and the owner's Base Account confirms once in Coinbase.
  * Kipurse's paymaster fronts the gas for that exact batch only (callsHash gate); the wallet repays the actual cost in USDC inside it.
@@ -144,7 +144,7 @@ export async function readMigrationState(pub,{wallet,known}){const W=getAddress(
  *       onMigrated async(record) (switches the server's suite for this wallet; called once, after the chain shows the batch landed). */
 import {randomBytes} from 'node:crypto';
 import {commitment} from './batch-commit.mjs';import {decodePolicyV5,encodePolicyV5} from './abi.mjs';
-/* t1238 §6#109 (owner chose ①: move, then reconnect the AIs): mode 'seat' = move this wallet to a NEW key-seat wallet on V5.4 (src/v5/move-seat.mjs). */
+/* t1238 decision 109 (owner chose (1): move, then reconnect the AIs): mode 'seat' = move this wallet to a NEW key-seat wallet on V5.4 (src/v5/move-seat.mjs). */
 export const MOVE_SEAT_REAL_GAS=3_000_000n;   // fork-measured 2,965,162 for the whole move batch (t1238)
 export const MOVE_SEAT_GAS=3_300_000n;        // fee-quote gas = real x 1.1
 export const MOVE_SEAT_L1_WEI=4_000_000_000_000n; // L1 data allowance (~9 KB key-seat creation code + ~3 KB calls)

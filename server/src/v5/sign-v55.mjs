@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): the owner's V5.5 signing flows, the same proven way as V5.4 (createDeployV54 / createMigrateV54): a one-time page
+// t1250 (decision 119): the owner's V5.5 signing flows, the same proven way as V5.4 (createDeployV54 / createMigrateV54): a one-time page
 // in Safari, the owner's own Base Account confirms ONE fixed batch in Coinbase, Kipurse's paymaster fronts the gas for exactly that batch
 // (callsHash gate in onboard-sponsor) and the batch repays it in USDC (never ETH). The page lists EVERY call in plain Chinese and English;
 // the KPVH guard (link #vh=) refuses any batch that differs by one byte from what was checked. OFF unless KIPURSE_V55=1.

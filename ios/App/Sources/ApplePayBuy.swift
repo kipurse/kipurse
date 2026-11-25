@@ -52,7 +52,7 @@ struct ApplePayBuySheet: View {
         Label(T("用 Apple Pay 买 USDC", "Buy USDC with Apple Pay"), systemImage: "applelogo").font(.title3.bold())
         switch step {
         case .loading: ProgressView().frame(maxWidth: .infinity)
-        case .needsVerify:   // t635u: every purchase needs the owner's Coinbase Verified Account attestation (server enforces it)
+        case .needsVerify:   // t635: every purchase needs the owner's Coinbase Verified Account attestation (server enforces it)
           Text(T("先完成一次 Coinbase 认证，就能用 Apple Pay 买。提现和暂停永远不需要认证。", "Finish a one-time Coinbase verification to buy with Apple Pay. Withdrawing and pausing never need it.")).font(.body).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("applepay.needsVerify")
           CBVerifyGuide(v: cbv)
             .onChange(of: cbv.status) { s in if s == .verified { withAnimation { step = .terms } } }

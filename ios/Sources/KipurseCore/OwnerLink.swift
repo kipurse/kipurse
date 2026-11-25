@@ -17,11 +17,18 @@ public struct OwnerLink: Equatable {
 }
 
 public enum Server {
-  /// HTTPS anywhere; plain HTTP only for localhost / private LAN (the kit on the owner's Mac). Passkey signing itself needs HTTPS.
-  public static func isAllowed(_ u: URL) -> Bool {
+  /// t147 (decision 147): plain-HTTP LAN servers are a Debug-only developer path. A Release build accepts HTTPS only.
+  #if DEBUG
+  public static let lanHTTPAllowed = true
+  #else
+  public static let lanHTTPAllowed = false
+  #endif
+  /// HTTPS anywhere; plain HTTP only for localhost / private LAN (the kit on the owner's Mac), and only when allowLAN (Debug builds).
+  /// Passkey signing itself needs HTTPS.
+  public static func isAllowed(_ u: URL, allowLAN: Bool = lanHTTPAllowed) -> Bool {
     guard let h = u.host?.lowercased() else { return false }
     if u.scheme == "https" { return true }
-    guard u.scheme == "http" else { return false }
+    guard allowLAN, u.scheme == "http" else { return false }
     if h == "localhost" || h == "127.0.0.1" || h.hasSuffix(".local") { return true }
     let p = h.split(separator: ".").compactMap { Int($0) }
     guard p.count == 4 else { return false }

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1156u (§6#75): session-save failures say what really happened; the network sentence only for real network errors.
+/// t1156 (decision 75): session-save failures say what really happened; the network sentence only for real network errors.
 final class SessionErrorCopyT1156Tests: XCTestCase {
   override func tearDown() { Loc.override = nil }
   let la = "com.apple.LocalAuthentication"

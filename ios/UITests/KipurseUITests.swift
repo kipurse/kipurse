@@ -10,8 +10,8 @@ final class KipurseUITests: XCTestCase {
   }
   /// t1073/t1076: demo "main" has no everyday policy, so connect is gated until a saved AI limit exists.
   let kpAISaved = ["-kpAISaved", "10000000,50000000,200000000"]
-  /// t665: two tabs (AI 生活 / 钱包), found by icon identifier. "AI 智能体" and "设置" are now pages inside them:
-  /// tab("AI 智能体") = AI 生活 → 管理, tab("设置") = 钱包 → gear.
+  /// t665: two tabs (AI [zh]), found by icon identifier. "[zh]" and "[zh]" are now pages inside them:
+  /// tab("[zh]") = AI [zh] → [zh], tab("[zh]") = [zh] → gear.
   let tabIcons = ["AI 生活": "sparkles", "钱包": "creditcard.fill", "设置": "gearshape.fill"]   // t879: 设置 is the third tab
   func tab(_ name: String) -> XCUIElement {
     if name == "AI 智能体" { let l = tabButton("AI 生活"); if l.waitForExistence(timeout: 8) { l.tap() }; return app.buttons["life.manage"] }
@@ -56,18 +56,18 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5) || app.staticTexts["设置"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["BackButton"].exists, "t879: a tab, not a pushed page")
     shot("settings-tab-zh"); tab("钱包").tap()
     XCTAssertFalse(app.buttons["记录"].exists); XCTAssertFalse(app.buttons["待批准"].exists)
-    XCTAssertTrue(["2项", "2items"].contains((tab("AI 生活").value as? String)?.replacingOccurrences(of: " ", with: "") ?? ""), "§6#110: badge on AI 生活: \(String(describing: tab("AI 生活").value))")  // t1245 U9: badge = every card under 待你批准 — demo "main" has the Example Shop trust request + the Claude 8 USDC one-time request (VoiceOver word is the system's language)
-    XCTAssertFalse(((tab("钱包").value as? String) ?? "").range(of: "[0-9]", options: .regularExpression) != nil, "§6#110: no badge on 钱包")
+    XCTAssertTrue(["2项", "2items"].contains((tab("AI 生活").value as? String)?.replacingOccurrences(of: " ", with: "") ?? ""), "decision 110: badge on AI 生活: \(String(describing: tab("AI 生活").value))")  // t1245 U9: badge = every card under 待你批准 — demo "main" has the Example Shop trust request + the Claude 8 USDC one-time request (VoiceOver word is the system's language)
+    XCTAssertFalse(((tab("钱包").value as? String) ?? "").range(of: "[0-9]", options: .regularExpression) != nil, "decision 110: no badge on 钱包")
     XCTAssertTrue(app.descendants(matching: .any)["balance.unit"].exists); XCTAssertFalse(app.staticTexts["主网"].exists)
     XCTAssertTrue(app.descendants(matching: .any)["balance.amount"].label.contains("14.10"), "t665: 2 decimals")
-    XCTAssertFalse(app.descendants(matching: .any)["caps.spent"].exists, "t927/§6#110: home = balance, 充值/提现, 入金/支付/提现 records (待你批准 lives on AI 生活)")
-    XCTAssertFalse(app.descendants(matching: .any)["life.pending.title"].exists, "§6#110: no 待你批准 on 钱包")
+    XCTAssertFalse(app.descendants(matching: .any)["caps.spent"].exists, "t927/decision 110: home = balance, 充值/提现, 入金/支付/提现 records (待你批准 lives on AI 生活)")
+    XCTAssertFalse(app.descendants(matching: .any)["life.pending.title"].exists, "decision 110: no 待你批准 on 钱包")
     shot("main-home")
     tab("AI 生活").tap(); XCTAssertTrue(app.descendants(matching: .any)["life.pending.title"].waitForExistence(timeout: 5))   // the badge number = the cards shown here
     XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "8 USDC")).firstMatch.exists, "one-time request card"); shot("life-pending")
   }
   func testApprovalOpensPhoneApproveSheet() {
-    launch("main", tab: "life")   // §6#110: 待你批准 lives on AI 生活
+    launch("main", tab: "life")   // decision 110: 待你批准 lives on AI 生活
     XCTAssertTrue(app.staticTexts["待你批准"].waitForExistence(timeout: 5))
     app.buttons["approve.open"].tap()
     XCTAssertTrue(app.navigationBars["允许 AI 付给新收款方？"].waitForExistence(timeout: 5))
@@ -77,7 +77,7 @@ final class KipurseUITests: XCTestCase {
   }
   /// ONE LIMIT: pending AI request on home -> sheet shows the single AI payment limit (no category toggles) -> approve the AI request -> stop one AI.
   func testAllowancesSetupApproveAndStopAgent() {
-    launch("main", tab: "life")   // §6#110: the pending AI request card lives on AI 生活
+    launch("main", tab: "life")   // decision 110: the pending AI request card lives on AI 生活
     let card = app.descendants(matching: .any)["allow.card.pending"]; _ = card.waitForExistence(timeout: 8); reveal(card)
     if !card.exists { print("TREE>>>" + app.debugDescription) }
     XCTAssertTrue(card.exists); card.tap()
@@ -89,7 +89,7 @@ final class KipurseUITests: XCTestCase {
     let stop = app.buttons["allow.agent.stop"].firstMatch; reveal(stop); XCTAssertTrue(stop.waitForExistence(timeout: 5)); stop.tap()
     XCTAssertTrue(app.descendants(matching: .any)["allow.agent.stopped"].waitForExistence(timeout: 5)); shot("allow-done")
     app.buttons["allow.close"].tap()
-    XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 5))   // t927: no summary card (one approvals block) · §6#110: back on AI 生活
+    XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 5))   // t927: no summary card (one approvals block) · decision 110: back on AI 生活
   }
   func testSuspiciousDustCollapsed() {
     launch("main")
@@ -134,7 +134,7 @@ final class KipurseUITests: XCTestCase {
       XCTAssertTrue(app.staticTexts["tips.title"].waitForExistence(timeout: 5)); app.terminate()
     }
   }
-  /// t1057u + t1058u: no lost-phone subtitle on Settings; tips use normal KP body; address on Wallet.
+  /// t1057 + t1058: no lost-phone subtitle on Settings; tips use normal KP body; address on Wallet.
   func testT1057T1058SettingsAndWalletAddress() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang]; app.launch()
@@ -149,7 +149,7 @@ final class KipurseUITests: XCTestCase {
       tab("钱包").tap()   // tab() keys are Chinese identifiers (SF Symbol map)
       let cw = app.buttons["wallet.copyWallet"]; for _ in 0..<8 where !cw.exists || !cw.isHittable { app.swipeUp() }
       XCTAssertTrue(cw.waitForExistence(timeout: 8), lang); cw.tap()
-      let full = (cw.value as? String) ?? ""   // t1133u: full address in the top card, the old row is gone
+      let full = (cw.value as? String) ?? ""   // t1133: full address in the top card, the old row is gone
       XCTAssertTrue(full.hasPrefix("0x") && full.count == 42, lang)
       let title = lang == "zh" ? "我的钱包地址" : "My wallet address"
       XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", title)).firstMatch.exists, lang)
@@ -157,7 +157,7 @@ final class KipurseUITests: XCTestCase {
     }
   }
 
-  /// Student pass: Apple Pay is the ONE main deposit button; every other way is folded under "其他方式".
+  /// Student pass: Apple Pay is the ONE main deposit button; every other way is folded under "[zh]".
   func otherWays() {
     let o = app.buttons["deposit.other"]; XCTAssertTrue(o.waitForExistence(timeout: 8))
     XCTAssertEqual(app.buttons.matching(identifier: "deposit.applepay").count, 1, "t932: exactly one Apple Pay 充值 entry"); XCTAssertFalse(app.buttons["deposit.coinbase"].exists, "address way starts folded")
@@ -240,8 +240,8 @@ final class KipurseUITests: XCTestCase {
     shot("limits-page-after-switch")
     shot("limits-page")
   }
-  /// t603u/t604u: the limit-change screen states the per-change network fee in USDC and never asks for ETH.
-  /// t1038u: 钱包总限额 entry is on the Wallet tab (on-chain floor); AI 总限额 entry is on AI Life (agent caps + everyday). No settings entry.
+  /// t603/t604: the limit-change screen states the per-change network fee in USDC and never asks for ETH.
+  /// t1038: [zh] entry is on the Wallet tab (on-chain floor); AI [zh] entry is on AI Life (agent caps + everyday). No settings entry.
   func openLimits(ai: Bool = false) {
     let t = app.tabBars.buttons.element(boundBy: ai ? 0 : 1); if t.waitForExistence(timeout: 8) { t.tap() }
     let l = app.buttons[ai ? "life.aiLimit" : "wallet.totalLimit"]; XCTAssertTrue(l.waitForExistence(timeout: 8), ai ? "life.aiLimit" : "wallet.totalLimit")
@@ -259,14 +259,14 @@ final class KipurseUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["everyday.cost"].exists, "t1038: wallet total limit page has no AI everyday card")
     back(); openLimits(ai: true)
     XCTAssertTrue(app.navigationBars["AI 花钱上限"].waitForExistence(timeout: 5), "t1079: AI spending limits page")
-    // t1245 (§6#115 U18): a blank AI limits page shows no yellow 「请填写每笔金额」 until the owner types; the cards are there.
+    // t1245 (decision 115 U18): a blank AI limits page shows no yellow "[zh]" until the owner types; the cards are there.
     XCTAssertTrue(app.descendants(matching: .any)["everyday.title"].waitForExistence(timeout: 5))
     let ec = app.staticTexts["everyday.cost"]
     if ec.exists { XCTAssertTrue(ec.label.contains("请填写每笔") || ec.label.contains("Enter the per-payment") || ec.label.contains("所有 AI 共用") || ec.label.contains("Shared by every AI") || ec.label.contains("不收手续费"), ec.label) }
     for t in [whyLabel, fc.label] + (ec.exists ? [ec.label] : []) { XCTAssertFalse(t.contains("请先准备 ETH") || t.contains("add ETH"), t) }
     shot("limits-free-vs-charged")
   }
-  /// t1156u (§6#75): AI spending limits save when the session step fails. Calm, specific text on the existing line; the network
+  /// t1156 (decision 75): AI spending limits save when the session step fails. Calm, specific text on the existing line; the network
   /// sentence only for a real network error. No new buttons; the save button stays.
   func testAILimitsSaveSessionErrorsAreCalm() {
     let cases: [(String, String, [String], [String])] = [
@@ -352,7 +352,7 @@ final class KipurseUITests: XCTestCase {
   }
   func testSettingsButtons() {
     launch("main", tab: "settings")
-    // t1068u: settings uses PageTitle (settings.title), not system large navigation title
+    // t1068: settings uses PageTitle (settings.title), not system large navigation title
     XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5) || app.staticTexts["设置"].waitForExistence(timeout: 5))
     shot("settings-main")
     XCTAssertFalse(app.buttons["settings.limits"].exists, "t1038: limits moved to Wallet / AI Life"); XCTAssertFalse(app.buttons["settings.deposit"].exists)   // deposit only on the wallet tab
@@ -360,9 +360,9 @@ final class KipurseUITests: XCTestCase {
     app.buttons["settings.phone"].tap(); XCTAssertTrue(app.navigationBars["Face ID 批准"].waitForExistence(timeout: 5)); back()
     let rg = app.buttons["settings.lostPhone"]; for _ in 0..<6 where !rg.exists || !rg.isHittable { app.swipeUp() }; rg.tap()   // t821 / t1044
     XCTAssertTrue(app.staticTexts["手机丢了怎么办"].waitForExistence(timeout: 5)); back()
-    // t1057u: Settings lost-phone row has no Coinbase subtitle
+    // t1057: Settings lost-phone row has no Coinbase subtitle
     XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Coinbase 钱包需留一点 USDC")).firstMatch.exists)
-    XCTAssertFalse(app.buttons["settings.copyWallet"].exists, "t1058u: address moved to wallet")
+    XCTAssertFalse(app.buttons["settings.copyWallet"].exists, "t1058: address moved to wallet")
     XCTAssertFalse(app.buttons["测试网"].exists); XCTAssertFalse(app.staticTexts["测试网"].exists); XCTAssertFalse(app.buttons["settings.network"].exists)
     tab("钱包").tap()
     XCTAssertTrue(app.descendants(matching: .any)["balance.unit"].waitForExistence(timeout: 5)); XCTAssertFalse(app.staticTexts["测试网"].exists)
@@ -391,7 +391,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.alerts.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "another wallet")).firstMatch.exists)
   }
   /// Safety group: pause offers 24h / 48h / 7 days / until resume; delete warns to withdraw first.
-  /// §6#110 (owner 2026-11-21): pause lives on AI 生活; delete stays in 设置 → 危险操作 (different tabs, never side by side).
+  /// decision 110 (owner 2026-11-21): pause lives on AI [zh]; delete stays in [zh] → [zh] (different tabs, never side by side).
   func testSafetyGroup() {
     launch("main", tab: "life"); XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 8))
     let pz = app.buttons["safety.pause"]; for _ in 0..<8 where !pz.exists || !pz.isHittable { app.swipeUp() }
@@ -404,7 +404,7 @@ final class KipurseUITests: XCTestCase {
     shot("safety-2-pause-picker"); dismissDialog()
     app.terminate(); launch("main", tab: "settings")   // fresh launch: a tab tap right after the dialog closes can be dropped
     XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 8) || app.staticTexts["设置"].waitForExistence(timeout: 8))
-    XCTAssertFalse(app.buttons["safety.pause"].exists, "§6#110: pause moved out of 设置 (one place)")
+    XCTAssertFalse(app.buttons["safety.pause"].exists, "decision 110: pause moved out of 设置 (one place)")
     let del = app.buttons["safety.delete"]; for _ in 0..<8 where !del.exists || !del.isHittable { app.swipeUp() }; XCTAssertTrue(del.exists)
     app.buttons["safety.delete"].tap(); XCTAssertTrue(app.buttons["safety.deleteConfirm"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["先提现"].exists, "warns to withdraw first when money is left"); shot("safety-3-delete-confirm")
@@ -419,11 +419,11 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["你的 Coinbase 钱包"].exists && !app.staticTexts["你的 Coinbase 账户"].exists); XCTAssertTrue(app.staticTexts["withdraw.amount"].label.contains("14.1"), app.staticTexts["withdraw.amount"].label)   // t927: = the home balance (was a fixed 13.95)
     XCTAssertTrue(app.staticTexts["withdraw.net"].exists, "t927: 预计到账 = 余额 − 网络费")
     for w in ["execute", "target", "data", "BaseScan", "Basescan", "复制", "0x 开头", "Connect", "保险箱"] {
-      // t1133u: the wallet card (behind this sheet) has 复制 inside wallet.copyWallet; the withdraw sheet itself must have none
+      // t1133: the wallet card (behind this sheet) has [zh] inside wallet.copyWallet; the withdraw sheet itself must have none
       let p = NSPredicate(format: "label CONTAINS %@", w), card = app.buttons["wallet.copyWallet"]
       XCTAssertEqual(app.staticTexts.matching(p).count, card.exists ? card.staticTexts.matching(p).count : 0, w)
       XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND identifier != %@", w, "wallet.copyWallet")).firstMatch.exists, w) }
-    XCTAssertEqual(app.textFields.count, 1, "t1116u: only the optional amount field, no address to type"); XCTAssertTrue(app.textFields["withdraw.custom"].exists); XCTAssertTrue(app.buttons["withdraw.all"].isSelected, "default = 全部"); shot("withdraw-1-screen")
+    XCTAssertEqual(app.textFields.count, 1, "t1116: only the optional amount field, no address to type"); XCTAssertTrue(app.textFields["withdraw.custom"].exists); XCTAssertTrue(app.buttons["withdraw.all"].isSelected, "default = 全部"); shot("withdraw-1-screen")
     go.tap(); let c = app.buttons["withdraw.confirm"].firstMatch; XCTAssertTrue(c.waitForExistence(timeout: 5)); shot("withdraw-2-confirm"); c.tap()
     XCTAssertTrue(app.descendants(matching: .any)["withdraw.done"].waitForExistence(timeout: 8)); XCTAssertTrue(app.staticTexts["withdraw.doneAmount"].label.contains("14.1")); shot("withdraw-3-done")
   }
@@ -432,7 +432,7 @@ final class KipurseUITests: XCTestCase {
     launch("main-empty")
     XCTAssertTrue(app.staticTexts["还没有记录"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["待你批准"].exists)
-    tab("AI 生活").tap(); XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 5)); XCTAssertFalse(app.staticTexts["待你批准"].exists, "§6#110: nothing pending on AI 生活 either"); tab("钱包").tap()
+    tab("AI 生活").tap(); XCTAssertTrue(app.staticTexts["life.title"].waitForExistence(timeout: 5)); XCTAssertFalse(app.staticTexts["待你批准"].exists, "decision 110: nothing pending on AI 生活 either"); tab("钱包").tap()
     shot("main-empty")
     launch("empty")
     XCTAssertTrue(app.staticTexts["先设置额度，AI 才能付款"].waitForExistence(timeout: 5))
@@ -484,13 +484,13 @@ final class KipurseUITests: XCTestCase {
   func testLedgerShowsEveryBalanceChange() {
     launch("main")
     let row = app.buttons["ledger.row.1"]; reveal(row); XCTAssertTrue(row.waitForExistence(timeout: 8))
-    XCTAssertTrue(app.staticTexts["入金 · 支付 · 提现记录"].exists, "§6#110: wallet records = 入金 / 支付 / 提现")
+    XCTAssertTrue(app.staticTexts["入金 · 支付 · 提现记录"].exists, "decision 110: wallet records = 入金 / 支付 / 提现")
     for f in ["全部", "入金", "支付", "提现"] { XCTAssertTrue(app.segmentedControls["ledger.filter"].buttons[f].exists, f) }
     XCTAssertTrue(app.staticTexts["−0.03"].exists); XCTAssertTrue(app.staticTexts["余额 14.10"].exists)
     XCTAssertTrue(app.staticTexts["+10"].exists); XCTAssertTrue(app.staticTexts["余额 14.13"].exists)
     XCTAssertFalse(app.staticTexts["手续费（你的 Coinbase 付）"].exists, "fee rows folded (audit #8)"); XCTAssertTrue(app.descendants(matching: .any)["ledger.feeTotal"].exists, "one fee total line")
     shot("ledger-home")
-    // t1276 (§6#136): records are drawers — folded by default, tap shows the details + the explorer button; amounts never masked
+    // t1276 (decision 136): records are drawers — folded by default, tap shows the details + the explorer button; amounts never masked
     let ex = app.buttons["ledger.row.1.explorer"]; XCTAssertFalse(ex.exists, "folded by default")
     if app.buttons["balance.hide"].exists { app.buttons["balance.hide"].tap() }
     XCTAssertTrue(app.staticTexts["−0.03"].exists, "record amounts stay visible with the wallet total hidden")
@@ -502,12 +502,12 @@ final class KipurseUITests: XCTestCase {
     launch("main", tab: "agents", extra: kpAISaved)
     XCTAssertTrue(app.buttons["agent.grok-bot"].waitForExistence(timeout: 8))
     XCTAssertTrue(app.buttons["agent.claude"].exists)
-    // grouped by real status: 已连接 (Muse, Grok Bot) above 未连接 (Claude)
+    // grouped by real status: [zh] (Muse, Grok Bot) above [zh] (Claude)
     let hOn = app.staticTexts["已连接"].firstMatch, hOff = app.staticTexts["未连接"].firstMatch
     XCTAssertTrue(hOn.exists); XCTAssertTrue(hOff.exists)
     let g = app.buttons["agent.grok-bot"].frame.minY, c = app.buttons["agent.claude"].frame.minY
     XCTAssertLessThan(app.descendants(matching: .any)["muse.row"].firstMatch.frame.minY, hOff.frame.minY); XCTAssertLessThan(g, hOff.frame.minY); XCTAssertGreaterThan(c, hOff.frame.minY)
-    // server's "oauth-claude-desktop" record (no live token) is the Claude card, shown once, as 授权未完成 — no generic duplicate row
+    // server's "oauth-claude-desktop" record (no live token) is the Claude card, shown once, as [zh] — no generic duplicate row
     XCTAssertTrue(app.staticTexts["未连接 · 还没连完，点“连接”继续"].exists);   // t1245 U37: same status word as AI 生活 + how to finish
     XCTAssertEqual(app.staticTexts.matching(identifier: "Claude").count, 1)
     for id in ["claude-code", "codex", "gemini-spark", "cursor"] { XCTAssertFalse(app.buttons["agent.\(id)"].exists, id) }
@@ -576,7 +576,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(go.isEnabled); go.tap()
   }
   func testConnectApproveFaceID() {
-    launch("main-connect", tab: "life")   // §6#110: connect requests are in 待你批准 on AI 生活
+    launch("main-connect", tab: "life")   // decision 110: connect requests are in 待你批准 on AI 生活
     let open = app.buttons["connect.open"]; XCTAssertTrue(open.waitForExistence(timeout: 8)); shot("connect-card")
     open.tap()
     chooseUnsetLimits()
@@ -597,7 +597,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["没有完成"].waitForExistence(timeout: 5))
   }
   func testConnectFromPhoneReturnsToClaude() {
-    app = XCUIApplication(); app.launchArguments = ["-demo", "main-connect", "-tab", "life", "-kp.lang", "zh", "-kpConnectClaude"]; app.launch()   // §6#110
+    app = XCUIApplication(); app.launchArguments = ["-demo", "main-connect", "-tab", "life", "-kp.lang", "zh", "-kpConnectClaude"]; app.launch()   // decision 110
     let open = app.buttons["connect.open"]; XCTAssertTrue(open.waitForExistence(timeout: 8)); open.tap()
     chooseUnsetLimits()
     if !app.staticTexts["Claude 想连接你的钱包"].waitForExistence(timeout: 8) { print("TREE", app.debugDescription) }; XCTAssertTrue(app.staticTexts["Claude 想连接你的钱包"].exists); app.buttons["技术细节"].tap(); XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "claude.ai")).count > 0)
@@ -674,7 +674,7 @@ final class KipurseUITests: XCTestCase {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-kpFreshInstall", "-kp.lang", lang, "-kpOnboard", "-kpSigninMock", "bind"]; app.launch()
       let b = app.buttons["cb.signin"]; XCTAssertTrue(b.waitForExistence(timeout: 10)); b.tap()
-      XCTAssertTrue(app.descendants(matching: .any)["wallet.title"].firstMatch.waitForExistence(timeout: 10), "t1001u: returning user lands in the wallet home"); shot("newphone-1-\(lang)")
+      XCTAssertTrue(app.descendants(matching: .any)["wallet.title"].firstMatch.waitForExistence(timeout: 10), "t1001: returning user lands in the wallet home"); shot("newphone-1-\(lang)")
       sleep(2)   // t1209: let the first launch finish persisting the bind state before it is killed (pre-existing flake, A/B 2/3 = 2/3)
       app.terminate()
       app = XCUIApplication(); app.launchArguments = ["-kp.lang", lang, "-kpKeepUnbound"]; app.launch()
@@ -728,7 +728,7 @@ final class KipurseUITests: XCTestCase {
       XCTAssertEqual(prompts.label, "prompts:0", "entering wallet still no LAContext")
     }
   }
-  /// t853: start screen = two big choices only; the fee + Coinbase details only in the register screen (zh + en). No "每笔最多 0.05".
+  /// t853: start screen = two big choices only; the fee + Coinbase details only in the register screen (zh + en). No "[zh]".
   func testStartScreenTwoChoicesOnly() {
     for (lang, reg, login, fee) in [("zh", "新用户注册", "老用户登录", "Coinbase 钱包（Base 账户）"), ("en", "Sign up", "Sign in", "Coinbase wallet (Base account)")] {
       app = XCUIApplication(); app.launchArguments = ["-kpFreshInstall", "-kp.lang", lang, "-kpOnboard"]; app.launch()
@@ -758,7 +758,7 @@ final class KipurseUITests: XCTestCase {
   /// Resume while the phone isn't bound: says so (not "Face ID needed") and offers to bind (zh + en).
   func testResumeUnboundSaysBindAndLinks() {
     for (lang, resume, text, go, nav) in [("zh", "恢复", "还没开启", "去开启", "Face ID 批准"), ("en", "Resume", "aren't on", "Turn on", "Face ID approvals")] {
-      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang, "-kpResumeUnbound", "-kpSkipFaceID"]; app.launch()   // §6#110: pause / resume on AI 生活
+      app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang, "-kpResumeUnbound", "-kpSkipFaceID"]; app.launch()   // decision 110: pause / resume on AI 生活
       let t = app.buttons["safety.pause"]; XCTAssertTrue(t.waitForExistence(timeout: 8)); for _ in 0..<8 where !t.isHittable { app.swipeUp() }; t.tap()
       let r = app.buttons[resume].firstMatch; XCTAssertTrue(r.waitForExistence(timeout: 5)); r.tap()
       let al = app.alerts.firstMatch; XCTAssertTrue(al.waitForExistence(timeout: 8))
@@ -803,7 +803,7 @@ final class KipurseUITests: XCTestCase {
     let resume = app.buttons["buy.resume"]; scrollTo(resume); XCTAssertTrue(resume.waitForExistence(timeout: 6)); t899shot("siri-allowance-paused-en")
     scrollTo(resume); resume.tap(); XCTAssertTrue(app.buttons["buy.pause"].waitForExistence(timeout: 6), "resumed (Face ID in real mode)")
   }
-  /// t902: 连接 Siri shows the intro + 3 steps FIRST; the Face ID approval sheet (fee) opens only from the last step's 下一步.
+  /// t902: [zh] Siri shows the intro + 3 steps FIRST; the Face ID approval sheet (fee) opens only from the last step's [zh].
   func t902shot(_ n: String) { shot(n); try? FileManager.default.createDirectory(atPath: "/tmp/t902shots", withIntermediateDirectories: true); try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "/tmp/t902shots/\(n).png")) }
   /// t1071 supersedes the t902 intro prerequisite; existing fee/approval consent is mandatory.
   func testT1071SiriDirectToFaceIDBothLanguages() {
@@ -835,7 +835,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertFalse(app.buttons["用 Face ID 解锁"].exists, "no app lock")
     XCTAssertEqual(app.buttons["balance.reveal"].firstMatch.label, "显示余额")
     let mask = app.staticTexts["balance.masked"]; XCTAssertTrue(mask.exists); XCTAssertFalse(app.staticTexts["****"].exists)
-    // t1276 (§6#136, owner 2026-11-23): only the wallet total is masked; record amounts / balances stay visible
+    // t1276 (decision 136, owner 2026-11-23): only the wallet total is masked; record amounts / balances stay visible
     let r0 = app.buttons["ledger.row.0"]; reveal(r0); XCTAssertTrue(r0.waitForExistence(timeout: 8))
     XCTAssertTrue(app.staticTexts["余额 14.10"].exists, "record balances are not masked"); XCTAssertTrue(app.staticTexts["−0.03"].exists, "record amounts are not masked")
     shot("balance-hidden")
@@ -911,7 +911,7 @@ final class KipurseUITests: XCTestCase {
     // Siri module: Spotlight held its entities before the wipe; afterwards no item, no donation, no cache key is left.
     XCTAssertFalse(t.label.contains("siriBefore=[spotlight=0"), t.label); XCTAssertTrue(t.label.contains("siriAfter=[spotlight=0 donations=0]"), t.label)
   }
-  /// t1153u: Face ID off for Kipurse. On open: calm guidance on the status line, neutral (no red "没有完成"), only the existing Retry; no approve.
+  /// t1153: Face ID off for Kipurse. On open: calm guidance on the status line, neutral (no red "[zh]"), only the existing Retry; no approve.
   func testConnectFaceIDOffShowsGuidanceOnOpen() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", lang, "-openURL", "kipurse://approve-connect?id=demoGrokBotReq01", "-kpFaceIDOff"]; app.launch()
@@ -926,7 +926,7 @@ final class KipurseUITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t1153u: the approve tap hits LAError -6 -> same calm guidance instead of the system sentence; Retry returns to the sheet.
+  /// t1153: the approve tap hits LAError -6 -> same calm guidance instead of the system sentence; Retry returns to the sheet.
   func testConnectApproveFaceIDOffAfterTap() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", "zh", "-openURL", "kipurse://approve-connect?id=demoGrokBotReq01", "-kpSimulateFaceIDOff"]; app.launch()
     chooseUnsetLimits()
@@ -961,7 +961,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertEqual(l.label, "prompts=1 signed=true"); shot("facetest")
   }
 
-  /// 开通 (one-time setup) against the local SIMULATOR MOCK of /onboard (tools/onboard-mock.mjs, port 18680): one screen, one fee,
+  /// [zh] (one-time setup) against the local SIMULATOR MOCK of /onboard (tools/onboard-mock.mjs, port 18680): one screen, one fee,
   /// one signature page; the mock pretends the Coinbase wallet batch landed. The real batch is tested on the Base fork (onboard-fork.e2e.mjs).
   func testOnboardOneSignature() throws {
     guard DispatchQueue.global().sync(execute: { try? String(contentsOf: URL(string: "http://127.0.0.1:18680/onboard/quote")!) }) != nil else { throw XCTSkip("needs the onboard mock on 127.0.0.1:18680") }
@@ -972,7 +972,7 @@ final class KipurseUITests: XCTestCase {
     XCTAssertTrue(fee.label.contains("0.035579"), fee.label); shot("onboard-1-screen")
     XCTAssertTrue(app.staticTexts["onboard.step1"].exists, "guided step 1"); XCTAssertTrue(app.staticTexts["onboard.laterFee"].label.contains("USDC"))
     XCTAssertFalse(app.staticTexts["onboard.laterFee"].label.contains("需要 ETH"))
-    do { let g0 = app.buttons["onboard.go"]; reveal(g0); XCTAssertFalse(g0.isEnabled, "t603u: no preset limits, the user must choose") }
+    do { let g0 = app.buttons["onboard.go"]; reveal(g0); XCTAssertFalse(g0.isEnabled, "t603: no preset limits, the user must choose") }
     tapPreset("2 USDC", 0); tapPreset("50 USDC", 0); tapPreset("500 USDC", 0)
     let go = app.buttons["onboard.go"]; reveal(go); XCTAssertEqual(app.staticTexts["onboard.summary"].label, "每笔 2 · 每天 50 · 总额 500 USDC · 90 天"); shot("onboard-2-fee"); go.tap()
     XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15) || app.otherElements["WebSheet"].waitForExistence(timeout: 2)); sleep(2); shot("onboard-3-signing-page")
@@ -991,7 +991,7 @@ final class KipurseUITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t927: the separate large-text simple mode was removed (duplicate of the system text size); even with the old flag the normal home shows. Lost-phone guide stays in 设置.
+  /// t927: the separate large-text simple mode was removed (duplicate of the system text size); even with the old flag the normal home shows. Lost-phone guide stays in [zh].
   func testSimpleModeHome() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "home", "-kp.lang", "zh", "-kp.simpleMode", "YES"]; app.launch()
     XCTAssertTrue(app.buttons["home.deposit"].waitForExistence(timeout: 10)); XCTAssertFalse(app.buttons["simple.pause"].exists); shot("simple-home-gone")
@@ -1002,13 +1002,17 @@ final class KipurseUITests: XCTestCase {
     guard DispatchQueue.global().sync(execute: { try? String(contentsOf: URL(string: "http://127.0.0.1:18680/onboard/quote")!) }) != nil else { throw XCTSkip("needs the onboard mock on 127.0.0.1:18680") }
     app = XCUIApplication(); app.launchArguments = ["-kpOnboard", "-kpOnboardServer", "http://127.0.0.1:18680", "-kp.lang", "zh", "-kpIdentityOK"]; app.launch()
     let gate = app.buttons["gate.onboard"]; XCTAssertTrue(gate.waitForExistence(timeout: 10)); gate.tap()
-    XCTAssertTrue(app.buttons["guided.use0"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["guided.plan0"].exists, "no plan before answers")
-    for id in ["guided.use0", "guided.use1", "guided.use2", "guided.spend0", "guided.spend1", "guided.spend2"] { XCTAssertEqual(app.buttons[id].value as? String, "not selected", id) }
-    app.buttons["guided.use1"].tap(); let sp = app.buttons["guided.spend1"]; reveal(sp); sp.tap()
+    XCTAssertTrue(app.buttons["guided.spend0"].waitForExistence(timeout: 5))
+    let dep = app.buttons["5 USDC"].firstMatch; XCTAssertTrue(dep.waitForExistence(timeout: 5)); dep.tap()
+    for id in ["guided.use0", "guided.use1", "guided.use2"] { XCTAssertFalse(app.buttons[id].exists, "t1246: removed what-AI-buys question \(id)") }
+    XCTAssertFalse(app.staticTexts["1. AI 主要帮你买什么？"].exists); XCTAssertFalse(app.buttons["guided.plan0"].exists, "no plan before answer")
+    for id in ["guided.spend0", "guided.spend1", "guided.spend2"] { XCTAssertEqual(app.buttons[id].value as? String, "not selected", id) }
+    let sp = app.buttons["guided.spend1"]; reveal(sp); sp.tap()
     for i in 0..<3 { let p = app.buttons["guided.plan\(i)"]; reveal(p); XCTAssertTrue(p.exists); XCTAssertEqual(p.value as? String, "not selected", "plan \(i) must not be pre-selected"); XCTAssertFalse(p.label.contains("每月")) }
     do { let g0 = app.buttons["onboard.go"]; reveal(g0); XCTAssertFalse(g0.isEnabled, "nothing chosen yet") }
     let p1 = app.buttons["guided.plan1"]; reveal(p1); p1.tap(); XCTAssertEqual(p1.value as? String, "selected")
-    let go = app.buttons["onboard.go"]; reveal(go); XCTAssertEqual(app.staticTexts["onboard.summary"].label, "每笔 50 · 每天 50 · 总额 1500 USDC · 90 天"); XCTAssertTrue(go.isEnabled); shot("guided-picked")
+    XCTAssertTrue(p1.label.contains("每笔 50 · 每天 50 · 总额 1500 USDC"))
+    let go = app.buttons["onboard.go"]; reveal(go); XCTAssertTrue(go.isEnabled); shot("guided-picked")
   }
   func testFreshInstallSignInI18n() {
     for lang in ["en", "zh"] {
@@ -1030,7 +1034,7 @@ final class KipurseUITests: XCTestCase {
   }
   /// Account without a wallet -> new-user onboarding (fresh key); account with a wallet but another phone -> "add this iPhone".
   func testSignInOutcomesNewAndBind() {
-    for (o, label) in [("new", "开通我的钱包")] {   // t1001u: "bind" now lands in the wallet home (testLoginZeroBalanceLandsOnWalletHome)
+    for (o, label) in [("new", "开通我的钱包")] {   // t1001: "bind" now lands in the wallet home (testLoginZeroBalanceLandsOnWalletHome)
       app = XCUIApplication(); app.launchArguments = ["-kpFreshInstall", "-kp.lang", "zh", "-kpOnboard", "-kpSigninMock", o]; app.launch()
       let b = app.buttons["cb.signin"]; XCTAssertTrue(b.waitForExistence(timeout: 10)); b.tap()
       XCTAssertTrue(app.descendants(matching: .any)["cb.done"].waitForExistence(timeout: 8), o)
@@ -1040,8 +1044,8 @@ final class KipurseUITests: XCTestCase {
       app.terminate()
     }
   }
-  /// t1001u LOCKED guard: login with 0 balance lands straight on the wallet home. No Face ID / phone-key setup step, nothing
-  /// that needs a fee blocks the way, no new-wallet form (t802), and withdraw + Apple Pay / Coinbase 充值 stay reachable.
+  /// t1001 LOCKED guard: login with 0 balance lands straight on the wallet home. No Face ID / phone-key setup step, nothing
+  /// that needs a fee blocks the way, no new-wallet form (t802), and withdraw + Apple Pay / Coinbase [zh] stay reachable.
   func testLoginZeroBalanceLandsOnWalletHome() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-kpFreshInstall", "-kp.lang", lang, "-kpOnboard", "-kpSigninMock", "bind"]; app.launch()
@@ -1055,19 +1059,19 @@ final class KipurseUITests: XCTestCase {
       app.terminate()
     }
   }
-  /// 退出登录 / 换账户: no confirmation, no Face ID, back to "Sign in with Coinbase".
+  /// [zh]: no confirmation, no Face ID, back to "Sign in with Coinbase".
   func testSignOutReturnsToCoinbaseSignIn() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", "zh"]; app.launch()
     let b = app.buttons["settings.signout"]; for _ in 0..<8 where !b.exists || !b.isHittable { app.swipeUp() }
     XCTAssertTrue(b.waitForExistence(timeout: 8))
-    // §6#110 (owner 2026-11-21): 退出登录 / 换账户 is the very last item, below 危险操作 (删除账户).
+    // decision 110 (owner 2026-11-21): [zh] is the very last item, below [zh] ([zh]).
     let del = app.buttons["safety.delete"]; XCTAssertTrue(del.exists); XCTAssertGreaterThan(b.frame.minY, del.frame.maxY, "sign out sits below delete account")
     shot("signout-bottom"); b.tap()
     XCTAssertFalse(app.buttons["settings.signout.confirm"].exists, "no confirmation popup")
     XCTAssertTrue(app.buttons["cb.signin"].waitForExistence(timeout: 8)); shot("signout-done")
   }
 
-  /// t625u: no Coinbase attestation -> one guided 4-step flow (official Coinbase links only), progress, check again; passes once verified. Both languages.
+  /// t625: no Coinbase attestation -> one guided 4-step flow (official Coinbase links only), progress, check again; passes once verified. Both languages.
   func testCoinbaseVerifyGuideBothLanguages() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-kpOnboard", "-kp.lang", lang, "-kpIdentityOK", "-kpCBV", "later"] + (lang == "en" ? ["-AppleLanguages", "(en)"] : []); app.launch()   // t806: phone language too (system back button)
@@ -1077,7 +1081,7 @@ final class KipurseUITests: XCTestCase {
       XCTAssertFalse(app.buttons["onboard.go"].exists, "no setup before verification")
       XCTAssertTrue(app.staticTexts["cbv.progress"].label.contains(lang == "zh" ? "第 1 步" : "Step 1 of 4"))
       let why = app.buttons["cbv.whyButton"]; XCTAssertTrue(why.exists); why.tap(); XCTAssertTrue(app.staticTexts["cbv.whyText"].waitForExistence(timeout: 3)); XCTAssertTrue(app.staticTexts["cbv.whyText"].label.contains(lang == "zh" ? "一个验证只能开一个" : "One verification opens one"))
-      let urls = ["https://www.coinbase.com/signup", "https://www.coinbase.com/onchain-verify"   /* t771u: step 2 opens the official verify page */, "https://www.coinbase.com/onchain-verify"]
+      let urls = ["https://www.coinbase.com/signup", "https://www.coinbase.com/onchain-verify"   /* t771: step 2 opens the official verify page */, "https://www.coinbase.com/onchain-verify"]
       for i in 1...3 {
         let o = app.buttons["cbv.open\(i)"]; reveal(o); XCTAssertTrue(o.exists, "open \(i)"); o.tap()
         let dbg = app.staticTexts["cbv.debugOpen"]; XCTAssertTrue(dbg.waitForExistence(timeout: 3)); XCTAssertEqual(dbg.label, urls[i - 1])
@@ -1125,7 +1129,7 @@ final class KipurseUITests: XCTestCase {
     app.buttons["home.deposit"].tap()
     otherWays(); XCTAssertTrue(app.buttons["deposit.coinbase"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["deposit.onetap"].exists); shot("guide-deposit")
   }
-  /// t665: page 1 「AI 生活」 shows live orbs from real agent data, the monthly ring and the auto-categorised ledger; first launch opens it.
+  /// t665: page 1 "[zh]" shows live orbs from real agent data, the monthly ring and the auto-categorised ledger; first launch opens it.
   func testLifePageFirstWithOrbsAndLedger() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang, "-kpSkipFaceID", "-kpLifeDemo"]; app.launch()
@@ -1134,13 +1138,13 @@ final class KipurseUITests: XCTestCase {
       XCTAssertTrue(echo.label.contains(lang == "zh" ? "在线" : "Online"), echo.label)   // t915: a call 20 s ago = 在线 (付款中 only with a pending payment)
       XCTAssertTrue(echo.label.contains(lang == "zh" ? "最近活动 刚刚" : "Active just now"), echo.label)
       XCTAssertTrue(app.descendants(matching: .any)["life.agent.siri"].label.contains(lang == "zh" ? "已暂停" : "Paused"))
-      let cl = app.descendants(matching: .any)["life.agent.claude"].label   // t1164u (§6#79): authorized, last call 30 min ago -> still 在线 (always lit)
+      let cl = app.descendants(matching: .any)["life.agent.claude"].label   // t1164 (decision 79): authorized, last call 30 min ago -> still 在线 (always lit)
       XCTAssertTrue(cl.hasPrefix(lang == "zh" ? "Claude, 在线" : "Claude, Online"), cl); XCTAssertTrue(cl.contains(lang == "zh" ? "最近活动 30 分钟前" : "Active 30 min ago"), cl); XCTAssertFalse(cl.contains(lang == "zh" ? "未在线" : "idle"), cl)
       XCTAssertTrue(app.descendants(matching: .any)["life.ring"].exists)
       XCTAssertTrue(app.descendants(matching: .any)["life.cat.dining"].exists); XCTAssertTrue(app.descendants(matching: .any)["life.cat.tools"].exists)
       I18nCheck.check(app, lang, "life page")
       let row = app.buttons["life.tx.0"]; reveal(row)
-      // §6#110: the life ledger row says which AI paid and the category
+      // decision 110: the life ledger row says which AI paid and the category
       XCTAssertTrue(row.label.contains(lang == "zh" ? "付的" : "Paid by"), row.label); XCTAssertTrue(row.label.contains(lang == "zh" ? "类别" : "Category"), row.label)
       row.tap()
       XCTAssertTrue(app.navigationBars[lang == "zh" ? "付款详情" : "Payment details"].waitForExistence(timeout: 5) || app.staticTexts["Lumi 拉面馆"].exists)
@@ -1149,33 +1153,53 @@ final class KipurseUITests: XCTestCase {
     }
   }
   /// t665: manage opens the AI page; wallet keeps Coinbase top-up and withdraw.
-  /// §6#110 (owner 2026-11-21): approvals (待你批准), trusted merchants and pause have ONE place each, all on AI 生活.
+  /// decision 110 (owner 2026-11-21): approvals ([zh]), trusted merchants and pause have ONE place each, all on AI [zh].
   func testLifeLinksAndWalletActions() {
     app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", "zh", "-kpSkipFaceID"]; app.launch()
     let mg = app.buttons["life.manage"]; XCTAssertTrue(mg.waitForExistence(timeout: 10)); mg.tap()
     XCTAssertTrue(app.navigationBars["AI 智能体"].waitForExistence(timeout: 5)); back()
     XCTAssertFalse(app.buttons["life.approvals"].exists, "t927: approvals have one place (no extra banner)")
-    XCTAssertTrue(app.staticTexts["待你批准"].waitForExistence(timeout: 5), "§6#110: 待你批准 on AI 生活")
+    XCTAssertTrue(app.staticTexts["待你批准"].waitForExistence(timeout: 5), "decision 110: 待你批准 on AI 生活")
     let tr = app.buttons["life.trusted"]; for _ in 0..<8 where !tr.exists || !tr.isHittable { app.swipeUp() }; XCTAssertTrue(tr.isHittable, "trusted merchants on AI 生活")
     let pz = app.buttons["safety.pause"]; for _ in 0..<8 where !pz.exists || !pz.isHittable { app.swipeDown() }; XCTAssertTrue(pz.isHittable, "pause at the top of AI 生活 (never gated, t1277d)")
     tr.tap(); XCTAssertTrue(app.navigationBars["信任的商家"].waitForExistence(timeout: 5)); back()   // t1245 U30: same name as its entry
     tab("钱包").tap(); XCTAssertTrue(app.buttons["home.deposit"].waitForExistence(timeout: 5), "Coinbase-wallet top-up button"); XCTAssertTrue(app.buttons["home.withdraw"].exists)
-    XCTAssertFalse(app.staticTexts["待你批准"].exists, "§6#110: approvals have one place (AI 生活)")
+    XCTAssertFalse(app.staticTexts["待你批准"].exists, "decision 110: approvals have one place (AI 生活)")
     XCTAssertFalse(app.buttons["home.pause"].exists, "t928: one pause control"); XCTAssertFalse(app.buttons["safety.pause"].exists, "one pause control (AI 生活)")
-    tab("设置").tap(); XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["safety.pause"].exists, "§6#110: pause moved out of 设置")
+    tab("设置").tap(); XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["safety.pause"].exists, "decision 110: pause moved out of 设置")
   }
-  /// §6#110: the usage guide holds 手机丢了怎么办 and 安全小贴士 (still exactly four steps).
+  /// decision 110: the usage guide holds [zh] (still exactly four steps).
   func testUsageGuideHasLostPhoneAndTips() {
     for lang in ["zh", "en"] {
       app = XCUIApplication(); app.launchArguments = ["-demo", "main", "-tab", "settings", "-kp.lang", lang, "-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)", "-AppleLocale", lang == "zh" ? "zh_CN" : "en_US"]; app.launch()   // phone language = App language (the system back button follows the phone), as the other language tests
       let g = app.buttons["settings.usageGuide"]; XCTAssertTrue(g.waitForExistence(timeout: 10)); for _ in 0..<6 where !g.isHittable { app.swipeUp() }; g.tap()
       XCTAssertTrue(app.descendants(matching: .any)["guide.step4"].firstMatch.waitForExistence(timeout: 5)); XCTAssertFalse(app.descendants(matching: .any)["guide.step5"].exists, "0B: four steps")
+      // t1248: demo main has on-chain limits and at least one connected AI, so all four steps are done (not stuck on a purple 3)
+      for i in 1...4 { XCTAssertEqual(app.descendants(matching: .any)["guide.step\(i)"].firstMatch.value as? String, "done", "demo main step \(i)") }
       let lost = app.buttons["guide.lostPhone"]; reveal(lost); XCTAssertTrue(lost.exists, lang); shot("usage-guide-\(lang)")
       lost.tap(); XCTAssertTrue(app.staticTexts["lost.title"].waitForExistence(timeout: 5)); back()
       let tips = app.buttons["guide.tips"]; reveal(tips); tips.tap()
       XCTAssertTrue(app.staticTexts["tips.title"].waitForExistence(timeout: 5)); I18nCheck.check(app, lang, "tips from guide")
       app.terminate()
     }
+  }
+  /// t1248: checks follow the live wallet (limits set at opening; at least one connected AI), not a hardcoded step from the balance.
+  func testUsageGuideChecksFollowWalletState() {
+    // just opened: limits already in the opening batch, no AI yet -> steps 1-3 done, step 4 current (balance may be 0)
+    app = XCUIApplication(); app.launchArguments = ["-demo", "main-new", "-tab", "settings", "-kp.lang", "zh"]; app.launch()
+    let g = app.buttons["settings.usageGuide"]; XCTAssertTrue(g.waitForExistence(timeout: 10)); for _ in 0..<6 where !g.isHittable { app.swipeUp() }; g.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["guide.step4"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertEqual(app.descendants(matching: .any)["guide.step1"].firstMatch.value as? String, "done")
+    XCTAssertEqual(app.descendants(matching: .any)["guide.step2"].firstMatch.value as? String, "done")
+    XCTAssertEqual(app.descendants(matching: .any)["guide.step3"].firstMatch.value as? String, "done", "limits were set at opening")
+    XCTAssertEqual(app.descendants(matching: .any)["guide.step4"].firstMatch.value as? String, "current", "no AI connected yet")
+    app.terminate()
+    // returning user with a 0 balance, limits and a connected AI still in state -> all four done
+    app = XCUIApplication(); app.launchArguments = ["-demo", "main-zero", "-tab", "settings", "-kp.lang", "zh"]; app.launch()
+    let g2 = app.buttons["settings.usageGuide"]; XCTAssertTrue(g2.waitForExistence(timeout: 10)); for _ in 0..<6 where !g2.isHittable { app.swipeUp() }; g2.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["guide.step4"].firstMatch.waitForExistence(timeout: 5))
+    for i in 1...4 { XCTAssertEqual(app.descendants(matching: .any)["guide.step\(i)"].firstMatch.value as? String, "done", "main-zero step \(i) stays done at 0 balance") }
+    app.terminate()
   }
   /// t665: every completed payment shows the cheer card with the agent's display name.
   func testCelebrationOnPayment() {

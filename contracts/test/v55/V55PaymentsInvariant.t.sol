@@ -288,7 +288,7 @@ contract V55PayHandler is V55Base {
         vm.prank(attacker);
         try a5.cancelReservation(resList[i % resList.length].digest) { _bad("cancel", "non-owner cancelled a reservation"); } catch {}
     }
-    /// One owner approval = one x402 reservation, even after it was cancelled / reclaimed (t1181u).
+    /// One owner approval = one x402 reservation, even after it was cancelled / reclaimed (t1181).
     function replayApproval(uint256 i) external {
         if (resList.length == 0) return;
         Res memory r = resList[i % resList.length];

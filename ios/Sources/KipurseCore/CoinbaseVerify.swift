@@ -1,5 +1,5 @@
 import Foundation
-/// t624u: Kipurse does no KYC of its own and collects no identity data. New wallets need Coinbase's public on-chain
+/// t624: Kipurse does no KYC of its own and collects no identity data. New wallets need Coinbase's public on-chain
 /// "Verified Account" attestation on the user's Coinbase wallet (Coinbase already did the KYC). The SERVER decides; the app only guides.
 public enum CoinbaseVerify {
   /// Official Coinbase pages only (checked 2026-10-27 against coinbase.com / help.coinbase.com).

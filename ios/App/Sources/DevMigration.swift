@@ -1,5 +1,5 @@
-// t1214 (handbook §6#101/#102): developer/test build ONLY. This whole file compiles only with KP_DEV_MIGRATION (set for the Debug config in
-// project.yml); the Release/public App has no contract-migration page, no entry, no strings. Owner: 「用户的软件，绝对不能有换合约页面」.
+// t1214 (decision 101/#102): developer/test build ONLY. This whole file compiles only with KP_DEV_MIGRATION (set for the Debug config in
+// project.yml); the Release/public App has no contract-migration page, no entry, no strings. Owner: "[zh]".
 #if KP_DEV_MIGRATION
 import SwiftUI
 import KipurseCore

@@ -13,7 +13,7 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "104"
+    CURRENT_PROJECT_VERSION: "108"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: $(KIPURSE_TEAM_ID)   # from Config/Local.xcconfig
 targets:
@@ -31,14 +31,19 @@ targets:
         excludes: ["**/*.bak*", "**/*.orig", "**/*.removed*"]
     # App/Assistant = optional Siri / Spotlight module (remove it + KP_ASSISTANT below)
     # t1275 (#5): entitlements are two hand-kept files (XcodeGen's `entitlements:` key forces ONE file on both configs). Both carry the app group,
-    # aps-environment development, App Attest production (t629, owner approved) and the keychain groups:
+    # App Attest production (t629, owner approved) and the keychain groups; aps-environment: Release production (t147), Debug development:
     #   Release App/Kipurse.entitlements      .keys (phone key + default group for every item) and .app   (phone key survives variant / bundle changes)
     #   Debug   App/KipurseDebug.entitlements the same + the Debug build's own .app.$(KIPURSE_DEBUG_SUFFIX) (Release no longer lists it)
     dependencies: [{ package: KipurseCore }, { target: KipurseWidget }]
     postBuildScripts:   # t1275 (#6): Release never talks to a local-network server (QR login refuses http://); only Debug UI tests use 127.0.0.1 mocks
       - name: "t1275 Release drops NSAllowsLocalNetworking"
         script: |
-          if [ "$CONFIGURATION" = "Release" ]; then /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity:NSAllowsLocalNetworking" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" 2>/dev/null || true; fi
+          if [ "$CONFIGURATION" = "Release" ]; then /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity:NSAllowsLocalNetworking" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" 2>/dev/null || true
+            # t147: Release never asks for local-network access either (Debug UI tests keep it for 127.0.0.1 mocks)
+            /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" 2>/dev/null || true
+            for f in "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"/*.lproj/InfoPlist.strings; do [ -f "$f" ] && plutil -remove NSLocalNetworkUsageDescription "$f" 2>/dev/null || true; done
+            if /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" 2>/dev/null | grep -q "^Dict {$" && [ "$(/usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" | wc -l | tr -d ' ')" = "2" ]; then /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$TARGET_BUILD_DIR/$INFOPLIST_PATH"; fi
+          fi
         inputFiles: ["$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)"]
         basedOnDependencyAnalysis: false
     settings:
@@ -48,7 +53,7 @@ targets:
         OTHER_SWIFT_FLAGS: "$(inherited) -DKP_ASSISTANT"
         ENABLE_DEBUG_DYLIB: NO   # one real executable that links AppIntents itself (Siri / Shortcuts registration on device)
       configs:
-        Debug:   { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)", KIPURSE_ONBOARD: "YES", SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG KP_DEV_MIGRATION", CODE_SIGN_ENTITLEMENTS: App/KipurseDebug.entitlements }   # t769u: Debug test build must show the Face ID / setup button; t1214 §6#101: the developer-only "switch to V5.4" screen exists ONLY in this Debug test build
+        Debug:   { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app.$(KIPURSE_DEBUG_SUFFIX)", KIPURSE_ONBOARD: "YES", SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG KP_DEV_MIGRATION", CODE_SIGN_ENTITLEMENTS: App/KipurseDebug.entitlements }   # t769: Debug test build must show the Face ID / setup button; t1214 decision 101: the developer-only "switch to V5.4" screen exists ONLY in this Debug test build
         Release: { PRODUCT_BUNDLE_IDENTIFIER: "$(KIPURSE_BUNDLE_ID_PREFIX).app", KIPURSE_ONBOARD: "YES", CODE_SIGN_ENTITLEMENTS: App/Kipurse.entitlements }   # new-user onboarding (owner approved 2026-10-24)
     info:
       path: App/Info.plist

@@ -19,7 +19,7 @@ contract KipurseV5ZeroReserveTest is V5Base {
         v = PayerVaultV5(adapter.registerPermission(p));
     }
     function op(bytes memory callData, bytes memory pmd, uint256 k, bytes32 h) internal view returns (PackedUserOperation memory o) {
-        o.callData = callData; o.paymasterAndData = pmd; o.nonce = (vm.getBlockTimestamp() / 1 days) << 64; // t1181u branch: key = UTC day
+        o.callData = callData; o.paymasterAndData = pmd; o.nonce = (vm.getBlockTimestamp() / 1 days) << 64; // t1181 branch: key = UTC day
         (uint8 vv, bytes32 r, bytes32 s) = vm_sign(k, keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", h)));
         o.signature = abi.encodePacked(r, s, vv);
     }
@@ -43,7 +43,7 @@ contract KipurseV5ZeroReserveTest is V5Base {
         vm.expectRevert(NotEntryPoint.selector); v.validateUserOp(o, h, 0);
         vm.startPrank(EP);
         vm.expectRevert(NoEth.selector); v.validateUserOp(o, h, 1);                       // no paymaster => would pay ETH => refuse
-        uint256 d0 = (vm.getBlockTimestamp() / 1 days) * 1 days; uint256 win = ((d0 + 1 days - 1) << 160) | (d0 << 208); // t1181u branch
+        uint256 d0 = (vm.getBlockTimestamp() / 1 days) * 1 days; uint256 win = ((d0 + 1 days - 1) << 160) | (d0 << 208); // t1181 branch
         assertEq(v.validateUserOp(o, h, 0), win);                                         // session signer + Circle (valid for today only)
         assertEq(v.validateUserOp(op("", pmd(), 0xBAD1, h), h, 0), win | 1);              // any other key fails
         assertEq(v.validateUserOp(op("", pmd(), SESS, keccak256("other")), h, 0), win | 1); // signature bound to the hash

@@ -4,7 +4,7 @@ import SwiftUI
 import KipurseCore
 
 /// Apple Intelligence / Siri / Shortcuts: native App Intents. Read-only and the emergency pause run without opening the app;
-/// moving money (提现) opens the app and requires Face ID first. There is no "pay a stranger" intent: only the owner's own AI agents pay, within on-chain caps.
+/// moving money ([zh]) opens the app and requires Face ID first. There is no "pay a stranger" intent: only the owner's own AI agents pay, within on-chain caps.
 private func ownerAPI() throws -> OwnerAPI {
   guard let s = SessionVault.load() else { throw IntentError.notLoggedIn }
   return OwnerAPI(session: s)
@@ -67,7 +67,7 @@ enum MainRead {
     catch MainnetSession.Failure.noKey { throw MainIntentError.noSigner }
   }
 }
-/// t1161u (§6#78): any Siri / Shortcuts intent that reaches the app marks Siri "used" on the server, so the home Siri bead lights like
+/// t1161 (decision 78): any Siri / Shortcuts intent that reaches the app marks Siri "used" on the server, so the home Siri bead lights like
 /// any other AI's (the server only counted siri/buy|status|allowances; balance / activity / approvals went through the phone read session).
 /// Best effort, read-only (POST siri/allowances with the phone session, short timeout, throttled), never moves money; then the home cache refreshes.
 enum SiriSeen {

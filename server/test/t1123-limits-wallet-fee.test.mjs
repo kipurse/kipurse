@@ -1,10 +1,14 @@
-// t1123u (§6#63): later wallet-safety-limit changes take the fee from the Kipurse wallet's USDC in the SAME batch (t752 withdraw shape).
+// t1123 (decision 63): later wallet-safety-limit changes take the fee from the Kipurse wallet's USDC in the SAME batch (t752 withdraw shape).
 // From the owner's Base Account (signs only, 0 USDC is fine). Exactly: wallet -> official fee address F, then the cap change. Existing sponsor only.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {encodeFunctionData,parseAbi} from 'viem';
 import {createPublicLimits} from '../src/v5/limits-public.mjs';
 import {createOnboardSponsor,callsHash,LIMITS_WALLET_PREFIX} from '../src/v5/onboard-sponsor.mjs';import {createMemoryKV} from '../src/v5/store.mjs';
-import {limitsWalletFee,limitsWalletFeeCalls,checkLimitsWalletFeeCalls,limitsRelayCalls,limitsPaymasterApprove,LIMITS_WALLET_FEE_FROM,LIMITS_OFFICIAL_FEE_TO,LIMITS_SPONSOR_FLOOR_GAS,LIMITS_FEE_TRANSFER_GAS} from '../src/v5/limits-fee.mjs';
+import {limitsWalletFee,limitsWalletFeeCalls,checkLimitsWalletFeeCalls,feeRefundCall,BASE_USDC,LIMITS_WALLET_FEE_FROM,LIMITS_OFFICIAL_FEE_TO,LIMITS_SPONSOR_FLOOR_GAS,LIMITS_FEE_TRANSFER_GAS} from '../src/v5/limits-fee.mjs';
+// t147 (decision 147): the relay / third-party paymaster helpers are gone from the server; these local copies only build the refused shapes.
+const PM_OLD='0x6666666666667849c56f2850848ce1c4da65c68b';
+const limitsPaymasterApprove=a=>({to:BASE_USDC,value:'0x0',data:encodeFunctionData({abi:parseAbi(['function approve(address,uint256) returns (bool)']),functionName:'approve',args:[PM_OLD,BigInt(a)]})});
+const limitsRelayCalls=({wallet,owner,amount,changeCall})=>[feeRefundCall({wallet,token:BASE_USDC,owner,fee:amount}),limitsPaymasterApprove(amount),changeCall];
 const LIVE=JSON.parse(fs.readFileSync(new URL('./fixtures/t1123-prod-change.json',import.meta.url),'utf8'));
 const O=LIVE.owner,W=LIVE.wallet,FT=LIMITS_OFFICIAL_FEE_TO,E='0x'+'e'.repeat(40);
 const live={gasPriceWei:6_000_000n,ethUsd8:201280086896n};   // Base, 2026-11-12 ~17:40 CT
@@ -13,7 +17,6 @@ const choice={single:'1000',daily:'3000',term:'50000',days:365};
 function mk({fee,walletFee,reg=[]}={}){return createPublicLimits({base:()=>'https://x',current:async()=>null,confirm:async()=>({}),script:()=>'',
   plan:async()=>({owner:O,wallet:W,chainId:8453,human:[],labels:[],calls:[LIVE.change],raw:{},fromWallet:true}),
   fee:fee??(async()=>limitsWalletFee({callGas:171_595n,...live,walletUSDC:11_340_000n})),feeQuote:async()=>null,
-  walletPaymaster:()=>null,erc20URL:()=>'https://public.pimlico.io/v2/8453/rpc',
   walletFee:walletFee===undefined?{feeTo:FT,available:()=>true,register:async(id,a)=>{reg.push({id,...a});return 'https://x/onboard/new/paymaster?id='+LIMITS_WALLET_PREFIX+id;}}:walletFee});}
 test('quote: actual cost, never below the sponsor floor, 0.01 cap, wallet balance decides',()=>{
   const f=limitsWalletFee({callGas:171_595n,...live,walletUSDC:11_340_000n});
@@ -69,6 +72,6 @@ test('sponsor: lw- kind fronts gas only for the exact batch from the owner, same
   assert.equal(await s.gate('lw-unknown','pm_getPaymasterData',[op(c),EP,'0x2105']),'not_prepared');});
 test('launch wiring: Pimlico proxy off, walletFee uses the existing sponsor and the official fee address',()=>{
   const launch=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
-  assert.match(launch,/walletPaymaster:\(\)=>null,/);assert.match(launch,/registerLimitsWallet\?\.\(id,a\)/);assert.match(launch,/fee:async pl=>pl\?\.fromWallet\?limitsWalletFeeQuote/);
+  assert.doesNotMatch(launch,/walletPaymaster|erc20PaymasterURL|pimlico_getTokenQuotes/);assert.match(launch,/registerLimitsWallet\?\.\(id,a\)/);assert.match(launch,/fee:async pl=>pl\?\.fromWallet\?limitsWalletFeeQuote/);
   assert.match(launch,/walletFee:\{feeTo:\(v=>v==='off'\?null:[^\n]*OP\.feeTo\)/);   // t1270: the official fee address comes from operatorConstants (src/v5/operator-constants.mjs)
   assert.match(launch,/available:\(\)=>\{const sp=SPONSOR_REF\(\);return !!sp&&!sp\.usdcGas&&!!sp\.withdrawAvailable\?\.\(\);\}/);});

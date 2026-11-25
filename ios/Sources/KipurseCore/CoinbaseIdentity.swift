@@ -35,7 +35,7 @@ public enum CoinbaseIdentity {
   /// The wallet was opened on the sign-in page (one page, one free setup): go straight into the app with that wallet.
   public static func openedOnSignIn(_ r: Result) -> String? { r.outcome == .new && r.setupState == "done" ? r.setupWallet : nil }
   /// Default AI limits for the one-page setup (changeable later in the app; the same defaults the setup screen preselects).
-  /// t603u: NO preset limits. The user chooses his own AI limits in the guided onboarding step (first authorization free).
+  /// t603: NO preset limits. The user chooses his own AI limits in the guided onboarding step (first authorization free).
   public static let presetSetup: [String: String]? = nil
   /// First launch of an install (UserDefaults is deleted with the app; the keychain is not) must never auto-resolve a wallet
   /// from a leftover phone key: the user signs in with Coinbase first.

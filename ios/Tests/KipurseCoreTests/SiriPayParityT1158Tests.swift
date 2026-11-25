@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1158u (§6#77): Siri pays like every other AI — its own pay-only credential, trust-list names, a spoken reason when nothing can be paid.
+/// t1158 (decision 77): Siri pays like every other AI — its own pay-only credential, trust-list names, a spoken reason when nothing can be paid.
 final class SiriPayParityT1158Tests: XCTestCase {
   static let good = "ksc_" + String(repeating: "A", count: 21) + "_-" + String(repeating: "z", count: 20)
   func testCredentialFormat() {

@@ -6,10 +6,10 @@ import FoundationNetworking
 /// t1094: read the wallet safety limit the same way the server does — the spend permission's
 /// Policy extraData (single, daily, term). Read-only. A failed call is unreadable; an empty
 /// answer is "never set".
-/// t1129u: the old read asked one public node for every approval since block 0 (always refused, so the wallet page could
+/// t1129: the old read asked one public node for every approval since block 0 (always refused, so the wallet page could
 /// never show the limit) and decoded the event without its leading ABI offset word (real logs never matched). Now:
 /// newest-first chunked scan of SpendPermissionApproved/Revoked with a saved cursor + last found approval, real ABI layout,
-/// and the permission window (start/end) for the 钱包安全上限 row.
+/// and the permission window (start/end) for the [zh] row.
 public enum SafetyCaps {
   /// Tests replace this. Production scans public Base nodes. Nil result means the read failed.
   public static var query: ((String) async -> Any?)?

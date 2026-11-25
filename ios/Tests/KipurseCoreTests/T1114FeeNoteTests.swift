@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1114u (§6#60): the opening fee is charged separately from the user's Base account, on top of the deposit — never "taken from this deposit".
+/// t1114 (decision 60): the opening fee is charged separately from the user's Base account, on top of the deposit — never "taken from this deposit".
 final class T1114FeeNoteTests: XCTestCase {
   private func hasChinese(_ s: String) -> Bool { s.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) || (0x3000...0x303F).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) } }
   func testFeeNoteExactWording() {

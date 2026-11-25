@@ -11,7 +11,7 @@ export function createRegistry({file}){
   const write=()=>{const t=file+'.tmp';fs.writeFileSync(t,JSON.stringify(doc,null,1),{mode:0o600});fs.renameSync(t,file);};
   return {get:w=>ADDR.test(String(w))?doc.tenants[tenantKey(w)]??null:null,count:()=>Object.keys(doc.tenants).length,all:()=>Object.values(doc.tenants),
     only:()=>{const k=Object.keys(doc.tenants);return k.length===1?doc.tenants[k[0]]:null;},
-    byOwner:o=>{const l=(doc.byOwner[tenantKey(o)]??[]).map(w=>doc.tenants[w]).filter(Boolean);return [...l.filter(r=>!r.retired),...l.filter(r=>r.retired)];},   // t1238 §6#109: a moved-away wallet is retired, the new one comes first
+    byOwner:o=>{const l=(doc.byOwner[tenantKey(o)]??[]).map(w=>doc.tenants[w]).filter(Boolean);return [...l.filter(r=>!r.retired),...l.filter(r=>r.retired)];},   // t1238 decision 109: a moved-away wallet is retired, the new one comes first
     add(rec){const w=tenantKey(rec.wallet),o=tenantKey(rec.owner);doc.tenants[w]={...doc.tenants[w],...rec,wallet:getAddress(rec.wallet),owner:getAddress(rec.owner)};
       const l=new Set(doc.byOwner[o]??[]);l.add(w);doc.byOwner[o]=[...l];write();return doc.tenants[w];},
     update(w,patch){const r=doc.tenants[tenantKey(w)];if(!r)return null;Object.assign(r,patch);write();return r;},
@@ -32,12 +32,12 @@ export function resolveTenant({url,headers,reg,index,allowSingleDefault=true,def
   // credential -> tenant (point lookup). kpa_ = agent bearer token (sha256 like agents.json); anything else = OAuth access token.
   const tok=String(headers.authorization??'').replace(/^Bearer\s+/i,'')||String(headers['x-api-key']??'');let cred=null;
   if(tok&&!tok.startsWith('kps_')){cred=index.get('agent',sha256(tok))??index.get('oauth',sha256(tok));}
-  // t1251 (§6#120): a credential of a wallet the owner moved away from (retired) is not honoured: the request is routed as if it had none,
+  // t1251 (decision 120): a credential of a wallet the owner moved away from (retired) is not honoured: the request is routed as if it had none,
   // so the current wallet answers with its own 401 and the agent re-authorises there (a retired wallet is never served, never builds a runtime).
   if(cred&&reg.get(cred)?.retired)cred=null;
   const ck=/(?:^|;\s*)kpt=(0x[0-9a-fA-F]{40})/.exec(String(headers.cookie??''))?.[1]??null;
   if(!hint&&ck&&!m){hint=ck;via='cookie';}
-  // t1251 (§6#120): a wallet named in the URL / header / cookie that the owner moved away from routes to the wallet it moved to (retired wallets
+  // t1251 (decision 120): a wallet named in the URL / header / cookie that the owner moved away from routes to the wallet it moved to (retired wallets
   // are never served); that wallet then checks the credential itself.
   if(hint&&reg.get(hint)?.retired)hint=followMoved(hint,a=>reg.get(a));
   if(hint&&cred&&tenantKey(hint)!==cred)return {error:'wrong_wallet',status:403};
@@ -51,7 +51,7 @@ export function resolveTenant({url,headers,reg,index,allowSingleDefault=true,def
   return {wallet:rec.wallet,rec,path,via};}
 export {sha256};
 
-/** t1251 (handbook §6#120): the wallet a request for `wallet` should reach after owner-signed moves. Follows registry movedTo of retired
+/** t1251 (decision 120): the wallet a request for `wallet` should reach after owner-signed moves. Follows registry movedTo of retired
  *  records (0x5150 -> V5.4 -> V5.5 ...) up to `max` hops; stops at the first record that is not retired, has no movedTo, is unknown, or
  *  would loop. Returns the input unchanged when there was no move. */
 export function followMoved(wallet, get, max = 8) {

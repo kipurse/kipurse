@@ -1,13 +1,13 @@
 import XCTest
 
-/// t1170u (§6#82): a NEW payee above the AI auto limit -> the waiting card shows the FULL address and three buttons
-/// 「认识并信任」「只付这一次」「拒绝」 (zh/en). Every other waiting card keeps the old two buttons (UI frozen otherwise).
+/// t1170 (decision 82): a NEW payee above the AI auto limit -> the waiting card shows the FULL address and three buttons
+/// "[zh]""[zh]""[zh]" (zh/en). Every other waiting card keeps the old two buttons (UI frozen otherwise).
 final class T1170OwnerAskUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }
   func launch(_ lang: String, ask: Bool) {
     app = XCUIApplication()
-    app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang, "-kpSkipFaceID", "-kpStill",   // §6#110: 待你批准 lives on AI 生活
+    app.launchArguments = ["-demo", "main", "-tab", "life", "-kp.lang", lang, "-kpSkipFaceID", "-kpStill",   // decision 110: 待你批准 lives on AI 生活
                            "-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)", "-AppleLocale", lang == "zh" ? "zh_CN" : "en_US"] + (ask ? ["-kpAskDemo"] : [])
     app.launch()
   }

@@ -1,4 +1,4 @@
-// t1258 (handbook 0A #10, §6#128): ONE daily-cap rule for both trust kinds; the iOS fixture is generated from it.
+// t1258 (handbook 0A #10, decision 128): ONE daily-cap rule for both trust kinds; the iOS fixture is generated from it.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {trustDailyCap,MAX_FEE_PPM,trustCapsFor} from '../src/v5/owner-ask-approve.mjs';import {withFeeHeadroom} from '../src/v5/abi.mjs';
 const rd=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');

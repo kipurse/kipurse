@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 import "./V54Base.t.sol";
 
-/// Stateful handler for the LIVE V5.4 adapter (t1214 §6#118). Every money path the executor has: payDirect (stored trust,
+/// Stateful handler for the LIVE V5.4 adapter (t1214 decision 118). Every money path the executor has: payDirect (stored trust,
 /// registry, stranger, one-time owner approval, KPTR inline payee trust), paySigned (V5.2 payee binding), paySignedTrusted
 /// (V5.4 inline signer grant, per-order payees), x402 prepareAuthorization / settle / markSettled / reclaim / cancel,
 /// the M3 float (fund / session-key spend / reconcile), plus owner controls (pause, deny, deny signer, untrust, re-trust),
@@ -289,7 +289,7 @@ contract V54PayHandler is V54Base {
         vm.prank(attacker);
         try a4.cancelReservation(resList[i % resList.length].digest) { _bad("cancel", "non-owner cancelled a reservation"); } catch {}
     }
-    /// One owner approval = one x402 reservation, even after it was cancelled / reclaimed (t1181u).
+    /// One owner approval = one x402 reservation, even after it was cancelled / reclaimed (t1181).
     function replayApproval(uint256 i) external {
         if (resList.length == 0) return;
         Res memory r = resList[i % resList.length];

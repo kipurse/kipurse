@@ -6,7 +6,7 @@
 import {plantCbv} from './cbv-fork.mjs';import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {createPublicClient,createTestClient,createWalletClient,http as vh,parseAbi,getAddress,decodeAbiParameters,encodeAbiParameters,encodeFunctionData,toHex,serializeTransaction} from 'viem';import {base} from 'viem/chains';
 import {privateKeyToAccount,generatePrivateKey} from 'viem/accounts';import * as P256 from 'ox/P256';
-import {everydayDigest} from '../../src/v5/everyday-limits.mjs';/* t1278: matrix follows the t1268 app flow */import {WALLET_ABI} from '../../src/v5/phone-signer.mjs';import {amountProblems} from '../../src/v5/usdc-out.mjs';/* t1166u §6#80 permanent check */import {TOOL_NAMES_V5} from '../../src/v5/mcp.mjs';import {decodePolicyV5} from '../../src/v5/abi.mjs';import {hashToken,mintAgentToken} from '../../src/v4/agents.mjs';
+import {everydayDigest} from '../../src/v5/everyday-limits.mjs';/* t1278: matrix follows the t1268 app flow */import {WALLET_ABI} from '../../src/v5/phone-signer.mjs';import {amountProblems} from '../../src/v5/usdc-out.mjs';/* t1166 decision 80 permanent check */import {TOOL_NAMES_V5} from '../../src/v5/mcp.mjs';import {decodePolicyV5} from '../../src/v5/abi.mjs';import {hashToken,mintAgentToken} from '../../src/v4/agents.mjs';
 const RPC=process.env.FORK_RPC,PJ=process.env.FORK_PERMISSION_JSON;const MD=process.env.MATRIX_DIR??'/workspace/t1139';/* t1150: output dir (rescue-in/out, fixtures, report) */const GW=new URL('../../',import.meta.url).pathname;
 const AD=parseAbi(['function trust() view returns (address)','function vaultAddress(address) view returns (address)']);
 const ERC20=parseAbi(['function balanceOf(address) view returns (uint256)','function transfer(address,uint256) returns (bool)']);
@@ -14,11 +14,11 @@ const FACTORY='0xBA5ED110eFDBa3D005bfC882d75358ACBbB85842';const FACT=parseAbi([
 const BA_ABI=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls) payable']);
 const FEED='0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70';const FEED_ABI=parseAbi(['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)']);
 const L1='0x420000000000000000000000000000000000000F';const L1_ABI=parseAbi(['function getL1Fee(bytes) view returns (uint256)']);
-test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Siri above old cap, phone trust above 5, V2->V3 migration',{skip:!RPC||!PJ,timeout:900000},async()=>{
+test('t1150 matrix (t1138 + t1148 dup cases): phone approver V3: new user, Siri above old cap, phone trust above 5, V2->V3 migration',{skip:!RPC||!PJ,timeout:900000},async()=>{
   let perm=JSON.parse(PJ);const W0=getAddress(perm.account),A=getAddress(perm.spender),USDC=getAddress(perm.token);const pol=decodePolicyV5(perm.extraData);const EXEC=getAddress(pol.executor);
   const pub=createPublicClient({chain:base,transport:vh(RPC)});const tc=createTestClient({chain:base,mode:'anvil',transport:vh(RPC)});
   const trust=await pub.readContract({address:A,abi:AD,functionName:'trust'});const vault0=await pub.readContract({address:A,abi:AD,functionName:'vaultAddress',args:[W0]});
-  /* t1197u §6#92: new wallets open on V5.3; this fork wallet (like 0x5150) stays on V5.2. adOf(w) = the adapter whose vault for w has code. */
+  /* t1197 decision 92: new wallets open on V5.3; this fork wallet (like 0x5150) stays on V5.2. adOf(w) = the adapter whose vault for w has code. */
   const V53=JSON.parse(fs.readFileSync(GW+'mainnet/v53-suite.json','utf8'));const V53A=getAddress(V53.adapter);
   const adOf=async w=>{try{const v=getAddress(await pub.readContract({address:V53A,abi:AD,functionName:'vaultAddress',args:[w]}));const c=await pub.getCode({address:v});if(c&&c!=='0x')return V53A;}catch{}return A;};
   const OWNER0=getAddress(decodeAbiParameters([{type:'address'}],await pub.readContract({address:W0,abi:WALLET_ABI,functionName:'ownerAtIndex',args:[0n]}))[0]);
@@ -59,12 +59,12 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
       await tc.stopImpersonatingAccount({address:W0});}}
   let OV,M;const {startMainnet}=await import('../../mainnet/mainnet-owner-launch.mjs?rh');const port=19100+Math.floor(Math.random()*200);
   const START=async(ver,port)=>startMainnet({fork:true,agentPort:port,ownerPort:port+1000,stateFile:SF,overrides:OV={rpc:RPC,impersonateExecutor:EXEC,allowLegacyOnMainnet:true,gasMode:'legacy',onboard:true,userErase:true,ownerPay:true,phoneOnChain:async()=>true,
-    gasPricing:{usdcPerEth:String(Math.round(R.ethUsd*1e6)),gasPriceWei:R.liveGasPriceWei},fee:{ppm:'1000'},merchantRegistry:[],retryDelayMs:50,publicBase:'http://fork.invalid',allowHttpMerchantForTests:true/* t1204 §6#93: the 127.0.0.1 mock merchant */,kvFile:join(DATA,'kv.sqlite')}});
+    gasPricing:{usdcPerEth:String(Math.round(R.ethUsd*1e6)),gasPriceWei:R.liveGasPriceWei},fee:{ppm:'1000'},merchantRegistry:[],retryDelayMs:50,publicBase:'http://fork.invalid',allowHttpMerchantForTests:true/* t1204 decision 93: the 127.0.0.1 mock merchant */,kvFile:join(DATA,'kv.sqlite')}});
   const FX={};const fx=(k,v)=>{FX[k]=JSON.parse(JSON.stringify(v,(kk,vv)=>typeof vv==='bigint'?vv.toString():vv));};
   M=await START(null,port);let GU=`http://127.0.0.1:${port}`;
   try{
   const call=async(path,{method='GET',body,headers={}}={})=>{const r=await fetch(GU+path,{method,headers:{'content-type':'application/json',...headers},body:body?JSON.stringify(body):undefined});let j=null;try{j=await r.json();}catch{}return {status:r.status,j};};
-  /* t1278 (handbook §6#138): since t1268 the app saves AI limits as challenge -> phone-key signature over everydayText -> POST (MainnetViews.signedEveryday); the matrix does exactly that */
+  /* t1278 (decision 138): since t1268 the app saves AI limits as challenge -> phone-key signature over everydayText -> POST (MainnetViews.signedEveryday); the matrix does exactly that */
   const saveEveryday=async(u,b)=>{const c=await call(u.pre+'/everyday/challenge',{method:'POST',headers:u.H,body:{}});if(c.status!==200||!/^[0-9a-f]{48}$/.test(c.j?.nonce??'')||String(c.j?.wallet).toLowerCase()!==String(u.w).toLowerCase())return {status:c.status===200?502:c.status,j:{error:'challenge',got:c.j}};const sg=sign(everydayDigest({wallet:u.w,single:b.single,daily:b.daily,term:b.term,nonce:c.j.nonce}),u.phone);return call(u.pre+'/everyday',{method:'POST',headers:u.H,body:{...b,nonce:c.j.nonce,r:sg.r,s:sg.s}});};
   const rpcBody=async r=>{const t=await r.text();const m=t.match(/^data: (.*)$/m);try{return JSON.parse(m?m[1]:t);}catch{return {raw:t.slice(0,200)};}};
   const mcpTool=async(pre,tok,name,args)=>{const H={'content-type':'application/json',accept:'application/json, text/event-stream',authorization:'Bearer '+tok};
@@ -81,7 +81,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const res=[];let id=3;for(const [name,args] of calls){const c=await fetch(GU+pre+'/mcp',{method:'POST',headers:H2,body:JSON.stringify({jsonrpc:'2.0',id:id++,method:'tools/call',params:{name,arguments:args}})});const j=await rpcBody(c);
       const text=j?.result?.content?.[0]?.text;let out;try{out=JSON.parse(text);}catch{out=undefined;}res.push({name,status:c.status,isError:!!j?.result?.isError,out,text:typeof text==='string'?text.slice(0,300):null});}
     return {status:200,tools:tl?.result?.tools??[],res};};
-  const AIOUT=[];/* t1166u §6#80: every AI-facing answer collected here is checked at the end (permanent; never remove) */const aiOut=(surface,label,o)=>{if(o!==undefined&&o!==null&&typeof o==='object')AIOUT.push({surface,label,o});};
+  const AIOUT=[];/* t1166 decision 80: every AI-facing answer collected here is checked at the end (permanent; never remove) */const aiOut=(surface,label,o)=>{if(o!==undefined&&o!==null&&typeof o==='object')AIOUT.push({surface,label,o});};
   const find=async k=>{const c=await call('/phone/find/challenge',{method:'POST'});return call('/phone/find',{method:'POST',body:{nonce:c.j.nonce,x:k.x,y:k.y,...sign(c.j.digest,k)}});};
   const sess=async(pre,k)=>{const c=await call(pre+'/phone/session/challenge',{method:'POST'});if(c.status!==200)return c;return call(pre+'/phone/session',{method:'POST',body:{nonce:c.j.nonce,...sign(c.j.digest,k)}});};
   R.onboardQuote=(await call('/onboard/new/quote')).j;R.inheritedStrangerCaps={openSingle:String(pol.openSingle),openDaily:String(pol.openDaily)};console.log('CAPS',JSON.stringify(R.inheritedStrangerCaps));
@@ -134,14 +134,14 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
   // ===================== DEPOSIT (plain USDC transfer from the user's Base Account) =====================
   await tryStep('U1','suite',async()=>{const VA53=parseAbi(['function opsPerDay() view returns (uint256)','function vaultAddress(address) view returns (address)']);
     const v53=getAddress(await pub.readContract({address:V53A,abi:VA53,functionName:'vaultAddress',args:[U1.w]}));const st=await state(U1);
-    step('U1','§6#92 NEW wallet opened on V5.3: server vault = V5.3 vault (has code, 500 ops/day), adapter = 0xb150…',getAddress(String(st?.vault?.address??'0x0000000000000000000000000000000000000000'))===v53&&(await adOf(U1.w))===V53A&&BigInt(await pub.readContract({address:v53,abi:VA53,functionName:'opsPerDay'}))===500n,{vault:st?.vault?.address,v53});
+    step('U1','decision 92 NEW wallet opened on V5.3: server vault = V5.3 vault (has code, 500 ops/day), adapter = 0xb150…',getAddress(String(st?.vault?.address??'0x0000000000000000000000000000000000000000'))===v53&&(await adOf(U1.w))===V53A&&BigInt(await pub.readContract({address:v53,abi:VA53,functionName:'opsPerDay'}))===500n,{vault:st?.vault?.address,v53});
     const w0v53=getAddress(await pub.readContract({address:V53A,abi:VA53,functionName:'vaultAddress',args:[W0]}));const c0=await pub.getCode({address:w0v53});
-    step('U1','§6#92 existing wallet stays on V5.2: its permission spender is the V5.2 adapter and it has NO V5.3 vault',A!==V53A&&(!c0||c0==='0x')&&(await adOf(W0))===A,{w0:W0,v52adapter:A});});
+    step('U1','decision 92 existing wallet stays on V5.2: its permission spender is the V5.2 adapter and it has NO V5.3 vault',A!==V53A&&(!c0||c0==='0x')&&(await adOf(W0))===A,{w0:W0,v52adapter:A});});
   await tryStep('U1','deposit',async()=>{const before=await bal(U1.w);const dep=await batch(U1,[{to:USDC,data:encodeFunctionData({abi:ERC20,functionName:'transfer',args:[U1.w,30_000_000n]})}]);
     const stt=await freshState(U1);/* the server ledger rescans at most every 30 s */fx('U1.stateAfterDeposit',stt);
     step('U1','deposit 30 USDC lands; state balance = chain balance',dep.status==='success'&&String(stt?.balance)===String(await bal(U1.w)),{tx:dep.hash,stateBalance:stt?.balance,chain:String(await bal(U1.w)),before:String(before)});
     const led=(await call(U1.pre+'/phone/session/ledger',{headers:U1.H}));fx('U1.ledgerAfterDeposit',{status:led.status,res:led.j});});
-  // ===================== t1150u / handbook 0A#7 layer 3: SAME DEPOSIT RESCANNED -> credited once (tx:logIndex) =====================
+  // ===================== t1150 / handbook 0A#7 layer 3: SAME DEPOSIT RESCANNED -> credited once (tx:logIndex) =====================
   await tryStep('U1','DUP-3 deposit rescan',async()=>{
     const {createLedger}=await import('../../src/v5/ledger.mjs');const dh=(R.steps.filter(s=>s.user==='U1'&&/^deposit 30 USDC/.test(s.step)).pop()?.d?.tx);
     const rc=await pub.getTransactionReceipt({hash:dh});const vault=getAddress(await pub.readContract({address:await adOf(U1.w),abi:AD,functionName:'vaultAddress',args:[U1.w]}));
@@ -201,7 +201,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     step('U1','Face ID revoke on chain; revoke/confirm ok; phone/status no longer active',b.status==='success'&&rc.j?.ok===true&&!st.j?.active,{tx:b.hash,confirm:rc.j,before:s0.j,after:st.j});});
   await tryStep('U1','faceid enable',async()=>{
     const k=kp();const wb=await bal(U1.w),ob=await bal(U1.ba);
-    /* t1240 §6#110 F1: no owner proof -> refused (anyone could make a real-domain "add this phone" link before) */
+    /* t1240 decision 110 F1: no owner proof -> refused (anyone could make a real-domain "add this phone" link before) */
     {const r0=await call(U1.pre+'/phone/enroll',{method:'POST',body:{x:k.x,y:k.y}});step('U1','F1 add-this-phone without owner proof -> 401 sign_in_first',r0.status===401&&r0.j?.error==='sign_in_first',{status:r0.status,err:r0.j?.error});}
     /* the App's path: Coinbase sign-in on this phone with this key -> "bind" read grant for these x / y (signin.mjs verify; emulated here, signin has its own tests) */
     {const {kvKey}=await import(GW+'src/v5/store.mjs');M.kv.put(kvKey('readgrant',getAddress(U1.w),'phone'),{x:k.x,y:k.y,owner:U1.ba,exp:Date.now()+600e3},600e3);}
@@ -209,7 +209,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     step('U1','post-opening Face ID enroll returns calls',r.status===200&&Array.isArray(r.j?.calls),{status:r.status,err:r.j?.error,keys:Object.keys(r.j??{})});
     if(r.status!==200)return;
     if(r.j.id){const q=await call(U1.pre+'/phone/enroll/quote?id='+encodeURIComponent(r.j.id));fx('U1.enrollQuote',{status:q.status,res:q.j});
-      step('U1','enroll quote <= 0.05 USDC (t1128u)',q.status===200,{status:q.status,res:q.j});}
+      step('U1','enroll quote <= 0.05 USDC (t1128)',q.status===200,{status:q.status,res:q.j});}
     const b=await batch(U1,r.j.calls);await new Promise(r=>setTimeout(r,800));
     let cf=null;if(r.j.id){cf=await call(U1.pre+'/phone/enroll/confirm',{method:'POST',body:{id:r.j.id}});}
     const st=await call(U1.pre+'/phone/status');fx('U1.phoneStatusAfterEnroll',st.j);
@@ -242,7 +242,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     step('U1','Siri pay 1 USDC paid on chain',sb.status===200&&(await bal(shop))===1_000_000n,{status:sb.status,res:sb.j,shop:String(await bal(shop))});
     const stt=await state(U1);fx('U1.stateAfterSiriPay',stt);
     step('U1','Siri balance source (state.balance, read by the app Siri entity) = chain balance after the pay',String(stt?.balance)===String(await bal(U1.w)),{stateBalance:stt?.balance,chain:String(await bal(U1.w))});});
-  // ===================== t1161u (§6#78): ANY Siri intent marks Siri used (app SiriSeen -> POST siri/allowances with the phone session); never moves money =====================
+  // ===================== t1161 (decision 78): ANY Siri intent marks Siri used (app SiriSeen -> POST siri/allowances with the phone session); never moves money =====================
   await tryStep('U1','siri seen marker',async()=>{const w0=await bal(U1.w);const s0=await state(U1);const before=(s0?.agents??[]).find(a=>a.id==='siri')?.lastUsed??null;const t0=Date.now();
     const r=await call(U1.pre+'/siri/allowances',{method:'POST',headers:U1.H,body:{}});aiOut('siri','U1 /siri/allowances',r.j);const s1=await state(U1);const sr=(s1?.agents??[]).find(a=>a.id==='siri');fx('U1.siriSeen',{status:r.status,before,after:sr?.lastUsed});
     const fresh=!!sr?.lastUsed&&Date.parse(sr.lastUsed)>=t0-2000;
@@ -281,26 +281,26 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const b1=await bal(shopA);const p2=await aiPay('3','m-2');fx('U2.aiPayOverSingle',p2);
     step('U2','AI pays 3 USDC (> per-payment 2) -> refused, nothing paid',(await bal(shopA))===b1&&!/paid/.test(String(p2.out?.state??'')),{out:p2.out});
     const stt=await state(U2);fx('U2.stateAfterAiPay',stt);});
-  // ===================== t1161u (§6#78): an AI's READ-ONLY MCP call marks THAT agent used; a bad token is refused (never shown online); no money moves =====================
+  // ===================== t1161 (decision 78): an AI's READ-ONLY MCP call marks THAT agent used; a bad token is refused (never shown online); no money moves =====================
   if(tok)await tryStep('U2','ai read marks used',async()=>{const w0=await bal(U2.w);const t0=Date.now();
     const rd=await mcpTool(U2.pre,tok,'kipurse_allowances',{});const s1=await state(U2);const ai=(s1?.agents??[]).filter(a=>a.id!=='siri');const hit=ai.find(a=>a.lastUsed&&Date.parse(a.lastUsed)>=t0-2000);fx('U2.aiReadSeen',{status:rd.status,agents:ai.map(a=>({id:a.id,connected:a.connected,lastUsed:a.lastUsed}))});
     step('U2','AI read-only MCP call -> that agent lastUsed now + connected, no money moved',rd.status===200&&!rd.isError&&!!hit&&hit.connected===true&&ai.filter(a=>a.lastUsed&&Date.parse(a.lastUsed)>=t0-2000).length===1&&(await bal(U2.w))===w0,{status:rd.status,isError:rd.isError,agents:ai.map(a=>({id:a.id,connected:a.connected,lastUsed:a.lastUsed}))});
     const bad=await mcpTool(U2.pre,'kat_'+'0'.repeat(40),'kipurse_allowances',{});step('U2','unknown/expired AI token -> 401 at /mcp (honest broken connection, not online)',bad.status===401,{status:bad.status});});
-  // ===================== t1166u / handbook §6#80 (PERMANENT, mandatory before every deploy): every AI-facing amount is human-ready USDC =====================
+  // ===================== t1166 / decision 80 (PERMANENT, mandatory before every deploy): every AI-facing amount is human-ready USDC =====================
   if(tok)await tryStep('U2','ai amounts human-ready (MCP)',async()=>{const w0=await bal(U2.w);const pk=FX['U2.aiPayWithin']?.out?.purchaseKey??null;
     const calls=[['kipurse_wallet_status',{}],['kipurse_limits',{}],['kipurse_allowances',{}],['kipurse_list_purchases',{}],['kipurse_spending_summary',{period:'month'}],['kipurse_spending_report',{period:'month'}],
       ['kipurse_address_book',{}],['kipurse_trust_list',{}],['kipurse_deposit_info',{}],['kipurse_deposits',{}],['kipurse_pending_payments',{}],['kipurse_float_status',{}],['kipurse_verify_payee',{address:shopA}],
       ['kipurse_preflight',{to:shopA,amount:'0.5'}],['kipurse_parse_payment',{to:shopA,amount:'0.5'}],['kipurse_annual_summary',{year:new Date().getFullYear()}],
       ...(pk?[['kipurse_receipt',{purchaseKey:pk}],['kipurse_get_purchase',{purchaseKey:pk}],['kipurse_order_status',{purchaseKey:pk}]]:[])].filter(([n])=>TOOL_NAMES_V5.includes(n));
     const m=await mcpMany(U2.pre,tok,calls);fx('U2.aiAmounts',m);
-    step('U2','§6#80 every MCP tool description says amounts are already USDC (no conversion)',m.status===200&&m.tools.length>0&&m.tools.every(t=>/already USDC.*no conversion/.test(t.description??'')),{status:m.status,tools:m.tools.length,missing:m.tools.filter(t=>!/already USDC.*no conversion/.test(t.description??'')).map(t=>t.name)});
-    for(const r of m.res){aiOut('mcp',r.name,r.out);step('U2','§6#80 MCP '+r.name+' (read-only): JSON answer, every amount is USDC + "x.xx USDC", no raw base units',r.status===200&&r.out!==undefined&&amountProblems(r.out).length===0,{status:r.status,isError:r.isError,problems:r.out===undefined?['not JSON: '+r.text]:amountProblems(r.out).slice(0,5)});}
+    step('U2','decision 80 every MCP tool description says amounts are already USDC (no conversion)',m.status===200&&m.tools.length>0&&m.tools.every(t=>/already USDC.*no conversion/.test(t.description??'')),{status:m.status,tools:m.tools.length,missing:m.tools.filter(t=>!/already USDC.*no conversion/.test(t.description??'')).map(t=>t.name)});
+    for(const r of m.res){aiOut('mcp',r.name,r.out);step('U2','decision 80 MCP '+r.name+' (read-only): JSON answer, every amount is USDC + "x.xx USDC", no raw base units',r.status===200&&r.out!==undefined&&amountProblems(r.out).length===0,{status:r.status,isError:r.isError,problems:r.out===undefined?['not JSON: '+r.text]:amountProblems(r.out).slice(0,5)});}
     const ws=m.res.find(r=>r.name==='kipurse_wallet_status')?.out;const chain=await bal(U2.w);const want=(()=>{const w=chain/1000000n,f=(chain%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;})();
     const rawHit=ws?JSON.stringify(ws).match(new RegExp('"([A-Za-z_]+)":"?'+chain.toString()+'"?[,}]','g'))?.filter(x=>!/Atomic"/.test(x))??[]:['no answer'];
-    step('U2','§6#80 balance headline: wallet_status usdc = chain balance in USDC, usdcDisplay "x.xx USDC", summary 余额…, raw base units only under *Atomic',!!ws&&ws.usdc===want&&/^[0-9]+\.[0-9]{2} USDC$|^0\.0+[0-9]* USDC$/.test(ws.usdcDisplay??'')&&ws.usdcAtomic===chain.toString()&&ws.summary===`余额 ${ws.usdcDisplay} / Balance ${ws.usdcDisplay}`&&ws.amountsUnit==='USDC'&&chain>=1_000_000n&&rawHit.length===0,
+    step('U2','decision 80 balance headline: wallet_status usdc = chain balance in USDC, usdcDisplay "x.xx USDC", summary 余额…, raw base units only under *Atomic',!!ws&&ws.usdc===want&&/^[0-9]+\.[0-9]{2} USDC$|^0\.0+[0-9]* USDC$/.test(ws.usdcDisplay??'')&&ws.usdcAtomic===chain.toString()&&ws.summary===`余额 ${ws.usdcDisplay} / Balance ${ws.usdcDisplay}`&&ws.amountsUnit==='USDC'&&chain>=1_000_000n&&rawHit.length===0,
       {usdc:ws?.usdc,usdcDisplay:ws?.usdcDisplay,summary:ws?.summary,chain:chain.toString(),rawHit});
-    step('U2','§6#80 read-only sweep moved no money',(await bal(U2.w))===w0,{});});
-  // ===================== t1150u / handbook 0A#7 layers 1+2: SAME REQUEST RESENT; SAME ORDER PAID AGAIN WITH A NEW KEY =====================
+    step('U2','decision 80 read-only sweep moved no money',(await bal(U2.w))===w0,{});});
+  // ===================== t1150 / handbook 0A#7 layers 1+2: SAME REQUEST RESENT; SAME ORDER PAID AGAIN WITH A NEW KEY =====================
   const aiPayK=async(amount,ref,key)=>mcpTool(U2.pre,tok,'kipurse_pay',{to:shopA,amount,merchant:'t1150-dup-shop',orderRef:ref,idempotencyKey:key});
   if(tok)await tryStep('U2','DUP-1/2',async()=>{const tag=Date.now().toString(36);
     const s0=await bal(shopA),w0=await bal(U2.w);const k1='dup1-'+tag;const a=await aiPayK('0.9','dup-order-'+tag,k1);/* t1280: 0.9 so it is not a same-amount repeat of m-1 (duplicate guard) */fx('U2.dupFirst',a);
@@ -316,7 +316,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     step('U2','DUP-2 same merchant + orderRef + amount paid again with a NEW Idempotency-Key (2 new keys) -> deduped (already_paid*, no new tx), no second charge, nothing sent',
       /^already_paid/.test(String(n1.out?.state??''))&&/^already_paid/.test(String(n2.out?.state??''))&&[undefined,null,a.out?.txHash].includes(n1.out?.txHash)&&[undefined,null,a.out?.txHash].includes(n2.out?.txHash)&&s3===s2&&w3===w2,
       {state1:n1.out?.state,state2:n2.out?.state,reason:n1.out?.reason,tx:n1.out?.txHash,shopDelta:String(s3-s2),walletDelta:String(w2-w3)});
-    /* t1280 (§6#140, owner: duplicate-purchase guard in the free version) */
+    /* t1280 (decision 140, owner: duplicate-purchase guard in the free version) */
     const d1=await aiPayK('0.9','dup-other-'+tag,'dup4-'+tag);const d2=await aiPayK('0.9','dup-other2-'+tag,'dup5-'+tag);fx('U2.dupGuard',d1);
     const s4=await bal(shopA),w4=await bal(U2.w);
     step('U2','DUP-3 a DIFFERENT order, same payee + same 0.9 USDC within 10 min -> not paid, owner push card (POSSIBLE_DUPLICATE_PURCHASE), a retry under another order -> the SAME card, shop +0, wallet -0',
@@ -335,7 +335,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const b1=await bal(shopA);const p=await aiPay('1','m-4');step('U2','AI pay while stopped -> refused',(await bal(shopA))===b1,{out:p.out});
     const stt=await state(U2);fx('U2.stateWhileStopped',stt);
     const faceIdResume=async()=>{const c=await call(U2.pre+'/safety/resume',{method:'POST',headers:U2.H,body:{}});return {c,r:c.status===428?await call(U2.pre+'/safety/resume',{method:'POST',headers:U2.H,body:{nonce:c.j.nonce,...sign(c.j.digest,U2.phone)}}):c};};
-    const U2T=(await adOf(U2.w))===V53A?getAddress(V53.trust):trust;/* t1197u §6#92: the trust contract of U2's suite */const IP=parseAbi(['function isPaused(address) view returns (bool)']);const chainPaused=()=>pub.readContract({address:U2T,abi:IP,functionName:'isPaused',args:[U2.w]});
+    const U2T=(await adOf(U2.w))===V53A?getAddress(V53.trust):trust;/* t1197 decision 92: the trust contract of U2's suite */const IP=parseAbi(['function isPaused(address) view returns (bool)']);const chainPaused=()=>pub.readContract({address:U2T,abi:IP,functionName:'isPaused',args:[U2.w]});
     const {checkResumeCalls,RESUME_FEE_TO}=await import('../../src/v5/resume-onchain.mjs');
     const {c,r}=await faceIdResume();fx('U2.safetyResume',{challenge:{status:c.status,res:c.j},resume:{status:r.status,res:r.j},wallet:U2.w,owner:U2.ba,trust:U2T});
     step('U2','resume: Face ID challenge (428) then 202 confirm_on_chain plan (chain still paused -> NOT reported resumed)',c.status===428&&r.status===202&&r.j?.state==='confirm_on_chain'&&!!r.j?.id,{challenge:c.status,status:r.status,keys:Object.keys(r.j??{}),fee:r.j?.fee,err:r.j?.error});
@@ -366,7 +366,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
        const b4=await bal(shopA);const p4=await aiPay('0.7','m-5b');step('U2','second stop -> resume -> AI pay paid again',b3.status==='success'&&c3.j?.ok===true&&(await bal(shopA))-b4===700_000n,{tx:b3.hash,confirm:c3.j,out:p4.out});}}
     {const bogus=await call(U2.pre+'/safety/resume?plan=000000000000000000000000');step('U2','unknown / expired resume page -> 410 page, no kp-data',bogus.status===410,{status:bogus.status});}
   });
-  // ===================== t1170u (handbook §6#82, locked): NEW payee above an AI auto limit -> "do you know this payee?" (owner ask) =====================
+  // ===================== t1170 (decision 82, locked): NEW payee above an AI auto limit -> "do you know this payee?" (owner ask) =====================
   if(tok)await new Promise(r=>setTimeout(r,61000));/* fresh per-IP rate window (prod limit unchanged) */
   if(tok)await tryStep('ASK','owner ask (new payee over the AI limit)',async()=>{await useExec(U2);const tag=Date.now().toString(36);
     const buyA=(args)=>mcpTool(U2.pre,tok,'kipurse_buy',{purpose:'daily',merchant:'T1170 Desk',item:'standing desk',user_request:'buy the desk',...args});
@@ -375,7 +375,7 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const approveAsk=async(id,mode,{forge=false}={})=>{const p=await call(U2.pre+'/safety/mandates/ask-prepare',{method:'POST',headers:U2.H,body:{id,mode}});if(p.status!==200)return {prep:p};
       const sg=forge?{r:toHex(7n,{size:32}),s:toHex(9n,{size:32})}:sign(p.j.sign.digest,U2.phone);const body={id,mode,...sg,pay:forge?sg:sign(p.j.pay.digest,U2.phone),...(p.j.trust?{trust:forge?sg:sign(await rsh(p.j.trust.digest),U2.phone)}:{})};
       const ap=await call(U2.pre+'/safety/mandates/approve',{method:'POST',headers:U2.H,body});let trustFinal=null;
-      if(ap.status===200&&mode==='trust'){const t0=Date.now();for(;;){const x=((await call(U2.pre+'/safety/mandates',{headers:U2.H})).j?.askTrust??[]).find(z=>z.id===id);trustFinal=x?.trust??null;if((trustFinal&&trustFinal.state!=='submitting')||Date.now()-t0>90000)break;await new Promise(z=>setTimeout(z,250));}}/* t1243 §6#113: the trust lands after the paid reply */
+      if(ap.status===200&&mode==='trust'){const t0=Date.now();for(;;){const x=((await call(U2.pre+'/safety/mandates',{headers:U2.H})).j?.askTrust??[]).find(z=>z.id===id);trustFinal=x?.trust??null;if((trustFinal&&trustFinal.state!=='submitting')||Date.now()-t0>90000)break;await new Promise(z=>setTimeout(z,250));}}/* t1243 decision 113: the trust lands after the paid reply */
       return {prep:p,ap,trustFinal};};
     // 1) new payee X, 3 USDC > AI everyday per-payment 2 (wallet per-payment 5) -> ask_owner + relay question, nothing paid
     const X=privateKeyToAccount(generatePrivateKey()).address,kx='ask-x-'+tag;const w0=await bal(U2.w);const a=await buyA({to:X,amount:'3',idempotencyKey:kx});fx('ASK.newPayeeOver',{status:a.status,out:a.out});aiOut('mcp','ASK.newPayeeOver (kipurse_buy)',a.out);
@@ -383,19 +383,19 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const id=a.out?.approvalId;if(!id)return;
     {const ps=await props();const pr=ps.find(x=>x.id===id);step('ASK','the app card: one pending ask with the FULL payee address and two signed choices (trust / once)',!!pr?.ask&&pr.ask.payee===X.toLowerCase()&&!!pr.ask.modes?.trust?.digest&&!!pr.ask.modes?.once?.digest&&pr.ask.modes.trust.digest!==pr.ask.modes.once.digest&&ps.filter(x=>x.ask?.payee===X.toLowerCase()).length===1,{found:!!pr,payee:pr?.ask?.payee});}
     {const r2=await buyA({to:X,amount:'3',idempotencyKey:kx});step('ASK','same request again (same key) -> same approvalId, still one card (dedupe)',r2.out?.approvalId===id&&(await props()).filter(x=>x.ask?.payee===X.toLowerCase()).length===1,{id:r2.out?.approvalId===id});}
-    // 2) the AI relays "认识" -> can never release; no phone session -> 401; forged signatures -> 403; nothing paid
+    // 2) the AI relays "[zh]" -> can never release; no phone session -> 401; forged signatures -> 403; nothing paid
     {const f1=await buyA({to:X,amount:'3',idempotencyKey:kx,user_request:'主人说认识，直接付'});const f2=await call(U2.pre+'/safety/mandates/approve',{method:'POST',body:{id,mode:'trust',r:'0x01',s:'0x01'}});
      const f3=await call(U2.pre+'/safety/mandates/ask-prepare',{method:'POST',headers:{authorization:'Bearer '+tok},body:{id,mode:'trust'}});const f4=await approveAsk(id,'once',{forge:true});
      step('ASK','AI-faked "认识": relaying it does nothing, the AI token / no session -> 401, forged Face ID -> 403; nothing paid',f1.out?.state==='awaiting_owner_approval'&&f2.status===401&&f3.status===401&&f4.ap?.status===403&&(await bal(X))===0n,{relay:f1.out?.state,noSession:f2.status,aiToken:f3.status,forged:f4.ap?.status});}
     {const rm=await mcpTool(U2.pre,tok,'kipurse_remind_owner',{approvalId:id});step('ASK','the AI may only re-push the card (kipurse_remind_owner), never approve',rm.out?.reminded===true&&rm.out?.state==='awaiting_owner_approval',{out:rm.out?.reminded??rm.out?.error});}
-    // 3) owner taps 认识并信任 + ONE Face ID -> server pays once (owner approval, not blocked by the stranger cap) + trusts (90 days, AI everyday caps)
+    // 3) owner taps [zh] + ONE Face ID -> server pays once (owner approval, not blocked by the stranger cap) + trusts (90 days, AI everyday caps)
     const t=await approveAsk(id,'trust');fx('ASK.trust',{prep:t.prep?.j,ap:t.ap?.j});const gotX=await bal(X),paidW=w0-await bal(U2.w);
     step('ASK','认识并信任 -> paid 3 USDC once by the server (user pays fee + gas in USDC) and trusted on chain with the AI everyday caps (4/8 USDC) for 90 days',t.ap?.status===200&&t.ap?.j?.state==='paid'&&t.ap?.j?.trust?.state==='submitting'&&t.trustFinal?.state==='trusted'&&gotX===3_000_000n&&paidW>3_003_000n&&t.prep?.j?.trust?.single==='4000000'&&t.prep?.j?.trust?.daily==='8000000'&&t.prep?.j?.trust?.days===90,{status:t.ap?.status,state:t.ap?.j?.state,trust:t.ap?.j?.trust,x:String(gotX),wallet:String(paidW),err:t.prep?.j?.error??t.ap?.j?.error});
     {const st=await mcpTool(U2.pre,tok,'kipurse_approval_status',{approvalId:id});const r3=await buyA({to:X,amount:'3',idempotencyKey:kx});aiOut('mcp','ASK.statusPaid (kipurse_approval_status)',st.out);aiOut('mcp','ASK.retryPaid (kipurse_buy)',r3.out);
      step('ASK','the AI reads the result: approval status paid; same key again -> paid answer, no second payment',st.out?.state==='paid'&&r3.out?.state==='paid'&&(await bal(X))===3_000_000n,{status:st.out?.state,retry:r3.out?.state});}
     {const d2=await approveAsk(id,'trust');step('ASK','double approval -> already handled, paid exactly once',(d2.prep?.status===409||d2.ap?.status===409)&&(await bal(X))===3_000_000n,{prep:d2.prep?.status,ap:d2.ap?.status});}
     {const n=await buyA({to:X,amount:'1',idempotencyKey:'ask-x2-'+tag});aiOut('mcp','ASK.trustedNext (kipurse_buy)',n.out);step('ASK','trusted payee: next 1 USDC (inside the AI limits) is paid automatically, no question',n.out?.state==='paid'&&(await bal(X))===4_000_000n,{state:n.out?.state,reason:n.out?.reason});}
-    // 4) 只付这一次 -> paid once, NOT trusted: the next payment asks again
+    // 4) [zh] -> paid once, NOT trusted: the next payment asks again
     {const Y=privateKeyToAccount(generatePrivateKey()).address;const y=await buyA({to:Y,amount:'3',idempotencyKey:'ask-y-'+tag});const o=y.out?.approvalId?await approveAsk(y.out.approvalId,'once'):{};fx('ASK.once',{ask:y.out,ap:o.ap?.j});
      step('ASK','只付这一次 -> paid 3 USDC once, not added to the trust list',y.out?.decision==='ask_owner'&&o.ap?.status===200&&o.ap?.j?.state==='paid'&&o.ap?.j?.trust===null&&(await bal(Y))===3_000_000n,{ask:y.out?.state,ap:o.ap?.status,state:o.ap?.j?.state});
      const y2=await buyA({to:Y,amount:'1',idempotencyKey:'ask-y2-'+tag});step('ASK','only once: the next payment to the same payee asks again, nothing paid',y2.out?.decision==='ask_owner'&&y2.out?.state!=='paid'&&(await bal(Y))===3_000_000n,{decision:y2.out?.decision,state:y2.out?.state});}
@@ -405,18 +405,18 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     // 6) 24 h expiry -> nothing paid, card gone
     {const V=privateKeyToAccount(generatePrivateKey()).address;const v=await buyA({to:V,amount:'3',idempotencyKey:'ask-v-'+tag});const vid=v.out?.approvalId;let ok=false;let dg={};
      if(vid){const T=await M.tenant(U2.w);const {DatabaseSync}=await import('node:sqlite');const db=new DatabaseSync(T.engine().ledgerPath);db.prepare(`UPDATE owner_ask SET expires_at=?,created_at=? WHERE approval_id=?`).run(Date.now()-1,Date.now()-86400e3-1,vid);db.prepare(`UPDATE mandate_proposal SET created_at=? WHERE id=?`).run(Date.now()-86400e3-1000,vid);db.close();
-       const e1=await approveAsk(vid,'once');const s1=await mcpTool(U2.pre,tok,'kipurse_approval_status',{approvalId:vid});const pr=(await props()).some(x=>x.id===vid),bv=await bal(V);dg={prep:e1.prep?.status,prepJ:e1.prep?.j,e1:Object.keys(e1??{}),s1:s1.out,card:pr,bal:String(bv)};/* t1278: since t1259 (§6#129) an expired card answers 410 request_gone (state expired, nothing paid); the app closes the card on it (OwnerAsk.isGone) */ok=e1.prep?.status===410&&e1.prep?.j?.error==='request_gone'&&e1.prep?.j?.nothingPaid===true&&s1.out?.state==='expired'&&s1.out?.nothingPaid===true&&!pr&&bv===0n;}
+       const e1=await approveAsk(vid,'once');const s1=await mcpTool(U2.pre,tok,'kipurse_approval_status',{approvalId:vid});const pr=(await props()).some(x=>x.id===vid),bv=await bal(V);dg={prep:e1.prep?.status,prepJ:e1.prep?.j,e1:Object.keys(e1??{}),s1:s1.out,card:pr,bal:String(bv)};/* t1278: since t1259 (decision 129) an expired card answers 410 request_gone (state expired, nothing paid); the app closes the card on it (OwnerAsk.isGone) */ok=e1.prep?.status===410&&e1.prep?.j?.error==='request_gone'&&e1.prep?.j?.nothingPaid===true&&s1.out?.state==='expired'&&s1.out?.nothingPaid===true&&!pr&&bv===0n;}
      step('ASK','24 h expiry -> approval refused, status expired, card gone, nothing paid',ok,{id:!!vid,v:v.out?.state,...dg});}
-    // 7) §6#80: every ask answer above is human-ready USDC
-    {const l=AIOUT.filter(x=>/^ASK\./.test(x.label));const bad=l.filter(x=>amountProblems(x.o).length);step('ASK','§6#82 ask answers keep the §6#80 amount rule (USDC + Display, no raw base units)',l.length>=5&&bad.length===0,{count:l.length,bad:bad.map(x=>x.label)});}
+    // 7) decision 80: every ask answer above is human-ready USDC
+    {const l=AIOUT.filter(x=>/^ASK\./.test(x.label));const bad=l.filter(x=>amountProblems(x.o).length);step('ASK','decision 82 ask answers keep the decision 80 amount rule (USDC + Display, no raw base units)',l.length>=5&&bad.length===0,{count:l.length,bad:bad.map(x=>x.label)});}
   });
-  // ===================== t1204 / handbook §6#93: MERCHANT ORDER, the AI fills the order fields (ExampleShop-shaped MOCK merchant on 127.0.0.1, never the real one) =====================
-  if(tok)await tryStep('U2','§6#93 merchant order',async()=>{const http=await import('node:http');const {randomUUID}=await import('node:crypto');
+  // ===================== t1204 / decision 93: MERCHANT ORDER, the AI fills the order fields (ExampleShop-shaped MOCK merchant on 127.0.0.1, never the real one) =====================
+  if(tok)await tryStep('U2','decision 93 merchant order',async()=>{const http=await import('node:http');const {randomUUID}=await import('node:crypto');
     /* runs AFTER every U2 limit/ask check, on a NEW chain day (+24 h, wallet day cap) and with the owner's everyday 24 h limit raised (app saveEveryday), so its 1.1 USDC never eats the budget those checks rely on */
     await tc.increaseTime({seconds:86400+60});await tc.mine({blocks:1});
     /* + a plain 50 USDC deposit to U2's wallet, so these 1.1 USDC are not >50% of the balance moved out in 24 h (the large_outflow safety pause stays a real guard, not tripped by test bookkeeping) */
     {const h=await createWalletClient({chain:base,transport:vh(RPC),account:whale}).writeContract({address:USDC,abi:ERC20,functionName:'transfer',args:[U2.w,50_000_000n]});await pub.waitForTransactionReceipt({hash:h});}
-    {const ev=await saveEveryday(U2,{single:'4000000',daily:'20000000',term:'60000000'}/* = U2's wallet floor 5/20/100 at most */);step('U2','§6#93 setup: owner raises everyday 24 h limit for the merchant-order steps (app saveEveryday)',ev.status===200,{status:ev.status,err:ev.j?.error});}
+    {const ev=await saveEveryday(U2,{single:'4000000',daily:'20000000',term:'60000000'}/* = U2's wallet floor 5/20/100 at most */);step('U2','decision 93 setup: owner raises everyday 24 h limit for the merchant-order steps (app saveEveryday)',ev.status===200,{status:ev.status,err:ev.j?.error});}
     const F=JSON.parse(fs.readFileSync(GW+'test/fixtures/t1204-example-shop-shape.json','utf8'));const TOKEN=randomUUID(),SUBSEC='subsec-'+randomUUID(),MGMT='mgmt-'+randomUUID();
     const seen={create:[],status:[],first:[]};const ordersM=new Map();
     const orderOf=async(pid,c=50)=>{const t=Number((await pub.getBlock()).timestamp);return {purchaseId:pid,status:'open',chainId:8453,tokenContract:USDC,depositAddress:shopA,amountAtomic:String(c*10000),amountUsdc:(c/100).toFixed(2),amountCents:c,expiresAt:new Date((t+900)*1000).toISOString(),statusUrl:'/api/v1/agent/usdc-orders/'+pid};};
@@ -438,26 +438,26 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     try{
       const buy=(args)=>mcpTool(U2.pre,tok,'kipurse_buy',{purpose:'promo',merchant:'ExampleShop-shaped mock',item:'bid for my listing',user_request:'把我的网站竞价到第一',origin:ORIGIN,waitSeconds:3,...args});
       const tl=await mcpMany(U2.pre,tok,[]);const mdesc=(tl.tools??[]).find(t=>t.name==='kipurse_pay_merchant_order')?.description??'';
-      step('U2','§6#93 MCP: kipurse_pay_merchant_order says YOU fill orderParams; no "owner config" credential',/YOU fill orderParams/.test(mdesc)&&!/owner config/.test(mdesc),{desc:mdesc.slice(0,160)});
+      step('U2','decision 93 MCP: kipurse_pay_merchant_order says YOU fill orderParams; no "owner config" credential',/YOU fill orderParams/.test(mdesc)&&!/owner config/.test(mdesc),{desc:mdesc.slice(0,160)});
       const b0=await bal(shopA);const m1=await buy({orderParams:{targetBid:1,board:'all'},merchantPurchaseId:randomUUID()});
-      step('U2','§6#93 missing order fields -> refuse, names listingId + ownerToken, says get them from the user/merchant, nothing created or paid',
+      step('U2','decision 93 missing order fields -> refuse, names listingId + ownerToken, says get them from the user/merchant, nothing created or paid',
         m1.out?.decision==='refuse'&&m1.out?.reason==='missing_order_fields'&&JSON.stringify(m1.out?.missingFields)==='["listingId","ownerToken"]'&&/listingId/.test(m1.out?.say_to_user??'')&&/ownerToken/.test(m1.out?.say_to_user??'')&&seen.create.length===0&&(await bal(shopA))===b0,
         {reason:m1.out?.reason,missing:m1.out?.missingFields,say:m1.out?.say_to_user,creates:seen.create.length});
       const PID=randomUUID();const m2=await buy({orderParams:{listingId:'lst-1',ownerToken:TOKEN,targetBid:1,board:'all'},merchantPurchaseId:PID});const b1=await bal(shopA);
-      step('U2','§6#93 AI-supplied fields (listingId, ownerToken, targetBid, board) -> merchant got the AI token in the JSON body, paid 0.5 USDC exactly once to the order deposit address',
+      step('U2','decision 93 AI-supplied fields (listingId, ownerToken, targetBid, board) -> merchant got the AI token in the JSON body, paid 0.5 USDC exactly once to the order deposit address',
         m2.out?.state==='paid'&&b1-b0===500_000n&&seen.create.length===1&&seen.create[0].ownerToken===TOKEN&&seen.create[0].purchaseId===PID,{state:m2.out?.state,reason:m2.out?.reason,delta:String(b1-b0),creates:seen.create.length});
-      step('U2','§6#93 status follow-up used the AI token as Bearer for that merchant only -> fulfilled',m2.out?.fulfillment==='fulfilled'&&seen.status.length>=1&&seen.status.every(h=>h==='Bearer '+TOKEN),{fulfillment:m2.out?.fulfillment,polls:seen.status.length});
-      step('U2','§6#93 the AI token is not in the answer',!JSON.stringify(m2).includes(TOKEN),{});
+      step('U2','decision 93 status follow-up used the AI token as Bearer for that merchant only -> fulfilled',m2.out?.fulfillment==='fulfilled'&&seen.status.length>=1&&seen.status.every(h=>h==='Bearer '+TOKEN),{fulfillment:m2.out?.fulfillment,polls:seen.status.length});
+      step('U2','decision 93 the AI token is not in the answer',!JSON.stringify(m2).includes(TOKEN),{});
       const m3=await buy({orderParams:{listingId:'lst-1',ownerToken:TOKEN,targetBid:1,board:'all'},merchantPurchaseId:PID});const b2=await bal(shopA);
-      step('U2','§6#93 same merchantPurchaseId again -> no second charge (duplicate protection)',b2===b1&&[undefined,null,m2.out?.txHash].includes(m3.out?.txHash),{state:m3.out?.state,reason:m3.out?.reason,delta:String(b2-b1),sameTx:m3.out?.txHash===m2.out?.txHash});
+      step('U2','decision 93 same merchantPurchaseId again -> no second charge (duplicate protection)',b2===b1&&[undefined,null,m2.out?.txHash].includes(m3.out?.txHash),{state:m3.out?.state,reason:m3.out?.reason,delta:String(b2-b1),sameTx:m3.out?.txHash===m2.out?.txHash});
       const m4=await buy({orderParams:{listingId:'lst-1',ownerToken:'wrong-'+TOKEN,targetBid:1,board:'all'},merchantPurchaseId:randomUUID()});
-      step('U2','§6#93 merchant refusal that echoes the AI token -> redacted in the answer, nothing paid',m4.out?.decision==='refuse'&&!JSON.stringify(m4).includes(TOKEN)&&(await bal(shopA))===b2,{reason:m4.out?.reason,detail:m4.out?.detail});
+      step('U2','decision 93 merchant refusal that echoes the AI token -> redacted in the answer, nothing paid',m4.out?.decision==='refuse'&&!JSON.stringify(m4).includes(TOKEN)&&(await bal(shopA))===b2,{reason:m4.out?.reason,detail:m4.out?.detail});
       const FP=randomUUID();const m5=await buy({orderParams:{destination:'https://game.example',category:'games',rulesVersion:'2026-11',userApproved:true,credentialsSavedSecurely:true,submissionSecret:SUBSEC,purchaseId:FP,board:'today',targetBid:1,maxAmountCents:100},merchantPurchaseId:'idem-'+FP});const b3=await bal(shopA);
-      step('U2','§6#93 no-listing first bid (publish-and-prepare route) -> paid 0.6 USDC from the nested paymentRequest; submissionSecret + new listing token never in the answer',
+      step('U2','decision 93 no-listing first bid (publish-and-prepare route) -> paid 0.6 USDC from the nested paymentRequest; submissionSecret + new listing token never in the answer',
         m5.out?.state==='paid'&&b3-b2===600_000n&&seen.first.length===1&&seen.first[0].idempotencyKey==='idem-'+FP&&!JSON.stringify(m5).includes(SUBSEC)&&!JSON.stringify(m5).includes(MGMT),{state:m5.out?.state,reason:m5.out?.reason,delta:String(b3-b2)});
       const leaks=[];const scan=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=join(d,e.name);if(e.isDirectory())scan(p);else{const buf=fs.readFileSync(p);for(const [k,v] of [['token',TOKEN],['submissionSecret',SUBSEC],['merchantReceipt',MGMT]])if(buf.includes(Buffer.from(v)))leaks.push(k+'@'+p.slice(DATA.length));}}};scan(DATA);scan(CONF);
-      step('U2','§6#93 AI secrets never stored: not in ledger / kv / any data or config file',leaks.length===0,{leaks});
-      const logs=cap.join('');step('U2','§6#93 AI secrets never logged (gateway stdout/stderr during the merchant steps)',!logs.includes(TOKEN)&&!logs.includes(SUBSEC)&&!logs.includes(MGMT),{bytes:logs.length});
+      step('U2','decision 93 AI secrets never stored: not in ledger / kv / any data or config file',leaks.length===0,{leaks});
+      const logs=cap.join('');step('U2','decision 93 AI secrets never logged (gateway stdout/stderr during the merchant steps)',!logs.includes(TOKEN)&&!logs.includes(SUBSEC)&&!logs.includes(MGMT),{bytes:logs.length});
     }finally{process.stdout.write=ow;process.stderr.write=ew;srv.close();}});
   // ===================== REVOKE CONNECTION (app: AllowancesView stop agent) =====================
   if(tok)await tryStep('U2','revoke connection',async()=>{
@@ -465,13 +465,13 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const ag=(m.j?.agents??[]).find(a=>a.id!=='siri');step('U2','connected AI listed for the owner',!!ag,{agents:m.j?.agents});if(!ag)return;
     const r=await call(U2.pre+'/safety/agents/stop',{method:'POST',headers:U2.H,body:{agentId:ag.id}});fx('U2.agentStop',{status:r.status,res:r.j});
     const b1=await bal(shopA);const p=await aiPay('1','m-6');step('U2','after stopping the AI, its pay is refused',r.status===200&&(await bal(shopA))===b1,{stop:r.j,out:p.out});
-    if(tok){/* t1170u §6#82: a stopped AI never gets an owner ask (no card, no push), even for a new payee above its limit */const n0=((await call(U2.pre+'/safety/mandates',{headers:U2.H})).j?.proposals??[]).length;const Q=privateKeyToAccount(generatePrivateKey()).address;
+    if(tok){/* t1170 decision 82: a stopped AI never gets an owner ask (no card, no push), even for a new payee above its limit */const n0=((await call(U2.pre+'/safety/mandates',{headers:U2.H})).j?.proposals??[]).length;const Q=privateKeyToAccount(generatePrivateKey()).address;
      const q=await mcpTool(U2.pre,tok,'kipurse_buy',{purpose:'daily',merchant:'T1170 Stopped',item:'x',user_request:'x',to:Q,amount:'3',idempotencyKey:'ask-stop-'+Date.now().toString(36)});const n1=((await call(U2.pre+'/safety/mandates',{headers:U2.H})).j?.proposals??[]).length;
      step('U2','ASK stopped AI: new payee over its limit -> AGENT_STOPPED, no owner ask card',q.out?.decision!=='ask_owner'&&/AGENT_STOPPED|stopped/i.test(JSON.stringify(q.out??{}))&&n1===n0&&(await bal(Q))===0n,{out:q.out?.reason??q.out?.state,cards:[n0,n1]});}
     const stt=await state(U2);fx('U2.stateFinal',stt);});
-  // ===================== t1153u SIRI RECONNECT (an older oauth-siri record must be replaced, not block the connection) =====================
+  // ===================== t1153 SIRI RECONNECT (an older oauth-siri record must be replaced, not block the connection) =====================
   const U3=await openUser('U3');R.U3={wallet:U3.w};
-  /* t1161u: the extra seen-marker steps push this one-IP test past the 600/min per-IP limit (prod limit unchanged); pace like a real client: start U3 in a fresh rate window */
+  /* t1161: the extra seen-marker steps push this one-IP test past the 600/min per-IP limit (prod limit unchanged); pace like a real client: start U3 in a fresh rate window */
   await new Promise(r=>setTimeout(r,61000));
   await tryStep('U3','siri reconnect',async()=>{
     const T=await M.tenant(U3.w);step('U3','tenant loaded for the Siri reconnect case',!!T?.S,{});if(!T?.S)return;
@@ -480,17 +480,17 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     const f=await call(U3.pre+'/oauth/first',{method:'POST',body:{agent:'siri',...amts}});fx('U3.siriFirst',{status:f.status,res:f.j});
     step('U3','Siri oauth/first with an older Siri record present -> mode=first',f.status===200&&f.j?.mode==='first'&&!!f.j?.req,{status:f.status,err:f.j?.error});if(f.status!==200)return;
     const d=await approveFirst(U3,f.j.req,amts,'siriReconnect');
-    U3.siriCred=d?.siriCredential??null;/* t1158u: Siri-scoped credential from the signed Siri approval */
+    U3.siriCred=d?.siriCredential??null;/* t1158: Siri-scoped credential from the signed Siri approval */
     const row=T.S.oauthAgents['oauth-siri'];
     step('U3','Siri reconnect: old record replaced by the new client (no agent_id_in_use)',!!d&&row?.clientId===f.j.clientId&&row?.clientId!=='kpc_t1153_OLD',{row:row?{clientId:row.clientId===f.j.clientId?'new':'other'}:null});;
-    // t1157u: what the app reads after the reconnect (home Siri bead + Siri page): ONE Siri, the phone row, connected; mandates one Siri; reply carries the saved limits
+    // t1157: what the app reads after the reconnect (home Siri bead + Siri page): ONE Siri, the phone row, connected; mandates one Siri; reply carries the saved limits
     const isSiri=a=>[a?.id,a?.kind,a?.name].filter(Boolean).some(x=>String(x).toLowerCase().includes('siri'));
     const s3=await state(U3);fx('U3.stateAfterSiriReconnect',{agents:s3?.agents,everyday:s3?.everyday});const sl=(s3?.agents??[]).filter(isSiri);
     step('U3','after Siri reconnect: state lists exactly one Siri (id siri) and it is connected',sl.length===1&&sl[0].id==='siri'&&sl[0].connected===true&&s3?.everyday?.authorized===true,{siri:sl.map(a=>({id:a.id,via:a.via,connected:a.connected}))});
     const m3=await call(U3.pre+'/safety/mandates',{headers:U3.H});const ml=(m3.j?.agents??[]).filter(isSiri);
     step('U3','after Siri reconnect: /safety/mandates lists Siri once',m3.status===200&&ml.length===1&&ml[0].id==='siri',{status:m3.status,siri:ml.map(a=>a.id)});
     step('U3','phone-decide reply carries the saved AI limits (app updates without a stale view)',d?.everyday?.authorized===true&&d.everyday.requestedSingle===amts.single&&d.everyday.requestedTerm===amts.total,{everyday:d?.everyday?{authorized:d.everyday.authorized}:null});});
-  // ===================== t1158u (§6#77) SIRI PAY PARITY: real POST /siri/buy with the Siri credential (no phone session) =====================
+  // ===================== t1158 (decision 77) SIRI PAY PARITY: real POST /siri/buy with the Siri credential (no phone session) =====================
   await tryStep('U3','siri buy (credential)',async()=>{await useExec(U3);
     const cred=U3.siriCred;step('U3','signed Siri approval returned a Siri credential (ksc_…)',/^ksc_[A-Za-z0-9_-]{43}$/.test(String(cred??'')),{has:!!cred});if(!cred)return;
     const C={authorization:'Bearer '+cred};const tag=Date.now().toString(36);const cafe=privateKeyToAccount(generatePrivateKey()).address;const NAME='T1158 Cafe '+tag;
@@ -532,14 +532,14 @@ test('t1150 matrix (t1138u + t1148u dup cases): phone approver V3: new user, Sir
     {const st=await call(U3.pre+'/safety/agents/stop',{method:'POST',headers:U3.H,body:{agentId:'siri'}});const c7=await bal(cafe);const r=await sb({payee_name:NAME,amount:'1',idempotencyKey:'siri-rev-'+tag});
      step('U3','after Siri is disconnected (agent stop) the Siri credential is revoked -> 401, nothing paid',st.status===200&&r.status===401&&(await bal(cafe))===c7,{stop:st.status,status:r.status});}
   });
-  // ===================== t1166u / handbook §6#80 (PERMANENT): payment + Siri answers the AIs actually got =====================
+  // ===================== t1166 / decision 80 (PERMANENT): payment + Siri answers the AIs actually got =====================
   await tryStep('AI','ai amounts human-ready (pay + siri)',async()=>{
     for(const k of ['U2.aiPayWithin','U2.aiPayOverSingle','U2.dupFirst','U2.dupResend','U2.dupNewKey'])if(FX[k]?.out&&typeof FX[k].out==='object')aiOut('mcp',k+' (kipurse_pay)',FX[k].out);
     for(const k of ['U3.siriNewPayee','U3.siriInLimit','U3.siriAboveStrangerCap','U3.siriOverLimit'])if(FX[k]?.res)aiOut('siri',k+' (/siri/buy)',FX[k].res);
     const by=s=>AIOUT.filter(x=>x.surface===s);
     for(const s of ['mcp','siri']){const l=by(s);const bad=l.map(x=>({label:x.label,p:amountProblems(x.o)})).filter(x=>x.p.length);
-      step('AI','§6#80 all '+l.length+' '+s+' answers collected in this run: amounts are USDC + Display, no raw base units',l.length>=(s==='mcp'?10:3)&&bad.length===0,{count:l.length,bad:bad.slice(0,5).map(x=>({label:x.label,p:x.p.slice(0,3)}))});}
-    const pay=FX['U2.aiPayWithin']?.out;step('AI','§6#80 the 1 USDC AI payment answer says amount "1" / "1.00 USDC" (base units only in amountAtomic)',!!pay&&JSON.stringify(pay).includes('"amountDisplay":"1.00 USDC"')&&!/"amount":"?1000000"?[,}]/.test(JSON.stringify(pay)),{amount:pay?.amount,amountDisplay:pay?.amountDisplay,amountAtomic:pay?.amountAtomic});});
+      step('AI','decision 80 all '+l.length+' '+s+' answers collected in this run: amounts are USDC + Display, no raw base units',l.length>=(s==='mcp'?10:3)&&bad.length===0,{count:l.length,bad:bad.slice(0,5).map(x=>({label:x.label,p:x.p.slice(0,3)}))});}
+    const pay=FX['U2.aiPayWithin']?.out;step('AI','decision 80 the 1 USDC AI payment answer says amount "1" / "1.00 USDC" (base units only in amountAtomic)',!!pay&&JSON.stringify(pay).includes('"amountDisplay":"1.00 USDC"')&&!/"amount":"?1000000"?[,}]/.test(JSON.stringify(pay)),{amount:pay?.amount,amountDisplay:pay?.amountDisplay,amountAtomic:pay?.amountAtomic});});
   const f1=await state(U1);fx('U1.stateFinal',f1);
   // ===================== OFFLINE RESCUE (app: ChainRescue.balances -> ChainRescue.plan -> Coinbase confirm of wallet.executeBatch) =====================
   await tryStep('U1','offline rescue',async()=>{

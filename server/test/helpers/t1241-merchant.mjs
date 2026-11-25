@@ -1,4 +1,4 @@
-// t1241 (handbook §6#111): a ExampleShop-shaped merchant for unit tests (no network). It changes NOTHING for Kipurse: it publishes its own signer
+// t1241 (decision 111): a ExampleShop-shaped merchant for unit tests (no network). It changes NOTHING for Kipurse: it publishes its own signer
 // (optional), signs "EIP-712 AgentWalletPaymentOrder v5" for an OLD Kipurse adapter with payer 0 when asked (signedOrder:true), and issues a
 // NEW deposit address per order. Knobs: signed, badSig (sign with an unpublished key), noSig, statusAddress (status returns another
 // address), status (status string), confirm (status after payment).

@@ -18,7 +18,7 @@ async function connect(){const p=await provider();const [a]=await p.request({met
 async function sendCalls(calls){const p=await provider();const r=await p.request({method:'wallet_sendCalls',params:[{version:'2.0.0',chainId:'0x14a34',from:OWNER,atomicRequired:true,calls}]});
   const id=typeof r==='string'?r:r.id;for(let i=0;i<240;i++){const s=await p.request({method:'wallet_getCallsStatus',params:[id]});if(s.status===200||s.status==='CONFIRMED'||s.status==='success')return s;if(Number(s.status)>=400||s.status==='FAILED')throw Error('失败 failed');await new Promise(z=>setTimeout(z,1500));}throw Error('timeout');}
 const step=(n,title,body,state)=>`<div class="step ${state}"><h2>${state==='done'?'✅':n+'.'} ${title}</h2>${state==='todo'?'':body}</div>`;
-// big preset buttons + '自己填' (numeric keypad on iPhone). Presets are examples only; nothing is pre-selected.
+// big preset buttons + '[zh]' (numeric keypad on iPhone). Presets are examples only; nothing is pre-selected.
 function chips(k,cur=ANS[k],attr='data-k',inAttr='data-in',unit=Q[k][2],list=CH[k]){const isDays=k==='termDays';
   return `<div class=chips>${list.map(v=>`<button class="${String(cur)===String(v)?'sel':''}" ${attr}="${k}" data-v="${v}">${v} ${unit}</button>`).join('')}</div>
   <label class=own>自己填 / your own:<span class=row><input type=text ${isDays?'inputmode=numeric pattern="[0-9]*"':'inputmode=decimal'} autocomplete=off enterkeyhint=done ${inAttr}="${k}" placeholder="${isDays?`${TERM_MIN_DAYS}–${TERM_MAX_DAYS}`:'例如 3.5'}" value="${list.map(String).includes(String(cur??''))?'':esc(cur??'')}"><b>${unit}</b></span></label>

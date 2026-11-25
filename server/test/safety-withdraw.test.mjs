@@ -22,7 +22,7 @@ const call=async(M,method,path,body)=>{let code,out;const res={writeHead:c=>{cod
 test('withdraw module: destination fixed, inputs ignored, owner checked on chain, page has no editable field',async()=>{
   const pub=fakePub();const M=createOwnerWithdraw({pub,wallet:W,owner:O,token:T,feed:F,script:()=>''});
   const q=await M.quote();assert.equal(q.to,O);assert.equal(q.amount,'7500000');assert.ok(BigInt(q.feeUsdc)>0n);
-  // t1116u: the amount is now the user's choice (validated); destinations are still ignored
+  // t1116: the amount is now the user's choice (validated); destinations are still ignored
   assert.equal(JSON.parse((await call(M,'POST','/owner/withdraw/prepare',{to:X,owner:X,amount:'1'})).out).error,'amount_below_fee');
   const r=JSON.parse((await call(M,'POST','/owner/withdraw/prepare',{to:X,owner:X})).out);
   assert.equal(r.owner,O);assert.equal(r.amount,'7500000');assert.equal(checkWithdrawCalls(r.calls,{wallet:W,owner:O,token:T}),null);assert.ok(!r.calls[0].data.toLowerCase().includes(X.slice(2).toLowerCase()));

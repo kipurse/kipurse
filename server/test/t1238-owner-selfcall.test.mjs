@@ -1,4 +1,4 @@
-// t1238 (the owner's decision log §6#106): every batch we hand to the Base Account must have NO top-level owner/upgrade call
+// t1238 (decision 106): every batch we hand to the Base Account must have NO top-level owner/upgrade call
 // (keys.coinbase.com: "Account owner or upgrade calls are not allowed."). Owner changes are wallet.execute(wallet,0,...) self-calls.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {encodeFunctionData,decodeFunctionData,getAddress,parseAbi,pad} from 'viem';

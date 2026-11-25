@@ -13,7 +13,7 @@ public enum BatchVerify {
   public static let factory = "0xba5ed110efdba3d005bfc882d75358acbbb85842"
   public static let factoryProxyInitHash = "0xa53d9968113cdf38ec78edc985b30bcb1a274ddaa221624c1d15604f70b0761a"
   public static let deployer = "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  /// t1197u (§6#92): the trust contract of THIS wallet's suite (V5.2 0x65d2… / V5.3 0xda1d…).
+  /// t1197 (decision 92): the trust contract of THIS wallet's suite (V5.2 0x65d2… / V5.3 0xda1d…).
   public static var trust: String { KipurseSuite.active.trust.lowercased() }
   static var spm: String { RequestVerify.spendPermissionManager.lowercased() }
   /// keccak256 of each KipursePhoneApprover creation bytecode (without constructor args) and its length.
@@ -95,7 +95,7 @@ public enum BatchVerify {
     return (lc(to), d)
   }
   static func selector(_ d: [UInt8]) -> String { d.count >= 4 ? Hex.encode(Array(d.prefix(4))) : "0x" }
-  /// t1238 (handbook §6#106): Coinbase refuses top-level owner calls, so the server sends owner changes as the wallet calling itself:
+  /// t1238 (decision 106): Coinbase refuses top-level owner calls, so the server sends owner changes as the wallet calling itself:
   /// wallet.execute(wallet, 0, addOwnerAddress/removeOwnerAtIndex(...)). Returns the INNER call so it is checked by exactly the same rules
   /// as the old top-level form. `.none` = not a self-call (checked as before); `.bad` = a self-call we don't accept (anything else inside,
   /// a value, or non-canonical encoding).
@@ -123,7 +123,7 @@ public enum BatchVerify {
 
   /// One-signature setup batches. New user: [factory.createAccount([you],0)]? + deployer(phone signer) + wallet.addOwnerAddress(SPM)? +
   /// wallet.executeBatch(your limits) + wallet.addOwnerAddress(phone signer). Re-setup adds removeOwnerAtIndex(old signers) and no factory call.
-  /// t1197u (§6#92): `suite` = the contract suite this batch must use (nil: the suite of the server's vault if it is one of ours, else this wallet's).
+  /// t1197 (decision 92): `suite` = the contract suite this batch must use (nil: the suite of the server's vault if it is one of ours, else this wallet's).
   public static func setup(calls: [[String: Any]], wallet: String, owner: String, x: [UInt8], y: [UInt8], choice: RequestVerify.Choice, newWallet: Bool, vault: String? = nil, suite: KipurseSuite? = nil, now: Date = Date()) -> Report {
     let su = suite ?? KipurseSuite.forVault(vault, wallet: wallet) ?? KipurseSuite.active
     var rep = Report(); var p = [String]()
@@ -131,7 +131,7 @@ public enum BatchVerify {
     let ug = UsdcGas.split(calls, wallet: wallet, vault: vault); p += ug.problems; let calls = ug.rest
     if ug.vaultSeed > 0 { rep.notes.append("puts \(AnswerRules.format(Int64(ug.vaultSeed))) USDC of your money into your wallet's fee reserve") }
     if ug.approved > 0 { rep.notes.append("lets Coinbase take the network fee in USDC (at most 0.25)") }; if ug.feeRepaid > 0 { rep.notes.append("pays the opening fee in USDC in this confirmation") }; if ug.deposit > 0 { rep.notes.append("deposits your USDC into your Kipurse wallet") }; if newWallet && !ug.leading.isEmpty && ug.feeRepaid == 0 && ug.approved == 0 { p.append("opening must repay the network fee in USDC in this confirmation") } // enforced on live prepare by the app; legacy vectors have no USDC prefix
-    // t1238 §6#109: key-seat opening (owners fixed at creation). Detected only by THIS owner's own seat, computed on the phone.
+    // t1238 decision 109: key-seat opening (owners fixed at creation). Detected only by THIS owner's own seat, computed on the phone.
     if let seat = KeySeat.address(owner: owner, trust: su.trust), isSeatBatch(calls, wallet: wallet, owner: owner, seat: seat, trust: su.trust) {
       return setupSeat(calls, rep0: rep, problems: p, ug: ug, wallet: wallet, owner: owner, x: x, y: y, choice: choice, newWallet: newWallet, vault: vault, su: su, seat: seat, now: now) }
     if newWallet { if predictWallet(owner: owner) != lc(wallet) { p.append("wallet address isn't the one your Coinbase wallet gets") } }
@@ -139,7 +139,7 @@ public enum BatchVerify {
     if calls.isEmpty || calls.count > 12 { p.append("unexpected number of steps") }
     for (i, c) in calls.enumerated() {
       guard let (to, d0) = callParts(c) else { p.append("step \(i + 1) is malformed or sends ETH"); continue }
-      var d = d0  // t1238 §6#106: wallet.execute(wallet,0,owner change) is checked as its inner call
+      var d = d0  // t1238 decision 106: wallet.execute(wallet,0,owner change) is checked as its inner call
       switch selfCall(to, d0, wallet: wallet) { case .bad: p.append("step \(i + 1) is an unexpected wallet self-call"); continue; case .inner(let x): d = x; case .none: break }
       let s = selector(d)
       switch to {
@@ -178,7 +178,7 @@ public enum BatchVerify {
     if calls.count < 2 || calls.count > 10 { p.append("unexpected number of steps") }
     for (i, c) in calls.enumerated() {
       guard let (to, d0) = callParts(c) else { p.append("step \(i + 1) is malformed or sends ETH"); continue }
-      var d = d0  // t1238 §6#106: wallet.execute(wallet,0,owner change) is checked as its inner call
+      var d = d0  // t1238 decision 106: wallet.execute(wallet,0,owner change) is checked as its inner call
       switch selfCall(to, d0, wallet: wallet) { case .bad: p.append("step \(i + 1) is an unexpected wallet self-call"); continue; case .inner(let x): d = x; case .none: break }
       let s = selector(d)
       if to == deployer, approver == nil { approver = Self.approver(d, wallet: wallet, x: x, y: y, maxSingle: nil, maxDaily: nil, problems: &p); continue }
@@ -204,7 +204,7 @@ public enum BatchVerify {
   /// Unlink a phone: only removeOwnerAtIndex on your wallet, never your Coinbase wallet (and only `approver` if the phone knows it).
   public static func revoke(calls: [[String: Any]], wallet: String, owner: String, approver: String?) -> Report {
     var rep = Report()
-    // t1238 §6#109: key-seat wallet: Face ID off = exactly wallet.execute(your seat, 0, clearKey()); nothing else.
+    // t1238 decision 109: key-seat wallet: Face ID off = exactly wallet.execute(your seat, 0, clearKey()); nothing else.
     if let seat = KeySeat.address(owner: owner, trust: trust), isSeatBatch(calls, wallet: wallet, owner: owner, seat: seat, trust: trust) {
       if calls.count != 1 { rep.problems.append("unexpected number of steps") }
       for c in calls { guard let (to, d) = callParts(c), to == lc(wallet), let inner = KeySeat.executeOn(d, target: seat), Hex.encode(inner).lowercased() == KeySeat.clearKeyData else { rep.problems.append("unexpected step"); continue } }
@@ -213,7 +213,7 @@ public enum BatchVerify {
     if calls.isEmpty || calls.count > 3 { rep.problems.append("unexpected number of steps") }
     for c in calls {
       guard let (to, d0) = callParts(c), to == lc(wallet) else { rep.problems.append("unexpected step"); continue }
-      var d = d0  // t1238 §6#106: the removal may come as wallet.execute(wallet,0,removeOwnerAtIndex(...))
+      var d = d0  // t1238 decision 106: the removal may come as wallet.execute(wallet,0,removeOwnerAtIndex(...))
       switch selfCall(to, d0, wallet: wallet) { case .bad: rep.problems.append("unexpected step"); continue; case .inner(let x): d = x; case .none: break }
       guard selector(d) == selRemoveOwner else { rep.problems.append("unexpected step"); continue }
       if let e = removeProblem(d, owner: owner, keep: [spm], only: approver) { rep.problems.append(e) }
@@ -222,7 +222,7 @@ public enum BatchVerify {
   }
 }
 
-// MARK: - t1238 key seat (handbook §6#109)
+// MARK: - t1238 key seat (decision 109)
 extension BatchVerify {
   /// A batch is a key-seat batch when it creates the wallet with THIS owner's seat, deploys THIS owner's seat, or calls wallet.execute(THIS seat, ...).
   static func isSeatBatch(_ calls: [[String: Any]], wallet: String, owner: String, seat: String, trust: String) -> Bool {

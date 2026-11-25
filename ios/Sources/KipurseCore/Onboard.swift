@@ -1,6 +1,6 @@
 import Foundation
 
-/// One-time setup ("开通"): ONE Coinbase wallet signature, ONE atomic batch, ONE network fee paid by the owner's own Coinbase wallet
+/// One-time setup ("[zh]"): ONE Coinbase wallet signature, ONE atomic batch, ONE network fee paid by the owner's own Coinbase wallet
 /// (USDC same-tx repay; never ETH). Covers deposit + AI spend permission + caps; phone Face ID key is NOT required at opening (0A.1). Removal of dead
 /// phone approvers. Pure parsing / validation shared by the app and the unit tests.
 public enum Onboard {
@@ -19,29 +19,29 @@ public enum Onboard {
       if case .bool(let b)? = j["payerCanPayUSDC"] { payerCanPayUSDC = b } else { payerCanPayUSDC = nil }
       payerCanPayEth = j["payerCanPayEth"]?.bool ?? false; sponsoredByKipurse = j["sponsoredByKipurse"]?.bool ?? true
       signatures = Int(j["signatures"]?.atomic ?? 0); sponsored = j["sponsored"]?.bool ?? false; userPaysUSDC = j["feePaidBy"]?.string == "user_usdc"
-      // t1185u (§6#86): 0.15 USDC into the wallet's fee reserve (owner's money), shown only within 0.10..0.20
+      // t1185 (decision 86): 0.15 USDC into the wallet's fee reserve (owner's money), shown only within 0.10..0.20
       if let v = j["vaultSeedUSDC"]?.atomic, v >= Int64(UsdcGas.vaultSeedMin), v <= Int64(UsdcGas.vaultSeedMax) { vaultSeed = UInt64(v) } else { vaultSeed = nil }
     }
-    /// t1185u (§6#86): atomic USDC the opening moves into the wallet's fee reserve (nil = older server, none).
+    /// t1185 (decision 86): atomic USDC the opening moves into the wallet's fee reserve (nil = older server, none).
     public let vaultSeed: UInt64?
     /// Never accept a quote that claims someone else pays or that needs more than one signature.
     public var acceptable: Bool { signatures == 1 && (userPaysUSDC || (!sponsoredByKipurse || sponsored)) }
     public var canPay: Bool { sponsored || userPaysUSDC || payerCanPayEth || (payerCanPayUSDC ?? false) }
   }
-  /// 0A.1 / t1008u / t1022u: opening needs no Face ID; the user pays the opening fee in USDC in the same confirmation as the deposit. Never 免费/垫付/赞助.
-  /// t1026u: fee note shows the quoted actual network fee when available.
+  /// 0A.1 / t1008 / t1022: opening needs no Face ID; the user pays the opening fee in USDC in the same confirmation as the deposit. Never [zh].
+  /// t1026: fee note shows the quoted actual network fee when available.
   public static var feeNote: String { feeNote(quoted: nil) }
   public static func feeNote(quoted: String?) -> String { let n = UsdcGas.feeNote(quotedUSDC: quoted); return T(n.zh, n.en) }
   public static func feeNote(quoted: String?, seed: UInt64?) -> String { let n = UsdcGas.feeNote(quotedUSDC: quoted, seed: seed); return T(n.zh, n.en) }
-  /// The start button never depends on the user's balance (no 「余额不够，请先充值」 dead end before a wallet even exists).
+  /// The start button never depends on the user's balance (no "[zh]" dead end before a wallet even exists).
   public static func canStart(_ q: Quote?) -> Bool { guard let q else { return false }; return q.acceptable && (q.sponsored || q.userPaysUSDC) }
-  /// Opening deposit (t1008u: deposit = opening): decimal USDC -> atomic (6 dp); at least 1 USDC so the deposit clearly covers the opening fee.
+  /// Opening deposit (t1008: deposit = opening): decimal USDC -> atomic (6 dp); at least 1 USDC so the deposit clearly covers the opening fee.
   public static func depositAtomic(_ s: String) -> UInt64? { guard let v = AnswerRules.parseUSDC(s), v >= 1_000_000, v <= 1_000_000_000_000 else { return nil }; return UInt64(v) }
-  /// t1113u (§6#59): opening needs the user's own three limits (no silent default plan) plus a valid deposit and an acceptable quote.
+  /// t1113 (decision 59): opening needs the user's own three limits (no silent default plan) plus a valid deposit and an acceptable quote.
   public static func canOpen(quote: Quote?, starting: Bool, deposit: String, limitsError: String?) -> Bool {
     !starting && canStart(quote) && depositAtomic(deposit) != nil && limitsError == nil
   }
-  /// t1113u: the least USDC the user's Base account must hold at opening, mirroring the server (/onboard/new/prepare refuses
+  /// t1113: the least USDC the user's Base account must hold at opening, mirroring the server (/onboard/new/prepare refuses
   /// when balance < opening fee + deposit). Fee = live quote (opening + first wallet safety limits + Face ID key). Deposit = the
   /// amount typed, or the app's 1 USDC minimum when empty/too small. nil fee -> words only (never an invented number).
   public static func minBaseAtomic(quoted: String?, deposit: String, seed: UInt64? = nil) -> Int64? {

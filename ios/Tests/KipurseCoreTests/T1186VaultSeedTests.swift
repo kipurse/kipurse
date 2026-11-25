@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1185u (handbook §6#86): opening moves 0.15 USDC of the owner's own money into his wallet's fee reserve (vault), last step, once.
+/// t1185 (decision 86): opening moves 0.15 USDC of the owner's own money into his wallet's fee reserve (vault), last step, once.
 final class T1186VaultSeedTests: XCTestCase {
   let W = "0x0eBd05A4a2226a59790600a54129f4b0E90fC817", v53 = "0xe635ab8852c3cb3b2125d3cb45018657ef73946b", v52 = "0x5d0136641655ad46eff24b243c3555a714f4317b"
   func transfer(_ to: String, _ amt: UInt64) -> [String: Any] {

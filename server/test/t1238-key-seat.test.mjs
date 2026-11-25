@@ -1,4 +1,4 @@
-// t1238 (handbook §6#108 / §6#109): Face ID key seat behind KIPURSE_KEY_SEAT. Every batch handed to the Base Account must pass the
+// t1238 (decision 108 / decision 109): Face ID key seat behind KIPURSE_KEY_SEAT. Every batch handed to the Base Account must pass the
 // Coinbase popup rule (keys.coinbase.com, 2026-11-20): no addOwnerAddress / addOwnerPublicKey / removeOwnerAtIndex / removeLastOwner /
 // upgradeToAndCall / initialize at any depth of execute / executeBatch (deeper than 4 = refused too); no call to the Base Account itself;
 // no top-level call to the SpendPermissionManager.
@@ -75,7 +75,7 @@ function seatWorld({key=[0n,0n]}={}){
 test('KEY SEAT new phone: ONE wallet.execute(seat, setKey) + wallet-pays fee leg; no owner change; Coinbase rule passes; confirm reads the seat',async()=>{
   const w=seatWorld({key:[BigInt(X),BigInt(Y)]});
   const same=await w.ph.enroll({x:X,y:Y});assert.equal(same.already,true,'same key as on chain -> nothing to sign, no fee');
-  const r=await w.ph.enroll({x:X2,y:Y2});assert.equal(r.version,SEAT_VERSION);assert.ok(BigInt(r.fee)>0n&&BigInt(r.fee)<=50_000n,'actual-cost fee, capped at 0.05 (§6#66)');
+  const r=await w.ph.enroll({x:X2,y:Y2});assert.equal(r.version,SEAT_VERSION);assert.ok(BigInt(r.fee)>0n&&BigInt(r.fee)<=50_000n,'actual-cost fee, capped at 0.05 (decision 66)');
   assert.equal(r.walletPays,true);assert.equal(r.calls.length,2);
   const d=decodeFunctionData({abi:CBSW,data:r.calls[0].data});assert.equal(d.functionName,'execute');assert.equal(getAddress(d.args[0]),getAddress(w.SEAT));
   const inner=decodeFunctionData({abi:SEAT_ABI,data:d.args[2]});assert.equal(inner.functionName,'setKey');assert.equal(inner.args[0],BigInt(X2));

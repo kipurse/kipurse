@@ -1,7 +1,7 @@
 import SwiftUI
 import KipurseCore
 
-/// t1254 (handbook §6#123): shown after 「继续」 on the first-connect limits page, before jumping to an outside AI.
+/// t1254 (decision 123): shown after "[zh]" on the first-connect limits page, before jumping to an outside AI.
 /// Display + the same launch as before; nothing here saves, grants or signs.
 struct ConnectHandoffItem: Identifiable { let id = UUID(); let target: AIConnect }
 

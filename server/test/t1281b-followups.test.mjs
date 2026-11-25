@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1281 follow-ups (handbook §6#141 ②): (1) a spending sum that FAILS must not read as "nothing spent" (fail closed; only a missing
+// t1281 follow-ups (decision 141 (2)): (1) a spending sum that FAILS must not read as "nothing spent" (fail closed; only a missing
 // table/column in an older schema counts as zero); (2) the spending report also states what really left the wallet (amount + fees);
 // (3) the mainnet app purchase list carries fee / networkFee for the app's local fallback (SpendCost).
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,readFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';

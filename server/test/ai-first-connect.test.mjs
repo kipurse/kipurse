@@ -64,7 +64,7 @@ test('each unset agent is asked, and one confirmed policy is shared without bein
 test('a failed connection rolls the new policy back and leaves the request pending',async()=>{
   const t=harness({throwOnAgent:true});const ok=await t.call('/oauth/first',{agent:'siri',...AMOUNTS});
   const text=firstConnectText({wallet:W,clientId:ok.out.clientId,agent:'Siri',request:ok.out.req,redirect:ok.out.redirect,...AMOUNTS,action:'approve',nonce:ok.out.nonce,exp:ok.out.exp});
-  const d=await t.call('/oauth/phone-decide',{req:ok.out.req,approve:true,...t.phone.sig(text)});assert.equal(d.code,409);assert.equal(d.out.error,'connect_failed'); // t1153u: calm copy instead of a bare 500
+  const d=await t.call('/oauth/phone-decide',{req:ok.out.req,approve:true,...t.phone.sig(text)});assert.equal(d.code,409);assert.equal(d.out.error,'connect_failed'); // t1153: calm copy instead of a bare 500
   assert.equal(t.ev.get().authorized,false);assert.equal(t.agents.length,0);assert.equal(t.S.oauth.pending[ok.out.req].status,'pending');});
 test('limits that changed after the statement was issued approve neither the policy nor the connection',async()=>{
   const t=harness();const ok=await t.call('/oauth/first',{agent:'grok',...AMOUNTS});

@@ -1,4 +1,4 @@
-// t1153u: a second Siri first-connect (new client id) replaces the older Siri record like every other agent,
+// t1153: a second Siri first-connect (new client id) replaces the older Siri record like every other agent,
 // revokes the old client's tokens, and a failure on that last step is logged and answered with calm copy (nothing saved, nothing charged).
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {generateKeyPairSync,sign} from 'node:crypto';
 import {createOAuth,firstConnectText,replaceSiriAgent,reserveOAuthAgent} from '../kit/oauth.mjs';

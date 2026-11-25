@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1181u (handbook §6#84, audit §6#83 check 1 gap ②): ONE owner approval = ONE x402 reservation, enforced by the server.
+// t1181 (decision 84, audit decision 83 check 1 gap (2)): ONE owner approval = ONE x402 reservation, enforced by the server.
 // The live V5.2 adapter frees the purchase key when the owner cancels a reservation (cancelReservation) and does not remember
 // the owner approval, so the SAME approval could be prepared again until its validBefore (<= 600 s). The executor is this
 // server, so the server records every owner approval it used for prepareAuthorization and never sends it a second time:

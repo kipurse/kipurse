@@ -31,7 +31,7 @@ public struct AgreedBalanceMemory: Equatable {
   public func ledgerEnd(chain: Int64?, wallet w: String) -> Int64? { chain ?? value(for: w) }
 }
 
-/// t1279 (R15): a deposit shows "已到账 +X" only from two agreed chain balances: one before (baseline) and one now.
+/// t1279 (R15): a deposit shows "[zh]" only from two agreed chain balances: one before (baseline) and one now.
 public enum DepositArrival {
   public static func plus(baseline: Int64?, now: Int64?) -> Int64? {
     guard let b = baseline, let n = now, n > b else { return nil }

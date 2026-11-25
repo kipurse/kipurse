@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import XCTest
 
-/// t1280b (§6#140, owner: 「重复购买的卡片也改成专门提示」): a suspected-duplicate card says so and offers only
-/// 「再付一次」 + 「拒绝」 — never 「认识并信任」 / 「只付这一次」 (zh/en).
+/// t1280b (decision 140, owner: "[zh]"): a suspected-duplicate card says so and offers only
+/// "[zh]" + "[zh]" — never "[zh]" / "[zh]" (zh/en).
 final class T1280DupCardUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }

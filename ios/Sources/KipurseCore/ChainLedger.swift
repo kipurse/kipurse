@@ -1,9 +1,9 @@
 import Foundation
 
-/// t1037: when there is no server session yet, the wallet "记录" list is empty even though USDC already arrived.
+/// t1037: when there is no server session yet, the wallet "[zh]" list is empty even though USDC already arrived.
 /// Read USDC Transfer logs for this wallet straight from Base (same public nodes as ChainRPC) and shape them like the
 /// server ledger rows the UI already shows.
-/// t1129u: 记录 must show EVERY real wallet movement. One row per transaction (never two rows with the same id):
+/// t1129: [zh] must show EVERY real wallet movement. One row per transaction (never two rows with the same id):
 ///   deposit / withdraw (amount to the owner + the wallet-paid network fee, detail.fee) / walletfee (a wallet action whose only
 ///   USDC out is the network fee to Kipurse's fixed fee address: safety-limit change, Face ID enable…) / payment.
 /// Scans incrementally with a saved block cursor (Base now makes ~5 blocks/s, so a fixed small look-back missed yesterday's
@@ -230,7 +230,7 @@ public enum ChainLedger {
     return all
   }
 
-  /// t1129u: read new transfers and merge them into the rows already shown. Nil = nothing could be read (keep what is shown).
+  /// t1129: read new transfers and merge them into the rows already shown. Nil = nothing could be read (keep what is shown).
   public static func update(wallet: String, owner: String?, existing: [JSONValue], endingBalance: Int64,
                             usdc: String = VaultCheck.usdc, nodes: [URL] = ChainRPC.nodes) async -> [JSONValue]? {
     guard let tr = await scanStep(wallet: wallet, usdc: usdc, nodes: nodes) else { return nil }

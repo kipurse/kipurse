@@ -1,4 +1,4 @@
-// t1243 (handbook §6#113, owner 2026-11-21 20:38 CT「修，并装机」): 「认识并信任」 pays FIRST and replies as soon as the payment is known
+// t1243 (decision 113, owner 2026-11-21 20:38 CT"[zh]"): "[zh]" pays FIRST and replies as soon as the payment is known
 // (trust {state:'submitting'}); the trust + the V5.4 grant follow in the background strictly AFTER the payment (the vault's userOps never
 // overlap), the grant is verified on chain BEFORE it is stored, and the final result is readable by the app / AI. Also: a new APNs token
 // replaces this phone's previous one (one push per phone).

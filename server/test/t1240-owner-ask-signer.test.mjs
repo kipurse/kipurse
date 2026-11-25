@@ -1,4 +1,4 @@
-// t1240 (handbook §6#110, owner 2026-11-21): when the merchant's order is signed by the signer it publishes, the owner's ONE "trust" on an owner ask
+// t1240 (decision 110, owner 2026-11-21): when the merchant's order is signed by the signer it publishes, the owner's ONE "trust" on an owner ask
 // also signs the V5.4 signer grant (kind 5) in the same Face ID, so later orders of that merchant (fresh deposit address each time) auto-pay within
 // the trust caps. Without a verified signer, the ask behaves exactly as before (this payee only, no grant). The AI can never add a signer.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,readFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';

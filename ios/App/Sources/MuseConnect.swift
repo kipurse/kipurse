@@ -134,7 +134,7 @@ struct AgentBuyView: View {
         ForEach(AgentBuy.examples(for: t.id), id: \.self) { e in
           VStack(alignment: .leading, spacing: 8) {
             Text(e.text).font(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-            // t1245 (§6#115 U7): a square copy icon (centred) + the brand button with its icon and title centred as one group.
+            // t1245 (decision 115 U7): a square copy icon (centred) + the brand button with its icon and title centred as one group.
             HStack(spacing: KP.Space.s) {
               Button { UIPasteboard.general.string = e.text; Haptics.success(); copied = e.en } label: {
                 Image(systemName: copied == e.en ? "checkmark" : "doc.on.doc").font(.body.weight(.semibold)).foregroundStyle(Brand.accent)
@@ -152,7 +152,7 @@ struct AgentBuyView: View {
       footer: { Text(isSiri ? T("在 Siri 的额度内给已保存的收款方（信任名单里的或付过款的）付款，直接付，不用 Face ID；超额、新收款方或恢复暂停，才要 Face ID。", "Within Siri's allowance, payments to saved payees (on your trust list or paid before) go through with no Face ID. Going over it, a new payee or resuming a pause needs Face ID.")
                             : T("在 AI 付款上限以内，AI 直接付；超出或第一次付给新商家，会先问你，你用 Face ID 同意。", "Within your AI payment limit the AI just pays; anything over it, or a new shop, asks you first; approve with Face ID.")) }
 
-      // t927 → t1245: the shared limit lives in AI 生活 › AI 花钱上限; this page keeps only this AI's own allowance + pause
+      // t927 → t1245: the shared limit lives in AI [zh] › AI [zh]; this page keeps only this AI's own allowance + pause
       Section {
         if mine.isEmpty { Text(T("\(t.name) 还没买过东西。复制上面一句话试试。", "\(t.name) hasn't bought anything yet. Try a sentence above.")).foregroundStyle(.secondary).accessibilityIdentifier("buy.none") }
         ForEach(mine.prefix(10)) { x in Button { picked = x } label: { TxRow(t: x) }.buttonStyle(.plain) }
@@ -187,7 +187,7 @@ struct AgentBuyView: View {
       } header: { Text(T("连接", "Connection")) }
     }.listRowBackground(GlassRowBG())
     }
-    // t1245 (§6#115 U6): the glass list on the brand background (was the system black list with grey cards)
+    // t1245 (decision 115 U6): the glass list on the brand background (was the system black list with grey cards)
     .listStyle(.insetGrouped).kpSectionRhythm().scrollContentBackground(.hidden).tint(Brand.accent)
     .background(MockBG()).navigationTitle(t.name).navigationBarTitleDisplayMode(.inline)
     .task { if !allow.loaded { await allow.load() } }

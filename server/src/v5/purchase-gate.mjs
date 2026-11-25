@@ -1,4 +1,4 @@
-// t635u (owner approved): every Apple Pay / Onramp purchase needs the Coinbase Verified Account attestation for the wallet
+// t635 (owner approved): every Apple Pay / Onramp purchase needs the Coinbase Verified Account attestation for the wallet
 // OWNER's Base Account, for existing wallets too (owner's own included). Fail closed: RPC trouble -> no purchase, friendly retry.
 // Withdraw, pause and all other money-OUT/safety actions are never gated (they never call this).
 import {CBV_GUIDE} from './cb-verified.mjs';import {ttlCache} from './ratelimit.mjs';

@@ -157,7 +157,7 @@ test('t1138 matrix: phone approver V3: new user, Siri above old cap, phone trust
     step('U1','post-opening Face ID enroll returns calls',r.status===200&&Array.isArray(r.j?.calls),{status:r.status,err:r.j?.error,keys:Object.keys(r.j??{})});
     if(r.status!==200)return;
     if(r.j.id){const q=await call(U1.pre+'/phone/enroll/quote?id='+encodeURIComponent(r.j.id));fx('U1.enrollQuote',{status:q.status,res:q.j});
-      step('U1','enroll quote <= 0.05 USDC (t1128u)',q.status===200,{status:q.status,res:q.j});}
+      step('U1','enroll quote <= 0.05 USDC (t1128)',q.status===200,{status:q.status,res:q.j});}
     const b=await batch(U1,r.j.calls);await new Promise(r=>setTimeout(r,800));
     let cf=null;if(r.j.id){cf=await call(U1.pre+'/phone/enroll/confirm',{method:'POST',body:{id:r.j.id}});}
     const st=await call(U1.pre+'/phone/status');fx('U1.phoneStatusAfterEnroll',st.j);

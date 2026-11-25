@@ -2,7 +2,7 @@ import AppIntents
 import CoreSpotlight
 import KipurseCore
 
-/// A saved payee. Id = salted hash; title = nickname / "我的 Coinbase 钱包"; subtitle = last 4 only. Indexed in Spotlight.
+/// A saved payee. Id = salted hash; title = nickname / "[zh]"; subtitle = last 4 only. Indexed in Spotlight.
 struct PayeeEntity: AppEntity, IndexedEntity {
   static var typeDisplayRepresentation: TypeDisplayRepresentation = TypeDisplayRepresentation(name: "Kipurse payee", numericFormat: "\(placeholder: .int) payees")
   static var defaultQuery = PayeeQuery()

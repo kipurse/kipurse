@@ -5,7 +5,7 @@ import XCTest
 final class I18nTests: XCTestCase {
   static let cjk = try! NSRegularExpression(pattern: "[\\u3000-\\u303F\\u3400-\\u9FFF\\uFF00-\\uFFEF]")
   static func hasCJK(_ s: String) -> Bool { cjk.firstMatch(in: s, range: NSRange(location: 0, length: (s as NSString).length)) != nil }
-  /// "中文 / English" style: a CJK part and a Latin sentence part separated by " / " or a newline.
+  /// "[zh]" style: a CJK part and a Latin sentence part separated by " / " or a newline.
   static func bilingual(_ s: String) -> Bool {
     for sep in [" / ", "\n"] { let parts = s.components(separatedBy: sep); if parts.count > 1, parts.contains(where: hasCJK),
       parts.contains(where: { !hasCJK($0) && $0.range(of: "[A-Za-z]{3,} [A-Za-z]{3,}", options: .regularExpression) != nil }) { return true } }

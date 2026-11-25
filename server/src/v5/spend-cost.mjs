@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1281 (handbook §6#141, owner decision): every off-chain limit counts what REALLY leaves the wallet, exactly like the on-chain
+// t1281 (decision 141, owner decision): every off-chain limit counts what REALLY leaves the wallet, exactly like the on-chain
 // daily / term caps: amount + 0.1% protocol fee + network fee. ONE formula for every historic sum (AI total, everyday 24h, per-AI,
 // allowance, unattended, float, merchant day) and every reported "spent" number. The app has the same rules (KipurseCore SpendCost.swift);
 // the cross-test vectors are test/t1281-fee-counting.test.mjs -> Tests/KipurseCoreTests/t1281-spend-cost.json.txt.

@@ -32,7 +32,7 @@ final class T1043RescuePlainWordsTests: XCTestCase {
   }
 
   func testSettingsMentionsSpareUSDC() throws {
-    // t1057u: Settings row no longer shows LostPhoneRecovery.subtitle; spare-USDC wording stays on the property / guide page.
+    // t1057: Settings row no longer shows LostPhoneRecovery.subtitle; spare-USDC wording stays on the property / guide page.
     let s = try String(contentsOf: root.appendingPathComponent("App/Sources/Screens.swift"), encoding: .utf8)
     XCTAssertFalse(s.contains("LostPhoneRecovery.subtitle"))
     XCTAssertTrue(s.contains("settings.lostPhone"))

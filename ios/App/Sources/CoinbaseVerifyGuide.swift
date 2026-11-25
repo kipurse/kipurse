@@ -1,7 +1,7 @@
 import SwiftUI
 import KipurseCore
 
-/// t625u: one beginner flow, big buttons, before a NEW wallet can be opened. The server decides (exact attestation check);
+/// t625: one beginner flow, big buttons, before a NEW wallet can be opened. The server decides (exact attestation check);
 /// the app only guides and re-checks. Links: official Coinbase pages only.
 @MainActor final class CBVerifyModel: ObservableObject {
   @Published var status: CoinbaseVerify.Status = .checking
@@ -24,7 +24,7 @@ import KipurseCore
     #endif
     return OnboardAPI.isNew
   }
-  /// The Coinbase wallet to check: the one chosen for a new wallet, else the existing wallet's owner (t635u: purchases need it too).
+  /// The Coinbase wallet to check: the one chosen for a new wallet, else the existing wallet's owner (t635: purchases need it too).
   static var owner: String? {
     if let o = UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey), CoinbaseIdentity.isAddress(o) { return o }
     if let o = Operator.ownerAccount, CoinbaseIdentity.isAddress(o) { return o }
@@ -71,7 +71,7 @@ struct CBVerifyGuide: View {
     Step(title: T("有 Coinbase 账户吗？", "Have a Coinbase account?"), body: T("没有的话先注册一个。已经有就直接点「下一步」。", "If not, sign up first. Already have one? Tap Next."),
          button: T("打开 Coinbase 注册", "Open Coinbase sign-up"), url: CoinbaseVerify.signupURL),
     Step(title: T("在 Coinbase 完成身份验证", "Verify your identity on Coinbase"), body: T("打开 Coinbase 官方验证页，用你的 Coinbase 账户登录。如果还没验证过身份，页面会带你上传证件。这一步由 Coinbase 做，启付看不到你的任何证件和资料。", "Open Coinbase's official verification page and sign in with your Coinbase account. If you haven't verified your identity yet, it walks you through uploading your ID. Coinbase does this; Kipurse never sees your ID or details."),
-         button: T("打开 Coinbase 官方验证页", "Open Coinbase's verification page"), url: CoinbaseVerify.onchainVerifyURL),   // t771u: was a help article
+         button: T("打开 Coinbase 官方验证页", "Open Coinbase's verification page"), url: CoinbaseVerify.onchainVerifyURL),   // t771: was a help article
     Step(title: T("在 Coinbase 链上验证你的地址", "Verify your address on Coinbase (on-chain)"), body: T("在同一个页面：用 Coinbase 登录 → 点 Get verified → 连接你登录启付用的同一个钱包 → 签一次验证（不花钱）。完成后回到启付，点「我已验证，重新检查」。", "On the same page: sign in with Coinbase → tap Get verified → connect the same wallet you use for Kipurse → sign the verification (costs nothing). Then come back to Kipurse and tap “I verified, check again”."),
          button: T("打开 Coinbase 链上验证", "Open Coinbase Onchain Verify"), url: CoinbaseVerify.onchainVerifyURL),
     Step(title: T("回到启付", "Come back to Kipurse"), body: T("回来后启付会自动重新检查。通过后就能开通。", "When you come back, Kipurse checks again by itself. Once it passes you can open your wallet."),
@@ -115,7 +115,7 @@ struct CBVerifyGuide: View {
         }
       }
     }
-    // t771u: each step is its own clearly separated row (no crowding), at any text size
+    // t771: each step is its own clearly separated row (no crowding), at any text size
     if now { r.card(padding: 16) } else { r.padding(.vertical, 12).padding(.horizontal, 16).frame(maxWidth: .infinity, alignment: .leading).background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: KP.Radius.control)) }
   }
   @ViewBuilder var statusLine: some View {
@@ -137,7 +137,7 @@ struct CBVerifyGuide: View {
 }
 
 
-/// t866: what to pick on Coinbase's "关联钱包" page (red circle on Coinbase Wallet) + the address to check before signing.
+/// t866: what to pick on Coinbase's "[zh]" page (red circle on Coinbase Wallet) + the address to check before signing.
 /// t876: `address` is ALWAYS the signed-in user's own owner (Coinbase wallet) address; unknown/invalid -> the address box is hidden (never someone else's).
 struct VerifyWalletHelp: View {
   let address: String?

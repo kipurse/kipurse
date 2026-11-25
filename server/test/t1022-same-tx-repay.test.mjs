@@ -1,4 +1,4 @@
-// t1022u: Kipurse paymaster + same-tx USDC fee repay; refuse at zero balance; no dues; erc20_usdc stays off.
+// t1022: Kipurse paymaster + same-tx USDC fee repay; refuse at zero balance; no dues; erc20_usdc stays off.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {feeRepayCall,depositCall,usdcCallProblem,usdcGasMode,OPENING_FEE_USDC,KIPURSE_FEE_TO,USDC_BASE} from '../src/v5/usdc-gas.mjs';
 import {createOnboardSponsor} from '../src/v5/onboard-sponsor.mjs';

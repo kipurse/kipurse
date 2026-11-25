@@ -4,7 +4,7 @@ import KipurseCore
 enum ButtonKind { case primary, secondary, danger, warm }
 
 /// Full-width primary action (HIG: 50pt tall, 14pt continuous radius).
-/// t1243 (owner: 「用 face id 同意的按钮，字体都没有居中在按钮里」): icon + title centered as ONE group across the whole button width;
+/// t1243 (owner: "[zh]"): icon + title centered as ONE group across the whole button width;
 /// a plain Label hugs the leading edge when its title wraps or the button is wider than the label.
 struct CenteredLabel: View {
   let title: String; let icon: String
@@ -49,15 +49,15 @@ struct Glow: ViewModifier {
 }
 extension View { func kGlow() -> some View { modifier(Glow()) } }
 
-/// Preset chips (2x2) + L("自己填") field with the right keypad. Presets are examples; nothing pre-selected.
+/// Preset chips (2x2) + L("[zh]") field with the right keypad. Presets are examples; nothing pre-selected.
 struct AmountPicker: View {
   let title: String; let presets: [String]; let unit: String; var isDays = false
-  /// t1116u (withdraw only; nil keeps every other page unchanged): presets above this atomic USDC amount are unavailable,
+  /// t1116 (withdraw only; nil keeps every other page unchanged): presets above this atomic USDC amount are unavailable,
   /// and `idPrefix` gives the tiles / field clear ids ("<prefix>.all", "<prefix>.preset.<n>", "<prefix>.custom").
   var maxAtomic: Int64? = nil; var idPrefix: String? = nil
-  /// t1185u: whole-number counts (daily on-chain operations): own hint + footer, number pad. nil keeps every other picker unchanged.
+  /// t1185: whole-number counts (daily on-chain operations): own hint + footer, number pad. nil keeps every other picker unchanged.
   var countHint: String? = nil; var countFooter: String? = nil
-  /// t1245 (§6#115 U10): the "1 USDC ≈ US$1 …" line once per page — later pickers on the same page pass false.
+  /// t1245 (decision 115 U10): the "1 USDC ≈ US$1 …" line once per page — later pickers on the same page pass false.
   var showFooter = true
   @Binding var value: String
   @State private var custom = ""
@@ -102,7 +102,7 @@ struct AmountPicker: View {
   }
 }
 
-/// t1116u: sets an accessibility id only when one is given (nil = leave the element exactly as before).
+/// t1116: sets an accessibility id only when one is given (nil = leave the element exactly as before).
 private struct OptionalA11yID: ViewModifier {
   let id: String?
   func body(content: Content) -> some View { if let id { content.accessibilityIdentifier(id) } else { content } }

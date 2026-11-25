@@ -2,7 +2,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1281 (handbook §6#141 ③): approval cards show the signed-but-hidden terms (site / full payee / replaces / remember / validity),
+/// t1281 (decision 141 (3)): approval cards show the signed-but-hidden terms (site / full payee / replaces / remember / validity),
 /// built only from the SIGNED text; the trust card says its caps are upper bounds and the Face ID prompt carries the exact signed terms.
 /// Cross-test: t1281-card-details.json.txt was produced by the gateway's own normalizeItem + proposalText / askText (generator inside the file).
 final class T1281CardDetailsTests: XCTestCase {

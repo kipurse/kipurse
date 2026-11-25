@@ -18,7 +18,7 @@ public struct WalletState {
     guard case .object(var o) = raw else { return self }
     o["balance"] = .string(String(v)); return WalletState(.object(o))
   }
-  /// t1157u: the saved AI limits from the server's connect reply (same shape as state.everyday), so a stale cache never shows them as unset.
+  /// t1157: the saved AI limits from the server's connect reply (same shape as state.everyday), so a stale cache never shows them as unset.
   public func withEveryday(_ v: JSONValue) -> WalletState {
     guard case .object(var o) = raw, case .object = v else { return self }
     o["everyday"] = v; return WalletState(.object(o))
@@ -51,7 +51,7 @@ public struct WalletState {
   /// Agent-requested trust (same flow for every AI): owner-only approve (signs in his Coinbase wallet on the kit page) or reject.
   public var trustRequests: [TrustRequest] { (raw["trustRequests"]?["pending"]?.array ?? []).compactMap(TrustRequest.init) }
 
-  /// Everything that needs the owner's tap, as stable ids + plain Chinese text (drives notifications and the 待批准 list).
+  /// Everything that needs the owner's tap, as stable ids + plain Chinese text (drives notifications and the [zh] list).
   public var approvals: [Approval] {
     var out: [Approval] = []
     for p in raw["trust"]?["pending"]?.array ?? [] { if let id = p["id"]?.string {

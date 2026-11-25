@@ -1,4 +1,4 @@
-// t1246 (handbook §6#116 F11): push tokens move from the old wallet to the moved wallet ONCE; a restart never brings back pruned tokens.
+// t1246 (decision 116 F11): push tokens move from the old wallet to the moved wallet ONCE; a restart never brings back pruned tokens.
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
 const src=readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
 const m=src.match(/const copyPush=\(from,to\)=>\{[\s\S]*?\}catch\{\}\};/);

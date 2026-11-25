@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1208u / handbook §6#94: when the app asks iOS for notification permission and when it (re)uploads the APNs token.
+/// t1208 / decision 94: when the app asks iOS for notification permission and when it (re)uploads the APNs token.
 /// Pure decisions (unit-tested); the app does the UNUserNotificationCenter / UIApplication calls.
 public enum PushPermission {
   /// iOS authorization status, mirrored so the core stays UIKit-free.
@@ -19,7 +19,7 @@ public enum PushPermission {
     guard let t = token, !t.isEmpty, hasSession else { return false }
     return t != lastSent
   }
-  /// t1238/t1239 (handbook §6#109): the server keeps push tokens per wallet. After a wallet move or a sign-in to another wallet the
+  /// t1238/t1239 (decision 109): the server keeps push tokens per wallet. After a wallet move or a sign-in to another wallet the
   /// token itself is unchanged, so "sent" must remember the wallet too, or the new wallet never gets the token (no pushes).
   public static func sentKey(token: String, wallet: String) -> String {
     let w = wallet.lowercased(); return w.isEmpty ? token : token + "|" + w

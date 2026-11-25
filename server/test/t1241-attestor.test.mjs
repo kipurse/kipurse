@@ -1,4 +1,4 @@
-// t1241 (handbook §6#111 ⑤): the per-domain attestor ("担保"). It signs a V5.4 PaymentOrder only after its OWN re-check with the merchant
+// t1241 (decision 111 (5)): the per-domain attestor ("[zh]"). It signs a V5.4 PaymentOrder only after its OWN re-check with the merchant
 // (same deposit address / amount / payable / not expired / same expiry), the merchant's published-signer evidence, the pause list and its
 // chain / adapter / ceiling rules. Keys: one per domain, encrypted at rest, file mode 0600, dir 0700.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {randomBytes} from 'node:crypto';

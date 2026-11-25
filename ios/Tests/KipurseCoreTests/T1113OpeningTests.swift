@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1113u (§6#59): no silent default limits at opening; the opening screen states the least USDC the Base account needs.
+/// t1113 (decision 59): no silent default limits at opening; the opening screen states the least USDC the Base account needs.
 final class T1113OpeningTests: XCTestCase {
   let q = Onboard.Quote(.object(["feeUSDC": .string("0.064182"), "gas": .string("4100000"), "signatures": .number(1), "sponsoredByKipurse": .bool(false), "feePaidBy": .string("user_usdc")]))
   func testOpeningNeedsAllThreeLimits() {

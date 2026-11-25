@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// WITHDRAW (mainnet). t1116u: the user picks ANY amount (or everything); default/no amount = the whole USDC balance. Money goes to ONE fixed place: the wallet's own owner, i.e. the
+// WITHDRAW (mainnet). t1116: the user picks ANY amount (or everything); default/no amount = the whole USDC balance. Money goes to ONE fixed place: the wallet's own owner, i.e. the
 // Base Account registered for this wallet (re-checked on chain with isOwnerAddress before every quote). No request field can
-// change the destination: every input is ignored except the plan id, the amount (t1116u) and feeFrom. The owner signs with HIS Base Account, so it works whether
+// change the destination: every input is ignored except the plan id, the amount (t1116) and feeFrom. The owner signs with HIS Base Account, so it works whether
 // AI payments are paused, expired or revoked (it never uses the AI spend permission). Network fee: paid by the owner's own Base
-// Account and shown first; Kipurse pays nothing. [t1120u §6#62: everyday withdraw takes the fee from the WALLET (t752 shape); no owner-pays fallback when the page asks for wallet.] This server holds no key that can do this.
+// Account and shown first; Kipurse pays nothing. [t1120 decision 62: everyday withdraw takes the fee from the WALLET (t752 shape); no owner-pays fallback when the page asks for wallet.] This server holds no key that can do this.
 import {createSanctions} from './sanctions.mjs';
 import {langOf,X} from './i18n.mjs';import {randomBytes} from 'node:crypto';
 import {encodeFunctionData,decodeFunctionData,getAddress,parseAbi} from 'viem';
@@ -26,7 +26,7 @@ export function withdrawCalls({wallet,owner,token,amount,vault=null}){const a=Bi
   return [...(vault?[ex(vault,encodeFunctionData({abi:WITHDRAW_VAULT_ABI,functionName:'sweep'}))]:[]),ex(token,inner)];}
 /** t752 wallet-pays shape: [sweep?] + wallet pays `fee` USDC to the fixed fee address + the rest to the owner. */
 export const WITHDRAW_FEE_TRANSFER_GAS=40_000n;export const WITHDRAW_MAX_WALLET_FEE=250_000n; // 0.25 USDC hard ceiling = sponsor per-op cap (same constant in the page script)
-/** t763u: fee >= real cost. Realistic gas of this op (measured 248,864) x1.2 = 300k, charged with 1.4x price headroom; the sponsor re-checks at 1.1x. */
+/** t763: fee >= real cost. Realistic gas of this op (measured 248,864) x1.2 = 300k, charged with 1.4x price headroom; the sponsor re-checks at 1.1x. */
 export const WITHDRAW_REAL_GAS=300_000n;export const WITHDRAW_PRICE_HEADROOM_PCT=140n;
 export function withdrawCallsWalletPays({wallet,owner,token,amount,fee,feeTo,vault=null}){const a=BigInt(amount),f=BigInt(fee);if(f<=0n||f>WITHDRAW_MAX_WALLET_FEE||a<=f)throw Object.assign(Error('fee'),{code:'fee'});
   const ex=(t,d)=>({to:getAddress(wallet),value:'0x0',data:encodeFunctionData({abi:WITHDRAW_WALLET_ABI,functionName:'execute',args:[getAddress(t),0n,d]})});
@@ -58,9 +58,9 @@ export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chai
   const SC=sanctions??createSanctions({pub:chainId===8453?pub:null,chainId});
   const W=getAddress(wallet),O=getAddress(owner),T=getAddress(token);const prepared=new Map(),hits=new Map(),done=new Map();let pend=null;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const bal=a=>pub.readContract({address:T,abi:WITHDRAW_ERC20_ABI,functionName:'balanceOf',args:[a]});
-  /** t1116u: the amount the user chose (atomic USDC, 6 decimals) -> bigint; null = everything (old apps, close account). */
+  /** t1116: the amount the user chose (atomic USDC, 6 decimals) -> bigint; null = everything (old apps, close account). */
   const chosenOf=v=>{if(v===undefined||v===null||v==='')return null;const t=typeof v==='number'?(Number.isSafeInteger(v)?String(v):''):String(v);if(!/^[0-9]{1,15}$/.test(t))throw Object.assign(Error('bad_amount'),{code:'bad_amount'});const n=BigInt(t);if(n<=0n)throw Object.assign(Error('bad_amount'),{code:'bad_amount'});return n;};
-  let lastApp=null;   // t1116u: {at,partial,amount} of the latest app-chosen plan (a page re-prepare without an amount must not turn a partial plan into "everything")
+  let lastApp=null;   // t1116: {at,partial,amount} of the latest app-chosen plan (a page re-prepare without an amount must not turn a partial plan into "everything")
   async function quote(opts={}){const chosen=chosenOf(opts.amount);
     if(!await pub.readContract({address:W,abi:WITHDRAW_WALLET_ABI,functionName:'isOwnerAddress',args:[O]}))throw Object.assign(Error('the registered Base Account is not an owner of this wallet on chain'),{code:'owner_mismatch'});
     const inWallet=await bal(W);let reserve=0n,V=null;
@@ -73,15 +73,15 @@ export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chai
         const wei=gas*gp*3n/2n+1_000_000_000_000n;feeUsdc=wei*BigInt(rd[1])/10n**20n;if(feeUsdc<1000n)feeUsdc=1000n;}catch{feeUsdc=null;}}
     if(chosen!==null&&feeUsdc!==null&&chosen<=feeUsdc)throw Object.assign(Error('amount_below_fee'),{code:'amount_below_fee'});
     const ob=await bal(O).catch(()=>null);const canFront=feeUsdc!==null&&ob!==null&&ob>=feeUsdc;
-    // t606u: exit is NEVER blocked; if the Base Account can't front the fee in USDC we say so plainly (and never ask for ETH).
+    // t606: exit is NEVER blocked; if the Base Account can't front the fee in USDC we say so plainly (and never ask for ETH).
     const gasNote=canFront||feeUsdc===null?null:{zh:`提醒：取回的手续费约 ${usd(feeUsdc)} USDC，要由你的 Base Account 先用 USDC 付。现在你的 Base Account 里没有这点 USDC，Coinbase 可能付不了。请先从 Coinbase App 往你的 Base Account（Base 网络）转一点 USDC（比如 0.05），再点取回。你的钱一直安全地在钱包里。不要为此购买 ETH。`,en:`Heads-up: the withdrawal network fee (about ${usd(feeUsdc)} USDC) is paid in USDC by your Base Account first. It has no USDC right now, so Coinbase may not be able to pay it. Send a little USDC (e.g. 0.05, Base network) to your Base Account from the Coinbase app, then tap withdraw. Your money stays safe in the wallet. Don’t buy ETH for this.`};
     let wp=null;if(WP&&feeUsdc!==null&&gas!==null&&gas>0n){let g=feeUsdc*(gas+WITHDRAW_FEE_TRANSFER_GAS)/gas+1n;const sane=(feeUsdc*WITHDRAW_REAL_GAS*WITHDRAW_PRICE_HEADROOM_PCT+gas*100n-1n)/(gas*100n);if(sane>g)g=sane;if(g<1000n)g=1000n;
-      // t763u: anything Kipurse fronted for this wallet (onboarding gas, failed-op gas debt) is collected in the same batch
+      // t763: any legacy dues for this wallet (pre-t1022 onboarding gas, failed-op gas debt) is collected in the same batch
       let due=0n;try{due=BigInt(WP.dues?.()??0n);}catch{due=0n;}if(due<0n)due=0n;let f=g+due;if(f>WITHDRAW_MAX_WALLET_FEE)f=WITHDRAW_MAX_WALLET_FEE;const dueTaken=f-g>0n?f-g:0n;
       if(g<=WITHDRAW_MAX_WALLET_FEE&&amount>f&&(()=>{try{return !!WP.available();}catch{return false;}})())wp={available:true,fee:f.toString(),gasFee:g.toString(),dues:dueTaken.toString(),receive:(amount-f).toString(),feeTo:WP.to};}
     return {wallet:W,to:O,token:T,amount:amount.toString(),total:total.toString(),partial:amount<total,inWallet:inWallet.toString(),reserve:reserve.toString(),vault:V,feeUsdc:feeUsdc===null?null:feeUsdc.toString(),gas:gas===null?null:gas.toString(),feePaidBy:wp?'wallet':'owner_base_account',ownerUSDC:ob===null?null:ob.toString(),ownerCanPayUSDC:canFront,gasNote:wp?null:gasNote,walletPays:wp,usdcGas:(()=>{try{return !!WP?.usdcGas?.();}catch{return false;}})(),neverBlocked:true};}
   async function prepare(opts={}){{const h=await SC.check(owner);if(h)throw Object.assign(Error('你的收款账户地址在美国财政部 OFAC 制裁名单上，不能取回到这个地址。钱没有动。 / Your receiving address is on the US Treasury OFAC sanctions list; withdrawal to it is not allowed. No money moved.'),{code:'SANCTIONED_ADDRESS'});}let chosen=chosenOf(opts.amount);
-    // t1120u (§6#62): the pinned page re-prepares the wallet-pays fee shape for the plan the APP already checked. It must keep THAT amount:
+    // t1120 (decision 62): the pinned page re-prepares the wallet-pays fee shape for the plan the APP already checked. It must keep THAT amount:
     // 1) the plan id it was opened with, else 2) the latest app-chosen amount (30 min). Never "everything" over a partial plan.
     const feeShape=opts.feeFrom==='usdc_gas'||opts.feeFrom==='wallet';
     if(chosen===null&&feeShape&&opts.plan!=null&&opts.plan!==''){const e=prepared.get(String(opts.plan));if(!e||now()-e.at>=30*60e3)throw Object.assign(Error('unknown_plan'),{code:'unknown_plan'});chosen=e.amount;}
@@ -91,7 +91,7 @@ export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chai
     const part={partial:q.partial===true,walletBefore:BigInt(q.inWallet),swept:q.vault?BigInt(q.reserve):0n};
     if(prepared.size>20)prepared.clear();const id=randomBytes(16).toString('hex');
     // option A (t1020): the USER pays the network fee in USDC through the CDP ERC-20 paymaster: approve(<=0.25 USDC) + withdraw in ONE confirmation.
-    // No fee goes to Kipurse; only already-recorded old dues are repaid here (t1008u: old dues only on withdraw). Kipurse nets $0, no ETH anywhere.
+    // No fee goes to Kipurse; only already-recorded old dues are repaid here (t1008: old dues only on withdraw). Kipurse nets $0, no ETH anywhere.
     if((opts.feeFrom==='usdc_gas'||opts.feeFrom==='wallet')&&WP?.usdcGas?.()){const {approveCall}=await import('./usdc-gas.mjs');let due=0n;try{due=BigInt(WP.dues?.()??0n);}catch{due=0n;}if(due<0n)due=0n;if(due>WITHDRAW_MAX_WALLET_FEE)due=WITHDRAW_MAX_WALLET_FEE;
       if(due>=BigInt(q.amount))due=0n;
       const body=due>0n?withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:q.amount,fee:due,feeTo:WP.to,vault:q.vault}):withdrawCalls({wallet:W,owner:O,token:T,amount:q.partial?q.amount:BigInt(q.inWallet)>0n?q.inWallet:q.amount,vault:q.vault});
@@ -105,7 +105,7 @@ export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chai
       let paymaster=null;try{paymaster=await WP.register(id,{owner:O,wallet:W,calls,reimburse:BigInt(q.walletPays.gasFee)});}catch{paymaster=null;}
       if(paymaster){const plan={id,owner:O,wallet:W,token:T,vault:q.vault,chainId,amount:q.amount,inWallet:q.inWallet,reserve:q.reserve,feeUsdc:q.feeUsdc,feeFrom:'wallet',fee:f.toString(),gasFee:q.walletPays.gasFee,dues:q.walletPays.dues,receive:(BigInt(q.amount)-f).toString(),feeTo:WP.to,paymaster,calls};
         prepared.set(id,{at:now(),amount:BigInt(q.amount),receive:BigInt(q.amount)-f,ownerBefore:await bal(O),plan,...part});return plan;}}
-    // t1120u (§6#62): the page asked for the fee from the wallet. Never silently hand back an owner-pays plan (that is what asked the owner to fund
+    // t1120 (decision 62): the page asked for the fee from the wallet. Never silently hand back an owner-pays plan (that is what asked the owner to fund
     // the Base Account first). Clear error instead; nothing was sent.
     if(opts.feeFrom==='wallet')throw Object.assign(Error('现在暂时不能从钱包扣手续费，这次没有提现，钱没有动。请稍后再试。 / The network fee can’t be taken from the wallet right now. Nothing was withdrawn; your money didn’t move. Please try again later.'),{code:'wallet_fee_unavailable'});
     const calls=withdrawCalls({wallet:W,owner:O,token:T,amount:q.amount,vault:q.vault});const bad=checkWithdrawCalls(calls,{wallet:W,owner:O,token:T,vault:q.vault});if(bad)throw Object.assign(Error(bad),{code:bad});
@@ -113,7 +113,7 @@ export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chai
     prepared.set(id,{at:now(),amount:BigInt(q.amount),ownerBefore:await bal(O),plan,...part});return plan;}
   /** The exact plan the app already checked on the phone (by id; nothing in it can be changed by the caller). */
   function plan(id){const e=prepared.get(String(id??''));return e&&now()-e.at<30*60e3?e.plan:null;}
-  /** Done when the owner received the planned amount, or (everything) the wallet was emptied, or (t1116u partial) the wallet dropped by
+  /** Done when the owner received the planned amount, or (everything) the wallet was emptied, or (t1116 partial) the wallet dropped by
    *  >= the planned amount AND the owner gained at least that minus the fee ceiling. A partial withdrawal never needs a zero balance. */
   async function confirm(id){if(done.has(id))return done.get(id);const e=prepared.get(id);if(!e)return {ok:false,error:'unknown_plan'};const [w,o]=await Promise.all([bal(W),bal(O)]);
     const vr=e.plan?.vault&&BigInt(e.plan.reserve??0)>0n?await pub.readContract({address:e.plan.vault,abi:WITHDRAW_VAULT_ABI,functionName:'unreserved'}).catch(()=>null):0n;

@@ -1,7 +1,7 @@
 import SwiftUI
 import KipurseCore
 
-// MARK: 提现 — where (my Coinbase / my Base wallet / paste or scan) → how much (presets + 全部 + 自己填) → plain fee → Face ID.
+// MARK: [zh] — where (my Coinbase / my Base wallet / paste or scan) → how much (presets + [zh] + [zh]) → plain fee → Face ID.
 struct WithdrawFlow: View {
   @EnvironmentObject var m: AppModel
   let s: WalletState

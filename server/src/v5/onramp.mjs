@@ -2,7 +2,7 @@
 // Off unless KIPURSE_ONRAMP_ENABLED=1 AND the key file KIPURSE_ONRAMP_KEY_FILE exists (CDP Secret API key JSON: {id|name, privateKey}).
 // The key is read only to sign a request JWT; never logged, returned or kept.
 // Destination is ALWAYS the wallet the phone session belongs to; the client cannot pass an address. Only USDC on base.
-// HONESTY (owner 2026-10-27 t565u): a purchase is only "arrived" after it is verified (Coinbase send tx to THIS wallet, or the
+// HONESTY (owner 2026-10-27 t565): a purchase is only "arrived" after it is verified (Coinbase send tx to THIS wallet, or the
 // wallet's USDC balance went up). A buyer signed in to Coinbase may end with the coins in the Coinbase account: we say so.
 import {readFileSync,existsSync} from 'node:fs';import {randomBytes} from 'node:crypto';
 export const ONRAMP_HOST='api.developer.coinbase.com',ONRAMP_PATH='/onramp/v1/token',PAY_URL='https://pay.coinbase.com/buy/select-asset';
@@ -53,7 +53,7 @@ export function createOnramp({env=process.env,fetchFn=globalThis.fetch,jwt,kv,ba
       log('onramp_status',{wallet:mask(wallet),ref,state:out.state});return [200,{ok:true,ref,...out}];}};}
 
 // ---------------------------------------------------------------------------------------------------------------------------
-// APPLE PAY DIRECT (Headless Onramp, v2 Onramp Order API). PRIMARY path (owner 2026-10-27 t566u): guest checkout, no Coinbase
+// APPLE PAY DIRECT (Headless Onramp, v2 Onramp Order API). PRIMARY path (owner 2026-10-27 t566): guest checkout, no Coinbase
 // sign-in, Coinbase buys AND sends straight to destinationAddress = this wallet; never lands in a Coinbase account.
 // KIPURSE_ONRAMP_HEADLESS = off (default) | sandbox (partnerUserRef "sandbox-…", fake Apple Pay sheet, never charged) | live.
 // Coinbase rules: US users only, real (non-VoIP) US cell phone + email verified by OTP (Coinbase Verification API, valid 60 days),

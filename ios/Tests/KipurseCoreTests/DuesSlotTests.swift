@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t767u: new-wallet setup may end with vault.setBundlerFee(Kipurse ops, <= 0.05 USDC). Vectors come from the server builder.
+/// t767: new-wallet setup may end with vault.setBundlerFee(Kipurse ops, <= 0.05 USDC). Vectors come from the server builder.
 final class DuesSlotTests: XCTestCase {
   var v: [String: Any] = [:]
   override func setUp() { v = (try? JSONSerialization.jsonObject(with: Data(BatchVectors.json.utf8))) as? [String: Any] ?? [:] }

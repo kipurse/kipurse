@@ -1,7 +1,7 @@
 import XCTest
 
-/// t1164u (§6#79): every connected AI bead (Muse / Grok / Claude / Siri) is always lit 在线 — just used, used 6 min ago, or never used —
-/// also with duplicate / renamed rows; a disconnected AI shows 未连接. 已授权·未在线 never appears.
+/// t1164 (decision 79): every connected AI bead (Muse / Grok / Claude / Siri) is always lit [zh] — just used, used 6 min ago, or never used —
+/// also with duplicate / renamed rows; a disconnected AI shows [zh]·[zh] never appears.
 final class T1161BeadUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }

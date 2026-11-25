@@ -29,11 +29,11 @@ final class AppModel: ObservableObject {
   @Published var mainNeedsSignIn = false
   /// The wallet exists but THIS phone isn't bound (reinstall / new phone): home shows the bind card + the no-phone emergency page.
   @Published var phoneUnbound = false
-  /// kipurse://bind and the "去绑定" buttons: the bind flow as a sheet.
+  /// kipurse://bind and the "[zh]" buttons: the bind flow as a sheet.
   @Published var bindSheet = false
   /// New install: the user must "Sign in with Coinbase" before any wallet is looked up (the keychain phone key survives app deletion).
   @Published var needsIdentity = false
-  /// 退出登录 / 换账户: local only. Server records, on-chain state and funds are untouched; the phone key stays (signing back in
+  /// [zh]: local only. Server records, on-chain state and funds are untouched; the phone key stays (signing back in
   /// with the same Coinbase account reconnects with a free signature). No Face ID: nothing is moved or signed.
   func signOut() {
     poll?.cancel(); MainnetSession.clear(); SiriCredential.clear(); Operator.setWallet(nil)
@@ -95,13 +95,13 @@ final class AppModel: ObservableObject {
   }
   @Published var onrampTrack: OnrampTrack?
   private var lockAfterSheet = false
-  /// Last on-chain limits change (from kipurse://limits-updated or seen by polling): drives the success overlay + the 已更新 badge.
+  /// Last on-chain limits change (from kipurse://limits-updated or seen by polling): drives the success overlay + the [zh] badge.
   @Published var limitsUpdated: LimitsUpdate?
   @Published var limitsCelebrate = false
   /// #3: emergency page could not be reached (offline): show the built-in fallback instead of a blank page.
   @Published var emergencyOffline: URL?
   @Published var emergencyFirst: URL?   // t796: native screen before the web page
-  /// 授权中… (signed + submitted, waiting for Base) and its failure text. Shown full-screen instead of the old limits form.
+  /// [zh]… (signed + submitted, waiting for Base) and its failure text. Shown full-screen instead of the old limits form.
   @Published var authPending: LimitsPending?
   @Published var authFailed: String?
   var authOverlayShown: Bool { limitsCelebrate || authPending != nil || authFailed != nil }
@@ -136,7 +136,7 @@ final class AppModel: ObservableObject {
   init() {
     api = OwnerAPI(session: SessionVault.load())
     NotificationCenter.default.addObserver(forName: AssistantHooks.decision, object: nil, queue: .main) { [weak self] n in MainActor.assumeIsolated { self?.assistantDecision(n) } }
-    NotificationCenter.default.addObserver(forName: AssistantHooks.siriUsed, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { Task { await self?.refresh() } } }   // t1161u (§6#78)
+    NotificationCenter.default.addObserver(forName: AssistantHooks.siriUsed, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { Task { await self?.refresh() } } }   // t1161 (decision 78)
     Awareness.registerCategories(); NotificationRouter.shared.model = self; UNUserNotificationCenter.current().delegate = NotificationRouter.shared
     if LaunchFlags.has("-kpKeyDiag") { AppModel.keyDiag(); exit(0) }   // t1275 (#6): Debug only   // read-only: public fingerprints only, then quit (no wipe)
     // Fresh-install cleanup runs only on the very first launch of this install (UserDefaults is removed with the app) and never deletes
@@ -161,7 +161,7 @@ final class AppModel: ObservableObject {
       demo = CommandLine.arguments[i + 1]; locked = demo == "lock" || CommandLine.arguments.contains("-kpFaceTest"); balanceRevealed = !CommandLine.arguments.contains("-kpMasked")
       DemoGuard.active = true; AppModel.demoOwner(); state = AppModel.demoState(demo!)   // t802: demo wallet first, so the sample state carries an address (clean install had an empty slot)
       if let k = CommandLine.arguments.firstIndex(of: "-kpStray"), k + 1 < CommandLine.arguments.count { stray = WrongToken.demo(CommandLine.arguments[k + 1]) }
-      if CommandLine.arguments.contains("-kpT1157Reply") {   // t1157u UI test: the phone-decide reply's saved limits, applied by the real applyEveryday path
+      if CommandLine.arguments.contains("-kpT1157Reply") {   // t1157 UI test: the phone-decide reply's saved limits, applied by the real applyEveryday path
         applyEveryday(["authorized": true, "custom": true, "explicit": true, "at": 1795400000000, "single": "2000000", "daily": "5000000", "term": "30000000",
                        "requestedSingle": "2000000", "requestedDaily": "5000000", "requestedTerm": "30000000"])
       }
@@ -241,9 +241,9 @@ final class AppModel: ObservableObject {
            "connectRequests": d == "main-connect" ? [["id": "demoGrokBotReq01", "client": "Grok Bot", "kind": "grok-bot", "host": "www.cursor.com", "exp": now + 540]] : [],
            "trustRequests": ["pending": d == "main" ? [["id": "3f2b9c1e-0b7d-4e8a-9f5c-2d1b0a9e8f7c", "payee": "0x4f2a9C1e0B7d3E8a6F5c2D1b0A9e8F7c6D5b4A3e", "chainId": 8453, "single": "5000000", "total": "10000000", "merchantName": "Example Shop", "reason": "VPS", "requestedBy": ["muse"], "status": "awaiting_owner"]] : []]]
       if d == "main-empty" { j["ledger"] = [] }
-      if d == "main-zero" { j["ledger"] = []; j["purchases"] = []; j["balance"] = "0"; j["reserve"] = "0" }   // t1001u guard test: returning user, 0 balance
+      if d == "main-zero" { j["ledger"] = []; j["purchases"] = []; j["balance"] = "0"; j["reserve"] = "0" }   // t1001 guard test: returning user, 0 balance
       #if DEBUG
-      // t1185u UI test only: a V5.3 vault reports its daily on-chain operations (state.ops); "-kpOpsDemo full" = today's number used up
+      // t1185 UI test only: a V5.3 vault reports its daily on-chain operations (state.ops); "-kpOpsDemo full" = today's number used up
       if let i = CommandLine.arguments.firstIndex(of: "-kpOpsDemo") { let full = i + 1 < CommandLine.arguments.count && CommandLine.arguments[i + 1] == "full"
         j["ops"] = ["supported": true, "perDayCount": "500", "usedTodayCount": full ? "500" : "37", "leftCount": full ? "0" : "463", "resetsAt": "2026-11-19T00:00:00.000Z"] }
       #endif
@@ -257,7 +257,7 @@ final class AppModel: ObservableObject {
         let cal = Calendar.current, nowD = Date(timeIntervalSince1970: now), mStart = cal.dateInterval(of: .month, for: nowD)!.start.timeIntervalSince1970
         func at(_ back: Double) -> Double { max(mStart + 3600, now - back) }   // keep sample spend inside this month
         let yest = now - 86400
-        // t681: sample numbers equal to the approved mockup (本月 $486: 餐饮 165 / 出行 88 / 订阅 87 / 购物 88 / 工具 58)
+        // t681: sample numbers equal to the approved mockup ([zh] $486: [zh] 58)
         let rows: [(String, String, String, Double, String)] = [(T("Lumi 拉面馆", "Lumi Ramen"), "oauth-claude-desktop", "18500000", now - 1500, "lunch"), ("CityRide", "grok-bot", "12300000", now - 9000, "ride"),  // i18n-ok: sample data
           ("Soundwave", "muse", "9990000", yest, "monthly plan"), ("Orbit Store", "siri", "42000000", yest - 3600, "headphones"),
           ("Noodle Lab", "siri", "146500000", at(86400 * 3), "dinner"), ("Skyline Air", "grok-bot", "75700000", at(86400 * 4), "flight"),
@@ -267,12 +267,12 @@ final class AppModel: ObservableObject {
         j["balance"] = "1284600000"; j["trustRequests"] = ["pending": [Any]()]
         if var c = j["caps"] as? [String: Any] { c["daily"] = "200000000"; c["single"] = "50000000"; c["term"] = "2000000000"; j["caps"] = c }
       }
-      if CommandLine.arguments.contains("-kpT1157") {   // t1157u UI test: the stale cache an old server left (an empty oauth-siri row first, the phone Siri row connected, limits unset)
+      if CommandLine.arguments.contains("-kpT1157") {   // t1157 UI test: the stale cache an old server left (an empty oauth-siri row first, the phone Siri row connected, limits unset)
         j["agents"] = [["id": "oauth-siri", "name": "Siri", "kind": "custom", "connected": false],
                        ["id": "siri", "name": "Siri", "kind": "siri", "connected": true, "paused": false]]
         j.removeValue(forKey: "everyday")
       }
-      if let ages = UserDefaults.standard.string(forKey: "kpBeadAges") {   // t1161u UI test (§6#78): "muse=0,grok=360,…" seconds since each AI's last real call
+      if let ages = UserDefaults.standard.string(forKey: "kpBeadAges") {   // t1161 UI test (decision 78): "muse=0,grok=360,…" seconds since each AI's last real call
         let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         var age: [String: Double] = [:]; for kv in ages.split(separator: ",") { let p = kv.split(separator: "="); if p.count == 2, let v = Double(p[1]) { age[String(p[0])] = v } }
         func ago(_ k: String) -> Any { age[k].map { iso.string(from: Date(timeIntervalSince1970: now - $0)) } ?? NSNull() }
@@ -286,7 +286,7 @@ final class AppModel: ObservableObject {
                        ["id": "oauth-siri", "name": "Siri", "kind": "custom", "connected": false],
                        ["id": "siri", "name": "Siri", "kind": "siri", "connected": true, "paused": false, "lastUsed": ago("siri")]]
         j["purchases"] = [Any]()
-        if CommandLine.arguments.contains("-kpBeadOff"), let rows = j["agents"] as? [[String: Any]] {   // t1164u: every AI disconnected / expired
+        if CommandLine.arguments.contains("-kpBeadOff"), let rows = j["agents"] as? [[String: Any]] {   // t1164: every AI disconnected / expired
           j["agents"] = rows.map { r in var r = r; r["connected"] = false; return r } }
       }
       #endif
@@ -338,7 +338,7 @@ final class AppModel: ObservableObject {
     openOwnerPage(url) { m in await m.limitsTick(before: before) }
   }
   private var limitsBefore: Date?
-  /// One poll: on chain -> 授权完成; submitted -> close the page, 授权中…; server gave up -> failure + retry.
+  /// One poll: on chain -> [zh]; submitted -> close the page, [zh]…; server gave up -> failure + retry.
   func limitsTick(before: Date?) async -> Bool {
     await refresh()
     guard let s = state else { return false }
@@ -360,7 +360,7 @@ final class AppModel: ObservableObject {
     return DeepLinkGate.limitsOnChain(u, chain: await SafetyCaps.read(account: w).caps)
   }
   func showAuthFailed(_ msg: String) { authPending = nil; authFailed = msg; webSheet = nil; Haptics.error() }
-  /// 再查一次: keep waiting for the same change.
+  /// [zh]: keep waiting for the same change.
   func retryAuthCheck() {
     authFailed = nil; let before = limitsBefore
     authPending = authPending ?? LimitsPending(single: 0, daily: 0, term: 0, days: nil, since: Int64(Date().timeIntervalSince1970), failed: false)
@@ -400,7 +400,7 @@ final class AppModel: ObservableObject {
   // MARK: login
   func handle(url: URL) {
     if url.scheme == "kipurse", url.host == "bind" { bindSheet = true; return }
-    // App Review (owner approved 2026-11-22, §6#117): kipurse://review-demo opens the built-in demo (sample data, no server, nothing signed). Only when no wallet is open.
+    // App Review (owner approved 2026-11-22, decision 117): kipurse://review-demo opens the built-in demo (sample data, no server, nothing signed). Only when no wallet is open.
     // t1266 (fix 7): only on a phone with no real wallet / identity at all.
     if url.scheme == "kipurse", url.host == "review-demo" {
       if DeepLinkGate.reviewDemoAllowed(hasState: state != nil, inDemo: demo != nil, wallet: Operator.wallet, owner: UserDefaults.standard.string(forKey: CoinbaseIdentity.ownerKey),
@@ -466,7 +466,7 @@ final class AppModel: ObservableObject {
   @Published var wipeReport = ""
   /// Mainnet delete-everything: server records for this wallet (if the server allows, signed by this phone), then every local trace:
   /// Keychain (session, Secure Enclave key), preferences (payee cache, wallet), files, caches, Spotlight items, Siri donations.
-  /// On-chain facts stay on chain; the phone approver is removed from the wallet separately (手机确认 → 撤销).
+  /// On-chain facts stay on chain; the phone approver is removed from the wallet separately ([zh] → [zh]).
   func eraseMainnetEverything() async {
     if demo != nil { toast = T("演示里不会删除任何真实数据", "The demo never deletes real data"); return }
     if demo == nil, MainnetSession.load() == nil, PhoneKey.isPresent() { _ = await ensurePhoneSession(reason: L("删除账户")) }   // action: Face ID OK
@@ -487,7 +487,7 @@ final class AppModel: ObservableObject {
   // MARK: lock (LocalAuthentication; separate from the wallet passkey)
   private var unlocking = false
   /// Exactly ONE Face ID on mainnet. Runs in its own Task (NOT the LockView's .task, which is cancelled the moment the lock screen
-  /// disappears — that cancelled the session request on device: NSURLErrorCancelled, shown as "已取消").
+  /// disappears — that cancelled the session request on device: NSURLErrorCancelled, shown as "[zh]").
   ///  - valid read session (checked without any prompt): one LocalAuthentication unlock.
   ///  - session needed: the phone key's own Secure Enclave Face ID is the unlock (no separate LAContext prompt).
   func unlock() async { startUnlock() }
@@ -581,7 +581,7 @@ final class AppModel: ObservableObject {
   }
   /// t1036/t1037/t1094: before Face ID / server session the home is a shell (balance "0", empty ledger, no caps).
   /// Read USDC balance + recent Transfer logs + wallet safety caps from Base (read-only). Does not invent a home screen when state is nil.
-  /// t1279 (R15): the last two-node agreed USDC balance of this session (memory only). Home and deposit "已到账" read this, not the server.
+  /// t1279 (R15): the last two-node agreed USDC balance of this session (memory only). Home and deposit "[zh]" read this, not the server.
   private(set) var agreedBalance = AgreedBalanceMemory()
   /// The agreed balance of the shown wallet (demo: the demo state's balance). nil = the chain has not answered yet this session.
   var agreedBalanceNow: Int64? {
@@ -597,7 +597,7 @@ final class AppModel: ObservableObject {
     guard let w else { return }
     let b = await VaultCheck.usdcBalanceAgreed(w)   // t1278 (A7): two agreeing public nodes (no Face ID); nil = failed / disagreed
     agreedBalance.record(b, wallet: w)   // t1279 (R15): nil keeps the last two-node agreed balance (never the server's number)
-    // t1129u: 记录 = every real movement. Always merge new on-chain movements (withdraw + its fee, fee-only wallet actions,
+    // t1129: [zh] = every real movement. Always merge new on-chain movements (withdraw + its fee, fee-only wallet actions,
     // deposits, payments) into what is shown, one row per tx, balances recomputed from the live balance. Before this, a cached
     // list that already had one row was never read again, and the 27 h look-back was ~3 h on today's Base.
     var ledgerRows: [JSONValue]? = nil
@@ -621,7 +621,7 @@ final class AppModel: ObservableObject {
     guard changed else { return }
     state = next; LedgerCache.save(state!)
   }
-  /// t1253 (§6#122): after an owner-signed V5.4 -> V5.5 move, switch to the new wallet ONLY when the chain itself confirms it is this owner's
+  /// t1253 (decision 122): after an owner-signed V5.4 -> V5.5 move, switch to the new wallet ONLY when the chain itself confirms it is this owner's
   /// V5.5 wallet holding THIS phone's key (MoveFollow; the server can never swap the address). At most every 10 minutes.
   private var lastMoveCheck: Date?
   func followMove() async {
@@ -641,7 +641,7 @@ final class AppModel: ObservableObject {
       do { let s = try await MainnetSession.state(interactive: false)
         // t1266 (fix 4): a state for any wallet other than the one this phone verified is dropped (never shown, cached or acted on)
         if let sw = s.wallet, !Operator.wallet.isEmpty, sw.lowercased() != Operator.wallet.lowercased() { AuthLog.note("refresh", "dropped state of another wallet"); return }
-        await KipurseSuite.detect(wallet: s.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet), serverVault: s.raw["vault"]?["address"]?.string); let shown = agreedShown(CapsSource.carry(from: state, into: s)); state = shown;   /* t1278 (A7): keep the last chain caps; t1279 (R15): the server's balance never replaces the last two-node agreed one */   /* t1197u §6#92: V5.3 only for a wallet whose V5.3 vault exists on chain */ serverDown = false; LedgerCache.save(shown); Task { await loadStray(s) }; mainNeedsSignIn = false; mainError = nil; notifyNew(s.approvals); Awareness.publish(s); siriSync(s); Task { await AllowanceStore.shared.loadIfStale() }; await chainBalanceFallback() }   // t1129u: also fills movements the server ledger has not caught up on
+        await KipurseSuite.detect(wallet: s.wallet ?? (Operator.wallet.isEmpty ? nil : Operator.wallet), serverVault: s.raw["vault"]?["address"]?.string); let shown = agreedShown(CapsSource.carry(from: state, into: s)); state = shown;   /* t1278 (A7): keep the last chain caps; t1279 (R15): the server's balance never replaces the last two-node agreed one */   /* t1197 decision 92: V5.3 only for a wallet whose V5.3 vault exists on chain */ serverDown = false; LedgerCache.save(shown); Task { await loadStray(s) }; mainNeedsSignIn = false; mainError = nil; notifyNew(s.approvals); Awareness.publish(s); siriSync(s); Task { await AllowanceStore.shared.loadIfStale() }; await chainBalanceFallback() }   // t1129: also fills movements the server ledger has not caught up on
       catch MainnetSession.Failure.needsSignIn { if state == nil { mainNeedsSignIn = true }; await chainBalanceFallback() }
       catch MainnetSession.Failure.noKey { mainNeedsSignIn = false; await chainBalanceFallback() }
       catch MainnetSession.Failure.unbound { markUnbound() }
@@ -657,7 +657,7 @@ final class AppModel: ObservableObject {
     catch KipurseError.notLoggedIn { logout(); show(L("需要重新登录"), KipurseError.notLoggedIn.localizedDescription) }
     catch { /* keep last state; banner shows offline */ }
   }
-  /// t1157u: the server's connect reply carries the saved AI limits (state.everyday shape). Put them into the shown state and the
+  /// t1157: the server's connect reply carries the saved AI limits (state.everyday shape). Put them into the shown state and the
   /// local cache at once, so a missing read session can never leave the old "limits not set" view behind.
   func applyEveryday(_ reply: Any?) {
     guard let o = reply as? [String: Any], let d = try? JSONSerialization.data(withJSONObject: o),
@@ -665,7 +665,7 @@ final class AppModel: ObservableObject {
     let next = s.withEveryday(v); guard next.raw != s.raw else { return }
     state = next; if demo == nil { LedgerCache.save(next) }
   }
-  /// t1157u: on mainnet every fresh read needs the phone session; without one the shown state is the last cache and may be old.
+  /// t1157: on mainnet every fresh read needs the phone session; without one the shown state is the last cache and may be old.
   var stateMayBeStale: Bool {
     #if DEBUG
     if demo != nil { return CommandLine.arguments.contains("-kpStaleCache") }
@@ -685,7 +685,7 @@ final class AppModel: ObservableObject {
     }
   }
   /// Face ID with the phone signer key -> read-only mainnet session.
-  /// t890: the "用 Face ID 打开" / 重试 buttons. Always gives a visible result: one Face ID (passcode fallback) -> home;
+  /// t890: the "[zh]" / [zh] buttons. Always gives a visible result: one Face ID (passcode fallback) -> home;
   /// t1027: open/browse never Face ID. cancel / failure → Coinbase / unbound, never a dead Face ID gate.
   @Published var openingWallet = false
   func openWallet() async {
@@ -718,7 +718,7 @@ final class AppModel: ObservableObject {
     if MainnetSession.load() != nil, (try? await MainnetSession.state(interactive: false)) != nil { return true }
     guard PhoneKey.isPresent() else { return false }
     let why = reason.isEmpty ? L("确认操作") : reason
-    await FaceIDUnlock.ensure()   // t1255 §6#124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
+    await FaceIDUnlock.ensure()   // t1255 decision 124: Face ID locked by iOS -> passcode unlocks Face ID only (approves nothing)
     guard let ctx = await BiometricGate.unlockContext(reason: why) else { return false }
     defer { ctx.invalidate() }
     do {
@@ -829,7 +829,7 @@ final class AppModel: ObservableObject {
       switch SigningMode(rawValue: signingMode) ?? .safariView {
       case .safariView: webSheet = WebSheet(url: url)
       case .authSession: WebSigner.shared.start(url) { [weak self] _ in Task { await self?.refresh() } }
-      case .externalSafari: webSheet = WebSheet(url: url)   // t785u: never leave the app (old setting now opens in-app)
+      case .externalSafari: webSheet = WebSheet(url: url)   // t785: never leave the app (old setting now opens in-app)
       }
     } catch { show(L("打不开确认页面"), error.localizedDescription) }
   }
@@ -839,7 +839,7 @@ final class AppModel: ObservableObject {
     await openSigning(next: "/?return=kipurse&answers=\(b64)")
   }
 
-  /// 「离线提现」: the static rescue page; the rescue card rides in the #fragment (saved locally so it works without our server).
+  /// "[zh]": the static rescue page; the rescue card rides in the #fragment (saved locally so it works without our server).
   @AppStorage("rescueUrl") var rescueUrl = ""
   func openRescue() async {
     guard await BiometricGate.confirm(reason: L("打开独立取回确认页")) else { return }

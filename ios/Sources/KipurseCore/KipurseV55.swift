@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// t1250 (handbook §6#119): the Kipurse V5.5 suite on the phone. Public chain constants (gw/mainnet/v55-deploy-plan.json), the six owner digests
+/// t1250 (decision 119): the Kipurse V5.5 suite on the phone. Public chain constants (gw/mainnet/v55-deploy-plan.json), the six owner digests
 /// the Face ID key seat V2 accepts, its signature wrapper (owner index 1) and the KR-05 rules for trusts. Mirrors KipurseKeySeatV2 / KipurseTrustV55.
 /// V55-01: everything here is computed ON THE PHONE from the fields it shows; the phone never signs a digest taken from a server or a contract view.
 /// Pinned against the deployed contracts by Tests/KipurseCoreTests/t1250-v55-vectors.json.txt (T1250V55Tests).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): PRINT the V5.5 deploy batches the owner's Base Account would confirm in Coinbase (same shape as the V5.4 deploy:
+// t1250 (decision 119): PRINT the V5.5 deploy batches the owner's Base Account would confirm in Coinbase (same shape as the V5.4 deploy:
 // deterministic-deployer calls + a 0.15 USDC fee leg per batch). READ-ONLY: checks the chain (predicted addresses empty, which batch is next,
 // the owner's USDC) and prints calls + KPVH commitment + wallet_sendCalls payload. It never signs, sends or broadcasts anything.
 //   node mainnet/v55-deploy.mjs [--rpc https://base-rpc.publicnode.com] [--owner 0x4242…] [--full]

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1254 (handbook §6#123): the 「下一步」 page wording. It must say the limits are NOT in effect yet and that Face ID in Kipurse is the
+/// t1254 (decision 123): the "[zh]" page wording. It must say the limits are NOT in effect yet and that Face ID in Kipurse is the
 /// last step, for Muse and for every other outside AI.
 final class T1254ConnectHandoffTests: XCTestCase {
   func testStagedSaysNotInEffect() {

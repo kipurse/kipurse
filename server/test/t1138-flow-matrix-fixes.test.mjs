@@ -1,4 +1,4 @@
-// t1138u (§6#70): regressions for the three bugs the end-to-end flow matrix (test/fork/t1138-matrix.e2e.mjs) found.
+// t1138 (decision 70): regressions for the three bugs the end-to-end flow matrix (test/fork/t1138-matrix.e2e.mjs) found.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {decodeAbiParameters} from 'viem';
 import {createLedger} from '../src/v5/ledger.mjs';import {createPublicTrustApproval} from '../src/v5/trust-approve-public.mjs';

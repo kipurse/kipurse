@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1157u: the home Siri bead reads the real (phone) Siri row, not an empty "oauth-siri" row; the connect reply's saved limits replace a stale view.
+/// t1157: the home Siri bead reads the real (phone) Siri row, not an empty "oauth-siri" row; the connect reply's saved limits replace a stale view.
 final class T1157AgentMatchTests: XCTestCase {
   private func j(_ o: Any) -> JSONValue { try! JSONDecoder().decode(JSONValue.self, from: JSONSerialization.data(withJSONObject: o)) }
   private let oldServer: [[String: Any]] = [["id": "oauth-siri", "name": "Siri", "kind": "custom", "connected": false],
@@ -11,7 +11,7 @@ final class T1157AgentMatchTests: XCTestCase {
     XCTAssertEqual(a?["id"]?.string, "siri")
     let ph = AgentPhase.derive(connected: a?["connected"]?.bool ?? false, paused: false, allPaused: false, pendingPayments: 0, lastUsed: nil, now: Date())
     XCTAssertNotEqual(ph, .offline, "not 未连接")
-    XCTAssertEqual(ph, .online, "t1164u: connected = always lit")
+    XCTAssertEqual(ph, .online, "t1164: connected = always lit")
   }
   func testExactIdBeatsNameEvenWhenListedLater() {
     XCTAssertEqual(AgentMatch.pick([["id": "oauth-siri", "name": "Siri", "kind": "custom", "connected": true], ["id": "siri", "kind": "siri", "connected": false]].map(j), name: "Siri")?["id"]?.string, "siri")

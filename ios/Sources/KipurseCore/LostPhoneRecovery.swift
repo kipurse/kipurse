@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1045u: recovery starts at a public URL, with only the original Coinbase wallet; no saved link is required.
+/// t1045: recovery starts at a public URL, with only the original Coinbase wallet; no saved link is required.
 public enum LostPhoneRecovery {
   public static var title: String { T("手机丢了怎么办", "Lost your phone?") }
   public static var subtitle: String { T("换台设备，连接同一个 Coinbase 自动找回；Coinbase 钱包需留一点 USDC", "Recover automatically on another device with the same Coinbase wallet; keep a little USDC in your Coinbase wallet") }

@@ -1,7 +1,7 @@
 import XCTest
 
-/// t1113u (§6#59): no silent default limits; 充值并开通 stays disabled until all three limits are entered;
-/// one added footnote states the minimum Base USDC at opening. Uses a local quote mock only; never taps 充值并开通.
+/// t1113 (decision 59): no silent default limits; [zh] stays disabled until all three limits are entered;
+/// one added footnote states the minimum Base USDC at opening. Uses a local quote mock only; never taps [zh].
 final class T1113OpeningUITests: XCTestCase {
   override func setUp() { continueAfterFailure = false }
   private func shot(_ app: XCUIApplication, _ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
@@ -21,7 +21,7 @@ final class T1113OpeningUITests: XCTestCase {
     waitLabel(minBase, "1.064182 USDC")
     XCTAssertTrue(minBase.label.contains(zh ? "开户时你的 Coinbase 钱包（Base 账户）里至少要有约 1.064182 USDC" : "At opening your Coinbase wallet (Base account) needs at least about 1.064182 USDC"), minBase.label)
     XCTAssertFalse(minBase.label.contains("ETH"))
-    // t1114u (§6#60): the fee is charged separately from the Base account, on top of the deposit; button is English in English.
+    // t1114 (decision 60): the fee is charged separately from the Base account, on top of the deposit; button is English in English.
     let fee = app.staticTexts["onboard.feeNote"]; XCTAssertTrue(fee.waitForExistence(timeout: 10)); waitLabel(fee, "0.064182 USDC")
     XCTAssertEqual(fee.label, zh ? "开通手续费约 0.064182 USDC（按实际网络费），在充值之外另从你的 Coinbase 钱包（Base 账户）扣，不从这次充值里扣；Kipurse 不出这笔钱。"
                                  : "Opening fee about 0.064182 USDC (actual network cost), charged separately from your Coinbase wallet (Base account) on top of your deposit, not taken out of this deposit. Kipurse does not pay it.")
@@ -37,7 +37,7 @@ final class T1113OpeningUITests: XCTestCase {
     }
     preset(app, "5 USDC", 0)   // deposit
     waitLabel(minBase, "5.064182 USDC")
-    reveal(app, go); XCTAssertFalse(go.isEnabled, "t1113u: deposit only, no limits -> disabled (no silent default plan)")
+    reveal(app, go); XCTAssertFalse(go.isEnabled, "t1113: deposit only, no limits -> disabled (no silent default plan)")
     shot(app, "t1113-\(lang)-1-deposit-only")
     let manual = app.buttons[zh ? "自己填" : "Enter manually"].firstMatch
     reveal(app, manual); manual.tap()
@@ -55,8 +55,8 @@ final class T1113OpeningUITests: XCTestCase {
   func testOpeningNeedsThreeLimitsEn() throws { try run("en") }
 }
 
-/// t1185u (§6#86): the opening page states the 0.15 USDC that goes into the wallet's fee reserve (owner's money) in the existing
-/// fee note and minimum line (text only, no new elements). Uses a local quote mock with vaultSeedUSDC; never taps 充值并开通.
+/// t1185 (decision 86): the opening page states the 0.15 USDC that goes into the wallet's fee reserve (owner's money) in the existing
+/// fee note and minimum line (text only, no new elements). Uses a local quote mock with vaultSeedUSDC; never taps [zh].
 final class T1186OpeningSeedUITests: XCTestCase {
   override func setUp() { continueAfterFailure = false }
   private func shot(_ app: XCUIApplication, _ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }

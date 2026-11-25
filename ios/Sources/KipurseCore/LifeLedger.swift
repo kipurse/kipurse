@@ -1,6 +1,6 @@
 import Foundation
 
-/// t665 「AI 生活」: auto-categorised life ledger + per-agent live state. Pure logic, no network, no money movement.
+/// t665 "[zh]": auto-categorised life ledger + per-agent live state. Pure logic, no network, no money movement.
 public enum LifeCategory: String, CaseIterable, Codable, Sendable {
   case dining, travel, subscription, shopping, tools, other
   public var zh: String { ["dining": "餐饮", "travel": "出行", "subscription": "订阅", "shopping": "购物", "tools": "工具", "other": "其他"][rawValue]! }  // i18n-ok: paired zh/en
@@ -70,18 +70,18 @@ public enum LifeLedger {
 }
 
 /// What an agent's orb shows. Derived only from real agent data (connected / paused flags, pending payments, last use).
-/// t1157u: which live agent row a home character (Muse / Grok / Claude / Siri) shows. An exact id/kind match ("siri") beats a name that
+/// t1157: which live agent row a home character (Muse / Grok / Claude / Siri) shows. An exact id/kind match ("siri") beats a name that
 /// merely contains it ("oauth-siri"), and a connected row beats a not-connected one. Revoked rows never count.
 public enum AgentMatch {
   public static func pick(_ agents: [JSONValue], name: String) -> JSONValue? {
     let key = name.lowercased()
-    // t1164u: "oauth-siri" is the empty first-connect record the server hides since t1157 (stateAgents skips it); never match it.
+    // t1164: "oauth-siri" is the empty first-connect record the server hides since t1157 (stateAgents skips it); never match it.
     let live = agents.filter { !($0["revoked"]?.bool ?? false) && ($0["id"]?.string ?? "").lowercased() != "oauth-siri" }
     let hits = live.filter { a in [a["id"]?.string, a["kind"]?.string, a["name"]?.string].compactMap { $0?.lowercased() }.contains { $0.contains(key) } }
     let exact = hits.filter { a in [a["id"]?.string, a["kind"]?.string].compactMap { $0?.lowercased() }.contains(key) }
-    // t1161u (§6#78): one AI can have several rows (an old key "grok" and the OAuth "grok-bot"; "oauth-claude-desktop" and a "claude" key).
-    // The bead follows the row the AI is really using. t1164u (§6#79, connected = always lit): a connected row always beats a
-    // disconnected one (an old disconnected duplicate must not make a connected AI look 未连接); among connected rows the most
+    // t1161 (decision 78): one AI can have several rows (an old key "grok" and the OAuth "grok-bot"; "oauth-claude-desktop" and a "claude" key).
+    // The bead follows the row the AI is really using. t1164 (decision 79, connected = always lit): a connected row always beats a
+    // disconnected one (an old disconnected duplicate must not make a connected AI look [zh]); among connected rows the most
     // recent real call (lastUsed) wins; then exact id/kind (t1157).
     func rank(_ a: JSONValue) -> (Int, Double, Int) {
       let on = a["connected"]?.bool == true
@@ -106,16 +106,16 @@ public enum AgentMatch {
 public enum AgentPhase: String, Sendable { case online, paying, paused, idle, offline
   public var zh: String { ["online": "在线", "paying": "付款中", "paused": "已暂停", "idle": "已授权·未在线", "offline": "未连接"][rawValue]! }  // i18n-ok: paired zh/en
   public var en: String { ["online": "Online", "paying": "Paying", "paused": "Paused", "idle": "Authorized · idle", "offline": "Offline"][rawValue]! }   // t1245 U2: short enough for the four-column orb row
-  /// t1245 (§6#115 U37): the ONE not-connected line for AI 生活 and AI 智能体 (same status word; the agents list adds how to finish).
+  /// t1245 (decision 115 U37): the ONE not-connected line for AI [zh] (same status word; the agents list adds how to finish).
   public static func offlineLine(unfinished: Bool) -> (zh: String, en: String) {
     unfinished ? ("未连接 · 还没连完，点“连接”继续", "Offline · tap Connect to finish") : ("未连接", "Offline")  // i18n-ok: paired zh/en
   }
   public static let payingWindow: TimeInterval = 90
-  /// t878: 在线 only when the server saw a call recently. A key that still exists is only 已授权 (the AI may have disconnected on its side).
-  public static let clockSkew: TimeInterval = 120   // t1161u: tolerated server-ahead-of-phone clock difference
+  /// t878: [zh] (the AI may have disconnected on its side).
+  public static let clockSkew: TimeInterval = 120   // t1161: tolerated server-ahead-of-phone clock difference
   public static let onlineWindow: TimeInterval = 300   // t915: 在线 = a real authenticated call (MCP / Siri API) in the last 5 min
   /// t690: lit = connected and working (online / paying). Only lit orbs animate; unlit orbs are fully static.
-  /// t915: "最近活动 x 分钟前" from the server's last-seen time; nil when the server never saw a call.
+  /// t915: "[zh]" from the server's last-seen time; nil when the server never saw a call.
   public static func lastSeen(_ l: Date?, now: Date) -> (zh: String, en: String)? {
     guard let l else { return nil }; let s = max(0, now.timeIntervalSince(l))
     if s < 60 { return ("最近活动 刚刚", "Active just now") }  // i18n-ok: paired zh/en
@@ -129,10 +129,10 @@ public enum AgentPhase: String, Sendable { case online, paying, paused, idle, of
     if !connected { return .offline }
     if paused || allPaused { return .paused }
     if pendingPayments > 0 { return .paying }
-    // t1161u (§6#78): a server clock a little ahead of the phone (lastUsed slightly "in the future") is still a call just now.
-    // t1164u (§6#79, owner 2026-11-17 12:02 CT): no more 已授权·未在线 — a connected / authorized AI is always lit (在线) with the
-    // existing online animation, whether or not it was used recently. lastUsed only feeds the 「最近活动」 text. Only a truly
-    // disconnected / expired / revoked AI is 未连接. (.idle stays in the enum for old data but is never derived.)
+    // t1161 (decision 78): a server clock a little ahead of the phone (lastUsed slightly "in the future") is still a call just now.
+    // t1164 (decision 79, owner 2026-11-17 12:02 CT): no more [zh]·[zh] — a connected / authorized AI is always lit ([zh]) with the
+    // existing online animation, whether or not it was used recently. lastUsed only feeds the "[zh]" text. Only a truly
+    // disconnected / expired / revoked AI is [zh]. (.idle stays in the enum for old data but is never derived.)
     _ = lastUsed; _ = now
     return .online
   }

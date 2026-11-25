@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1243 (handbook §6#113): ONE Face ID when the phone session has expired on an approval path.
+/// t1243 (decision 113): ONE Face ID when the phone session has expired on an approval path.
 /// The sign-in evaluates an LAContext once; the approval signatures that follow may reuse that SAME evaluated context, but only
 /// - when the owner tapped the approve button on the full card (never from an automatic / lock-screen path), and
 /// - within `window` seconds of the Face ID, and
@@ -48,7 +48,7 @@ public final class ReusableUnlock<Value> {
 }
 
 public extension PushPermission {
-  /// t1243 (handbook §6#113): the token this phone uploaded before ("apnsSent" holds token or token|wallet). Sent as `replaces` with a
+  /// t1243 (decision 113): the token this phone uploaded before ("apnsSent" holds token or token|wallet). Sent as `replaces` with a
   /// new token so the server drops the old one from this wallet's list (one push per phone). nil when it is the same token or unknown.
   static func replacedToken(lastSent: String?, newToken: String) -> String? {
     guard let l = lastSent, !l.isEmpty else { return nil }

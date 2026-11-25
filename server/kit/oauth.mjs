@@ -35,7 +35,7 @@ export function reserveOAuthAgent(agents,{name,kind,clientId,knownIds=new Set()}
   if(!cur)agents[id]={id,name,kind,clientId,created:new Date().toISOString()};
   return {ok:true,id};
 }
-/** t1153u: a new Siri connection replaces an older Siri record (same as every other agent): the old client's tokens/codes are
+/** t1153: a new Siri connection replaces an older Siri record (same as every other agent): the old client's tokens/codes are
  *  revoked first, then the row is rewritten. Never touches the phone 'siri' row or any other agent. */
 export function replaceSiriAgent(agents,{kind,clientId,knownIds=new Set(),revoke=()=>{}}){
   const cur=agents['oauth-siri'];let replaced=null;
@@ -97,7 +97,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
   const dropClient=id=>{for(const [k,x] of Object.entries(O.pending))if(x.client_id===id&&x.status==='pending')drop('pending',k);drop('clients',id);};
   const byAge=(x,y)=>Number(x[1].created??0)-Number(y[1].created??0);
   /** the evictable client to drop: oldest of the source with the most of them (a flooder pays first); older than 10 min preferred */
-  /* t1279 R4 (§6#139): a client with an OPEN consent request (the owner may be on the approval screen right now) is evicted only after every
+  /* t1279 R4 (decision 139): a client with an OPEN consent request (the owner may be on the approval screen right now) is evicted only after every
      client without one, and the plain "oldest > 10 min" shortcut never takes it: within the heaviest source, idle clients go first */
   const withOpen=()=>{const s=new Set();for(const x of Object.values(O.pending))if(x?.status==='pending'&&x.client_id)s.add(x.client_id);return s;};
   function evictClient(only){const busy=usedClients(),open=withOpen(),n=Date.now();const cand=Object.entries(O.clients).filter(([id,c])=>!busy.has(id)&&!c.used&&(only===undefined||c.ipk===only));if(!cand.length)return false;
@@ -146,7 +146,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
     u.searchParams.set('code',code);p.codeHash=sha(code);p.codeExp=Date.now()/1000+CODE_TTL;p.status='approved';p.redirect=u.toString();save();return p.redirect;}
 
   function issue(client_id,agentId){const at=rnd(32),rt=rnd(32),n=Date.now()/1000;if(O.clients[client_id])O.clients[client_id].used=Date.now();
-    O.tokens[sha(at)]={type:'access',client_id,agentId,exp:n+ACCESS_TTL};O.tokens[sha(rt)]={type:'refresh',client_id,agentId,exp:n+REFRESH_TTL,at:sha(at)};save();/* t1280 (§6#140): the refresh token remembers its access token, so rotating ends the old one */
+    O.tokens[sha(at)]={type:'access',client_id,agentId,exp:n+ACCESS_TTL};O.tokens[sha(rt)]={type:'refresh',client_id,agentId,exp:n+REFRESH_TTL,at:sha(at)};save();/* t1280 (decision 140): the refresh token remembers its access token, so rotating ends the old one */
     return {access_token:at,token_type:'Bearer',expires_in:ACCESS_TTL,refresh_token:rt,scope:'wallet'};}
 
   function token(b){const bad=(e,d)=>[400,{error:e,error_description:d}];gc();
@@ -163,7 +163,7 @@ export function createOAuth({S,save,base,createAgentKey,isAgentLive,caps,spendAu
 
   function revoke(b){drop('tokens',sha(String(b.token||'')));save();return [200,{}];}
   /** Access token -> agentId (live) or null. */
-  /** t1161u: why a bearer was refused at /mcp (for an honest log line / the app): never returns the token or its hash. */
+  /** t1161: why a bearer was refused at /mcp (for an honest log line / the app): never returns the token or its hash. */
   function accessStatus(tok){const t=O.tokens[sha(String(tok||''))];if(!t)return {reason:'unknown_or_expired'};
     if(t.type!=='access')return {reason:'refresh_token_used_as_access',agentId:t.agentId??null};
     if(!isAgentLive(t.agentId))return {reason:'agent_revoked',agentId:t.agentId??null};
@@ -255,8 +255,8 @@ ${MAIN?`<div class=test style="background:#c00;color:#fff">${zh?'Base 主网':'B
       try{log?.('oauth_connect_failed',{route:'/oauth/phone-decide',reason:String(e?.code||'error').slice(0,40)});}catch{}
       return [409,{error:'connect_failed',error_description:'这次没有连接成功：没有保存额度，也没有扣钱。请回到 AI 重新连接。/ This connection did not go through. No limits were saved and nothing was charged. Please connect again from your AI.'}];}
     O.pending[id].by='phone:'+a.fingerprint;save();try{onConnected?.(O.clients[p.client_id]?.name??'');}catch{}
-    let everyday=null;try{everyday=everydayView?.()??null;}catch{everyday=null;}// t1157u: the saved AI limits (same shape as state.everyday) so the app can update at once
-    let extra=null;try{extra=approveExtras?.(O.clients[p.client_id]?.name??'')??null;}catch{extra=null;}// t1158u: Siri gets its own revocable credential (only on this signed phone reply)
+    let everyday=null;try{everyday=everydayView?.()??null;}catch{everyday=null;}// t1157: the saved AI limits (same shape as state.everyday) so the app can update at once
+    let extra=null;try{extra=approveExtras?.(O.clients[p.client_id]?.name??'')??null;}catch{extra=null;}// t1158: Siri gets its own revocable credential (only on this signed phone reply)
     return [200,{status:'approved',redirect,...(everyday?{everyday}:{}),...(extra&&typeof extra==='object'?extra:{})}];}
   function consentHtml(reqId,client,{owner,csrf,nonce,en}){const p=O.pending[reqId];const spend=bindSpend(p);const kind=mapClient(client.name);const X=(zh,e)=>en?e:zh;
     const what=`<div class=c><b>${X('它能做什么','What it can do')}</b><ul><li>${X('查看余额和付款记录','See your balance and payments')}</li><li>${X('在你设的上限内自动付款','Pay on its own, within your limits')}</li><li>${X('提议信任新的收款方、申请提现到你的钱包——都要你批准','Suggest new shops or withdrawals — you approve each one')}</li></ul><div class=muted>${X('它不能改上限，不能把钱转到别处。随时可以在 Kipurse App 里断开。','It can’t change your limits or send money anywhere else. Disconnect anytime in the Kipurse app.')}</div></div>`;

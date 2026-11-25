@@ -50,15 +50,15 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const GUARD={...GUARD_DEFAULTS,...(cfg.guardrails??{})};const TL={...TIER_LIMITS,...(cfg.tierLimits??{})};
   const gas=new GasBook(ledger.db);const txLock=inflightLock(); // failed-gas debt, 3-failure breaker, one in-flight tx per account
   const p=permissionFromJson(cfg.permission);
-  /* t1181u (§6#84): the engine's network + token; every off-chain limit record is pinned to it */
+  /* t1181 (decision 84): the engine's network + token; every off-chain limit record is pinned to it */
   const ENGINE_SCOPE=(()=>{try{return makeScope(cfg.chainId,cfg.token);}catch{return null;}})();
-  const AU=createApprovalUse(ledger.db);/* t1181u: one owner approval = one x402 reservation (server side; contract fix on the branch) */
+  const AU=createApprovalUse(ledger.db);/* t1181: one owner approval = one x402 reservation (server side; contract fix on the branch) */
   const MD=createMandates({db:ledger.db,wallet:p.account,scope:ENGINE_SCOPE,costParams:()=>costParams(),walletCaps:()=>({single:B('single'),daily:B('daily'),term:B('term')}),nameOf:a=>{try{return nameOf(a);}catch{return null;}},onProposal:v=>{try{cfg.onMandateProposal?.(v);}catch{}}});
-  const ASK=createOwnerAsks({db:ledger.db});/* t1170u §6#82: owner asks (new payee above an AI auto limit) */
+  const ASK=createOwnerAsks({db:ledger.db});/* t1170 decision 82: owner asks (new payee above an AI auto limit) */
   const OWNER_OK=Symbol('ownerApprovedAsk');/* set only by payApprovedByOwner (server code after the owner's Face ID); never reachable from AI JSON */
   /* t1278 S2: a signed order the SERVER fetched / built itself (autoSignedOrder, signed54, V5.1 attestor, layered attestor). Only these may be
      unbound (payer = 0); an order that came from the AI must name this wallet as payer, on every suite. Never reachable from AI JSON. */
-  const SERVER_ORDER=Symbol('serverFetchedOrder');/* t1279 R1 (§6#139): an already-normalized request is trusted ONLY under this in-process Symbol; a JSON key "__normalized" from an AI is ignored */const NORMALIZED=Symbol('normalizedRequest');const normReq=n=>({[NORMALIZED]:n});const serverReq=so=>({signedOrder:so,[SERVER_ORDER]:true});
+  const SERVER_ORDER=Symbol('serverFetchedOrder');/* t1279 R1 (decision 139): an already-normalized request is trusted ONLY under this in-process Symbol; a JSON key "__normalized" from an AI is ignored */const NORMALIZED=Symbol('normalizedRequest');const normReq=n=>({[NORMALIZED]:n});const serverReq=so=>({signedOrder:so,[SERVER_ORDER]:true});
   /* t1278 S3/S4: the gate's decision for this payment (tier, order, allowance), handed by payGuarded / paidFetch / releaseHold to payNormalized
      for the in-transaction re-check at claim time. Server code only (a Symbol key never survives JSON). */
   const CTX=Symbol('guardCtx');
@@ -80,7 +80,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   let uow=null;const opWriter=gasMode!=='userop'?null:{async write(fn,args,o){uow??=createUserOpWriter({cfg,pub:c.pub,session:cfg.session??loadOrCreateSessionKey(cfg.sessionKeyFile),
     vault:getAddress(await c.read('vaultAddress',[p.account])),adapter:cfg.adapter,maxGasPerOp:B('maxNetworkFee'),
     dues:cfg.dues??null,quotaStore:bundlerQuota,
-    onCharge:x=>gas.recordCharge({account:p.account,userOpHash:x.userOpHash,txHash:x.txHash,charged:x.charged,success:x.success,kind:x.kind})});return uow.write(fn,args,{...o,...(cfg.permitAtCap===true?{permitAtCap:true}:{}),kind:PAY_FNS.has(fn)?'pay':'owner'});}};   // t1252 (§6#121, V5.5): every gas permit at the owner's cap so the leftover allowance always covers the vault's own markSettled
+    onCharge:x=>gas.recordCharge({account:p.account,userOpHash:x.userOpHash,txHash:x.txHash,charged:x.charged,success:x.success,kind:x.kind})});return uow.write(fn,args,{...o,...(cfg.permitAtCap===true?{permitAtCap:true}:{}),kind:PAY_FNS.has(fn)?'pay':'owner'});}};   // t1252 (decision 121, V5.5): every gas permit at the owner's cap so the leftover allowance always covers the vault's own markSettled
   const f2Writer={async write(){throw Object.assign(Error('F2_X402_ONLY: degraded mode, no on-chain transactions; only x402 payments from an open float'),{code:'f2_x402_only'});}};
   const W=gasMode==='f2'?f2Writer:(writer??opWriter);
   const write=W?async(fn,args,o)=>W.write(fn,args,await at(fn,o)):async(fn,args,o)=>c.write(fn,args,await at(fn,o));
@@ -95,7 +95,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   let verP=null;const verifierAddr=()=>verP??=cfg.orderVerifier?Promise.resolve(getAddress(cfg.orderVerifier)):c.read('orders',[]).then(getAddress);
   const orderUsedOnChain=async o=>V51?rd('used',[p.account,o.signer,o.orderId],await verifierAddr()):rd('orderUsed',[o.signer,o.orderId]);
   let feeCache=cfg.fee?{ppm:BigInt(cfg.fee.ppm),recipient:cfg.fee.recipient}:null;
-  /* t1281 (§6#141): the live protocol fee rate, kept for the synchronous limit sums (inside the claim's BEGIN IMMEDIATE). Before the first chain
+  /* t1281 (decision 141): the live protocol fee rate, kept for the synchronous limit sums (inside the claim's BEGIN IMMEDIATE). Before the first chain
      read it is the owner-accepted maximum (Policy.maxFeePpm), i.e. never less than the real fee. */
   let PPM=feeCache?BigInt(feeCache.ppm):null;
   /* (a failed first read is not cached: the next call reads again; the limit sums meanwhile use the owner-accepted maximum) */
@@ -192,7 +192,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       if(await rd('deniedSigner',[p.account,s]))return {tier:'denied',reason:'signer_denied'};
       if(useReg&&((await reg('blocked',[s],false))||(await reg('blocked',[n.payee],false))))return {tier:'denied',reason:'registry_blocked'};
       const sb=await rd('trustedSigner',[p.account,s]);const t=await liveTrust(sb,nowS);
-      // t1214 (§6#100/#102): V5.4 owner signer grant (flag KIPURSE_V54_SIGNER_TRUST, suite v5.4 only; cfg.signerGrant is absent otherwise).
+      // t1214 (decision 100/#102): V5.4 owner signer grant (flag KIPURSE_V54_SIGNER_TRUST, suite v5.4 only; cfg.signerGrant is absent otherwise).
       // Only replaces the two "card" outcomes below; denied signer / registry block above still win. The chain re-checks everything.
       const viaGrant=async(why)=>{if(typeof cfg.signerGrant!=='function')return null;let g=null;try{g=await cfg.signerGrant({account:p.account,signer:s,order:n.signedOrder,nowS});}catch{g=null;}
         if(!g||!g.bytes)return null;n.signedOrder.grant=g.bytes;return {tier:'trusted',merchant:g.merchant,single:min(BigInt(g.single),B('single')),merchantDaily:BigInt(g.daily),viaGrant:true,grantReplaces:why};};
@@ -225,7 +225,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     else try{s=await recoverTypedDataAddress({domain:{...domain,verifyingContract:o.adapter},types:ORDER_TYPES,primaryType:'PaymentOrder',
       message:{payee:o.payee,amount:o.amount,orderId:o.orderId,deadline:o.deadline,chainId:o.chainId,adapter:o.adapter,payer:o.payer??ZERO},signature:o.signature});}catch{}
     if(o.payer&&lc(o.payer)!==lc(ZERO)&&lc(o.payer)!==lc(p.account))return {ok:false,code:'order_for_other_payer',detail:'the merchant signed this order for another wallet'};
-    /* t1240 §6#110 F5 (security review): on V5.4 a signed order must be bound to THIS wallet - an unbound one (payer 0) could be someone else's
+    /* t1240 decision 110 F5 (security review): on V5.4 a signed order must be bound to THIS wallet - an unbound one (payer 0) could be someone else's
        order from a merchant the owner trusts, planted for this wallet's AI to pay */
     /* t1278 S2: on EVERY suite, an AI-supplied order must be bound to this wallet; only server-fetched orders (explicit internal flag) skip this */
     if(!server&&lc(o.payer??ZERO)===lc(ZERO))return {ok:false,code:'order_payer_unbound',detail:'this wallet pays only signed orders bound to it (payer = this wallet)'};
@@ -350,7 +350,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   async function payNormalized(n,{agentId,intentId,repeatKey,ownerApproval,maxTotal,allowSameAmount,verifiedDomain,withdrawalId,allowance,ownerAsk,ctx=null}){
     {const sx=await sanctioned(n.payee,n.signedOrder?.signer);if(sx)return sx;}
     // t621 #6: every AI payment (direct, signed order, x402 after the 402 quote) is checked against the everyday limits right before signing
-    if(agentId!=='owner'&&!withdrawalId&&!(ownerAsk===true&&ownerApproval)){/* t1170u: the owner's Face ID approval of this exact ask (server path only) is not an AI auto payment */await warmFee();let amt;try{amt=typeof n.amount==='bigint'?n.amount:(n.amount!==undefined&&n.amount!==null?BigInt(n.amount):undefined);}catch{amt=undefined;}
+    if(agentId!=='owner'&&!withdrawalId&&!(ownerAsk===true&&ownerApproval)){/* t1170: the owner's Face ID approval of this exact ask (server path only) is not an AI auto payment */await warmFee();let amt;try{amt=typeof n.amount==='bigint'?n.amount:(n.amount!==undefined&&n.amount!==null?BigInt(n.amount):undefined);}catch{amt=undefined;}
       const ed=everydayGate(amt,{scope:{chainId:n.chainId,token:n.token}});if(ed)return capHit(ed);}
     if(n.mode==='signed'&&!n.signedOrder?.signer){n=await verifySigned(n);if(n.ok===false)return {state:'rejected',reason:n.code};}
     const nowS=await chainNow();
@@ -443,7 +443,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       return {state:'retry_later',reason:'chain_read_failed',nothingPaid:true,purchaseKey:key,retryAfterSec:Number(cfg.chainReadRetrySec??30),
         detail:'could not read whether this purchase is already paid on chain; nothing was sent. Retry later with the same idempotencyKey.'};}
     if(usedOnChain){ledger.update(key,agentId,{state:'paid',result:{note:'purchase already used on chain'}});return {state:'already_paid_on_chain',purchaseKey:key};}
-    let oaKey=null;/* t1181u */
+    let oaKey=null;/* t1181 */
     /* t1264 (contract C-1, server side): ONE owner approval = ONE use, for payDirect as well as prepareAuthorization. An approval that already
        opened a reservation (even one later cancelled / reclaimed) or paid is never sent again, on either route. Same key formula for both. */
     const useApproval=deadline=>{if(!isOwnerApproval(ownerApproval?.signature))return null;
@@ -468,7 +468,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         if(want!==got){ledger.update(key,agentId,{state:'failed'});return {state:'rejected',reason:'eip712_domain_mismatch',purchaseKey:key,detail:`merchant says ${n.eip712.name}/${n.eip712.version}`};}
       }
       const call=buildCall(n,id,cnow,ownerApproval,networkFee);const a=call.auth;
-      // t1181u (§6#84): an owner approval prepares at most ONE reservation, also after the owner cancelled it (live V5.2 would allow a re-prepare)
+      // t1181 (decision 84): an owner approval prepares at most ONE reservation, also after the owner cancelled it (live V5.2 would allow a re-prepare)
       {const u=useApproval(a.validBefore);if(u?.refusal)return u.refusal;oaKey=u?.key??null;}
       // t1264: the reservation's digest / auth are known before sending (pure reads), so a late-confirmed prepare can still be closed / reclaimed
       const vault=await rd('vaultAddress',[p.account]);const nonce=id.purchaseKey;
@@ -481,7 +481,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       ledger.update(key,agentId,{state:'prepared',result:{prepareTx:tx.hash,vault,digest,auth,fee:feeFor(n.amount,await fee()).toString(),networkFee:networkFee.toString()}});
       return {state:'prepared',purchaseKey:key,txHash:tx.hash,vault,digest,auth,paymentHeader:header,fee:feeFor(n.amount,await fee()).toString(),networkFee:networkFee.toString(),gasRecovery:nfx.recovery.toString()};
     }catch(e){
-      if(oaKey&&(e?.onChain===true||!ledger.get(key)?.tx_hash))AU.release(oaKey);/* t1181u: reverted on chain / never sent -> no reservation was opened; an unknown outcome keeps it used (fail safe) */
+      if(oaKey&&(e?.onChain===true||!ledger.get(key)?.tx_hash))AU.release(oaKey);/* t1181: reverted on chain / never sent -> no reservation was opened; an unknown outcome keeps it used (fail safe) */
       const booked=bookFailure(e,agentId);
       const rw=ledger.get(key);
       if(rw.tx_hash){for(let i=0;i<10;i++){const u=await usedNow(id.kind,id.purchaseKey,n.signedOrder).catch(()=>false);
@@ -497,7 +497,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         return {state:'unknown',nothingPaid:false,purchaseKey:key,txHash:rw.tx_hash,retryAfterSec:Number(cfg.unknownRetrySec??60),
           detail:'sent; confirmation not seen yet — do not pay again; check status (same idempotencyKey or kipurse_get_purchase)'};}
       ledger.update(key,agentId,{state:'failed',result:{error:errText(e,300),revertedTx:rw.tx_hash??null}});
-      if(e?.code==='daily_ops_used_up'&&!rw.tx_hash)return {...opsCalm(e),purchaseKey:key};/* t1185u §6#85: nothing was sent; the same request can be retried after the reset */
+      if(e?.code==='daily_ops_used_up'&&!rw.tx_hash)return {...opsCalm(e),purchaseKey:key};/* t1185 decision 85: nothing was sent; the same request can be retried after the reset */
       // a definitive on-chain revert left the purchase unused: let a later retry claim it again (its gas is booked above)
       if(booked)ledger.db.prepare(`UPDATE purchases SET tx_hash=NULL WHERE purchase_key=?`).run(key);
       return {state:'failed',purchaseKey:key,error:errText(e,300),txHash:rw.tx_hash,
@@ -521,7 +521,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       if(x402&&pd.x402)ledger.update(row.purchase_key,row.claimed_by,{state:'prepared',result:{prepareTx:row.tx_hash,...pd.x402,networkFee:pd.networkFee??null,lateConfirm:true}});
       else ledger.update(row.purchase_key,row.claimed_by,{state:'paid',result:{txHash:row.tx_hash,note:'confirmed by reconcile (send outcome was lost)',networkFee:pd.networkFee??null}});
       ledger.event('reconcile',row.purchase_key,'reconciled',{to:x402&&pd.x402?'prepared':'paid'});return x402&&pd.x402?'prepared':'paid';}
-    const rc=await receiptOf(row.tx_hash);const sentAt=Number(pd.at??row.updated_at??0);/* t1268 (§6#133): a vault userOp stays valid until the end of its UTC day (validateUserOp validUntil) -> never call it failed before that day is over (+10 min) */const old=Date.now()>Math.max(sentAt+RECON.failAfterMs,RECON.dayWindow?(Math.floor(sentAt/86400e3)+1)*86400e3+10*60e3:0);
+    const rc=await receiptOf(row.tx_hash);const sentAt=Number(pd.at??row.updated_at??0);/* t1268 (decision 133): a vault userOp stays valid until the end of its UTC day (validateUserOp validUntil) -> never call it failed before that day is over (+10 min) */const old=Date.now()>Math.max(sentAt+RECON.failAfterMs,RECON.dayWindow?(Math.floor(sentAt/86400e3)+1)*86400e3+10*60e3:0);
     if(rc?.status==='reverted'||(!rc&&old)){ledger.update(row.purchase_key,row.claimed_by,{state:'failed',result:{error:rc?'reverted (reconcile)':'not confirmed before every deadline passed (reconcile)',revertedTx:row.tx_hash}});
       ledger.db.prepare(`UPDATE purchases SET tx_hash=NULL WHERE purchase_key=? AND state='failed'`).run(row.purchase_key);ledger.event('reconcile',row.purchase_key,'reconciled',{to:'failed'});return 'failed';}
     return 'submitted';}
@@ -538,7 +538,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(r.state==='failed')return {state:'failed',purchaseKey:key,nothingPaid:!r.tx_hash,reason:res?.error?String(res.error).slice(0,80):'payment_failed',reconciled:true};
     if(r.state==='submitted')return {state:'unknown',purchaseKey:key,txHash:r.tx_hash,nothingPaid:false,detail:'sent; confirmation not seen yet — do not pay again; check status'};
     return null;}
-  /** t1185u (§6#85): the wallet's daily on-chain operations are used up. Calm, not an error: nothing paid, resets at 00:00 UTC, the owner can raise it. */
+  /** t1185 (decision 85): the wallet's daily on-chain operations are used up. Calm, not an error: nothing paid, resets at 00:00 UTC, the owner can raise it. */
   function opsCalm(e){const at=e.resetsAt??null;let ct='';try{ct=new Date(at).toLocaleString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit',month:'short',day:'numeric',timeZoneName:'short'});}catch{}
     return {state:'rejected',reason:'DAILY_OPERATIONS_USED_UP',decision:'wait',nothingPaid:true,retryable:true,retryAfter:at,opsPerDayCount:e.cap??null,opsUsedTodayCount:e.used??null,
       fix:`Nothing was paid. This wallet's on-chain operations for today (${e.cap??'?'}) are used up. They reset automatically at 00:00 UTC${ct?` (${ct})`:''}; then retry the same order with a NEW Idempotency-Key (it is still paid only once), or the owner can raise the daily number in the Kipurse app (Wallet safety floor). Do not switch networks or wallets.`,
@@ -581,7 +581,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     try{add(cfg.ownerGuard?.limits()?.withdrawalAddress,'withdrawal','own');}catch{}
     add(cfg.owner,'owner','own');return K;}
   function inboundTransfers(){try{return (cfg.ownerGuard?.deposits()??[]).map(d=>({from:d.from,amount:d.amount,usdc:d.status!=='wrong_token'}));}catch{return [];}}
-  /* t1281 (§6#141): amount + protocol fee + network fee per payment (spend-cost.mjs), like the on-chain daily / term caps */
+  /* t1281 (decision 141): amount + protocol fee + network fee per payment (spend-cost.mjs), like the on-chain daily / term caps */
   const sumTier=(tiers,ms=86400000)=>{try{const q=`SELECT o.amount,p.result,p.state FROM purchase_order o JOIN purchases p ON p.purchase_key=o.purchase_key WHERE o.tier IN (${tiers.map(()=>'?').join(',')}) AND o.created_at>=? AND p.state IN ('claimed','submitted','prepared','paid')`;
     const cp=costParams();return ledger.db.prepare(q).all(...tiers,Date.now()-ms).reduce((a,x)=>a+costOf(x,cp),0n);}catch(e){return missingOk(e);}};
   const trialSpent24h=()=>sumTier(['stranger']);
@@ -622,7 +622,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       say_to_user:day?`没有付款：今天 AI 不经你确认能花的总额（所有用途合计 ${fmtU(lim)} USDC）已用完。需要的话在手机上用 Face ID 批准这一笔。/ Not paid: today's total the AI may spend without asking (${fmtU(lim)} USDC, all purposes) is used up.`:`没有付款：近 30 天 AI 不经你确认能花的总额（${fmtU(limM)} USDC）已用完。/ Not paid: the 30-day total the AI may spend without asking is used up.`};}
   /* ---------------- t1278 S4: re-check at claim time (synchronous; runs inside the ledger's BEGIN IMMEDIATE) ---------------- */
   const holdsPending=agent=>{try{const cp=costParams();return ledger.db.prepare(`SELECT agent_id,amount FROM payment_hold WHERE state='pending'`).all().filter(h=>agent===undefined||h.agent_id===agent).reduce((a,h)=>a+costOf({amount:h.amount??0,state:'hold'},cp),0n);}catch(e){return missingOk(e);}};/* t1281: amount + fee */
-  /* t1280 (§6#140, owner: duplicate-purchase guard in the FREE version): an AI direct payment to the same payee for the same amount inside
+  /* t1280 (decision 140, owner: duplicate-purchase guard in the FREE version): an AI direct payment to the same payee for the same amount inside
      10 minutes under a different order key is held for the owner (push card via the owner-ask flow); checked inside the claim's BEGIN IMMEDIATE
      so two simultaneous copies never both pass. Not for x402 pay-per-call (repeated equal amounts are normal) or merchant-signed orders. The
      AI's allowSameAmount never skips it; the owner's own payments and an owner-approved ask are not guarded. */
@@ -634,7 +634,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       detail:'the same amount to the same payee was already started or paid in the last 10 minutes under another order; nothing was sent',
       fix:'Nothing was paid. If the user really wants a second one, the owner approves it on the phone (kipurse_buy / kipurse_pay with an idempotencyKey sends the card). Do not change the amount to get around this.',
       say_to_user:'没有付款：10 分钟内已经给同一个收款方付过同样金额，像是重复购买。如果确实要再买一次，请在手机上确认。/ Not paid: the same amount went to the same payee in the last 10 minutes, so this looks like a duplicate. Confirm on your phone if you really want a second one.'};}
-  /* t1281 (§6#141): authoritative: this payment counts amount + fee + its quoted network fee (single caps: the amount only) */
+  /* t1281 (decision 141): authoritative: this payment counts amount + fee + its quoted network fee (single caps: the amount only) */
   function recheckInTx({amount,agentId,scope,ctx,networkFee}){try{const amt=BigInt(amount);const nf=networkFee===undefined||networkFee===null?B('maxNetworkFee'):BigInt(networkFee);
       if(cfg.everydayCheck){const r=cfg.everydayCheck({amount:amt,cost:costIn(amt,nf),spent24h:everydaySpent()+holdsPending(),spentTerm:ledger._committed(null),...(scope?{chainId:scope.chainId,token:scope.token}:{})})??null;if(r)return r;}
       {const ac=MD.agentCheck(agentId,amt,scope,holdsPending(agentId),{networkFee:nf});if(ac)return ac;}
@@ -660,13 +660,13 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const everydaySpent=()=>outflow24h()+floatCommitted24h();
   /** Cumulative recorded payment amount. null means the total cannot be checked, so the caller must refuse. */
   const spentCumulative=()=>{try{return ledger.committedSpend();}catch{return null;}};
-  /** t609u Layer 2 + t621 #6 + t1076 total. Fail CLOSED. allowUnknown: pre-checks before the amount is known. */
+  /** t609 Layer 2 + t621 #6 + t1076 total. Fail CLOSED. allowUnknown: pre-checks before the amount is known. */
   function everydayGate(amount,{allowUnknown=false,scope}={}){if(!cfg.everydayCheck)return null;
     if(amount===undefined||amount===null){if(allowUnknown)return null;return {state:'rejected',reason:'EVERYDAY_AMOUNT_UNKNOWN',nothingPaid:true,fix:'The payment amount is unknown, so the owner’s everyday limits cannot be checked. Nothing was paid.',say_to_user:'没有付款：不知道这笔要付多少，没法核对你的日常额度。/ Not paid: the amount is unknown, so your everyday limits can’t be checked.'};}
     const spentTerm=spentCumulative();if(spentTerm==null)return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The cumulative total could not be read. Nothing was paid.',say_to_user:'没有付款：暂时核对不了总额。/ Not paid: the total could not be checked.'};
     try{return cfg.everydayCheck({amount:BigInt(amount),cost:costIn(BigInt(amount)),spent24h:everydaySpent(),spentTerm,...(scope?{chainId:scope.chainId,token:scope.token}:{})})??null;}/* t1281: amount + fee (network fee added at claim time) */catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit check failed; nothing was paid. Retry later.',say_to_user:'没有付款：暂时核对不了日常额度，请稍后再试。/ Not paid: your everyday limits could not be checked right now.'};}}
   async function anomalyBefore({payee,amount,tier}){const t=Date.now();
-    {const ed=everydayGate(amount,{allowUnknown:true});if(ed)return ed;}/* t609u Layer 2: everyday limits, before signing */for(const [k,ts] of AN.newPayees)if(t-ts>3600e3)AN.newPayees.delete(k);
+    {const ed=everydayGate(amount,{allowUnknown:true});if(ed)return ed;}/* t609 Layer 2: everyday limits, before signing */for(const [k,ts] of AN.newPayees)if(t-ts>3600e3)AN.newPayees.delete(k);
     if(tier!=='trust_list'&&tier!=='verified'&&payee){const k=lc(payee);if(!AN.newPayees.has(k)){AN.newPayees.set(k,t);if(AN.newPayees.size>=TL.newPayees1h){AN.newPayees.clear();return anomaly('too_many_new_payees');}}}
     if(amount!==undefined){try{const bal=BigInt(await rd('balanceOf',[p.account],getAddress(cfg.token)));const out=outflow24h();if((out+costIn(amount))*100n>(bal+out)*BigInt(TL.balanceOutPct))return anomaly('large_outflow');}catch{}}
     return null;}
@@ -711,7 +711,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     fix:'This payee was not established by the owner (AI checks, web pages, documents and AI payment history never count). Use kipurse_buy (it sends the owner ONE Face ID approval; approving remembers this payee) or kipurse_request_trust, then retry with the SAME idempotencyKey. Never try another address.',
     say_to_user:'还没付款：这是新收款方（AI 可能被骗）。已发到你手机，用 Face ID 批准一次，以后就记住它。/ Not paid yet: new payee (the AI could be tricked). Approve once on your phone with Face ID; it will be remembered.'});
   /** One gate for every agent payment (direct, x402): blacklist / lookalike / dust -> refuse; tier limits; anomaly; hold decision. */
-  /** t1181u: refuse (nothing paid) a payment whose network / token is not the scope of the wallet and of the saved everyday limits. */
+  /** t1181: refuse (nothing paid) a payment whose network / token is not the scope of the wallet and of the saved everyday limits. */
   function scopeGate(scope){if(!scope||!ENGINE_SCOPE)return null;
     const sx=scopeCheck('wallet limit',ENGINE_SCOPE,scope,ENGINE_SCOPE);if(sx)return sx;
     let es=null;try{es=cfg.everydayScope?.()??null;}catch{return {state:'rejected',reason:'EVERYDAY_CHECK_FAILED',nothingPaid:true,fix:'The everyday-limit scope could not be read. Nothing was paid.'};}
@@ -725,7 +725,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
         say_to_user:v.explain_zh+' / '+v.explain_en,nothingPaid:true,
         fix:v.required_action==='refuse'?'Do not pay this address.':'Do NOT retry with another address you found yourself. Tell the user it is NOT verified, then call kipurse_request_trust for this exact payee so the owner can approve it on the phone with Face ID; after approval, retry kipurse_pay.'}};}
     const tier=v.payee_tier;const extra={payee:v.address,payeeGroups:v.groups,verified:v.verified,addressStatus:v.status,payee_tier:tier,payee_tier_text:TIER_SAY[tier],...(amount!==undefined?{amountAtomic:String(amount)}:{})};
-    {const ac=MD.agentCheck(agentId,amount,scope);if(ac){const ownerEst=tier==='trust_list'||tier==='verified'||tier==='owner_direct';/* t1170u: a new payee over a cap becomes an owner ask, not a refusal -> not counted for the repeated-cap-hit pause */
+    {const ac=MD.agentCheck(agentId,amount,scope);if(ac){const ownerEst=tier==='trust_list'||tier==='verified'||tier==='owner_direct';/* t1170: a new payee over a cap becomes an owner ask, not a refusal -> not counted for the repeated-cap-hit pause */
       return {reject:ownerEst||ac.reason==='AGENT_STOPPED'?capHit({...ac,...extra}):{...ac,...extra,askOwnerEligible:true}};}}
     // OWNER ALLOWANCE (purpose mandate / recurring / one-off): inside it the AI pays without asking, also a new merchant; checks above still applied
     // NO-AI-TRUST (owner 2026-10-26): the AI alone may only pay payees the OWNER established (trust list, owner-approved + remembered,
@@ -750,9 +750,9 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const hold=mode!=='x402'&&amount!==undefined&&amount>=TL.holdAbove&&tier!=='trust_list';
     if(mode==='x402'&&amount!==undefined&&amount>=TL.holdAbove&&tier!=='trust_list')return {reject:capHit({state:'rejected',reason:'X402_OVER_HOLD_LIMIT',nothingPaid:true,capHit:true,...extra,fix:'Web (x402) payments of 500 USDC or more need a payee on the owner trust list (kipurse_request_trust -> owner Face ID).',say_to_user:'没有付款：网页付款达到 500 USDC 需要收款方在你的信任名单里。/ Not paid: web payments of 500 USDC or more need a trusted payee.'})};
     return {v,tier,extra,hold};}
-  const payGuarded=async(o0)=>{let o=o0;await warmFee();/* t1281: the live fee rate for the limit sums */if(o&&Object.prototype.hasOwnProperty.call(o,'ownerAsk')&&o[OWNER_OK]!==true){const {ownerAsk:_x,...rest}=o;o=rest;}/* t1170u: ownerAsk only via the server path */
+  const payGuarded=async(o0)=>{let o=o0;await warmFee();/* t1281: the live fee rate for the limit sums */if(o&&Object.prototype.hasOwnProperty.call(o,'ownerAsk')&&o[OWNER_OK]!==true){const {ownerAsk:_x,...rest}=o;o=rest;}/* t1170: ownerAsk only via the server path */
     if(o.withdrawalId||o.agentId==='owner')return payInner(o);/* owner Siri/phone pay = already Face ID approved by the owner */
-    if(o[OWNER_OK]===true&&o.ownerApproval){/* t1170u: the owner tapped + Face ID on this exact request. AI policy gates (new payee, AI caps, everyday, holds) do not
+    if(o[OWNER_OK]===true&&o.ownerApproval){/* t1170: the owner tapped + Face ID on this exact request. AI policy gates (new payee, AI caps, everyday, holds) do not
       apply; sanctions (payNormalized), scam blacklist / lookalike / dust refusals still do; the wallet limits and the on-chain approval check stay the authority. */
       let n;try{n=await resolveN(o.request);}catch{n=null;}if(!n||n.ok===false||n.mode!=='direct'||!n.payee)return {state:'rejected',reason:'owner_ask_not_direct',nothingPaid:true};
       const v=await verifyPayee({address:n.payee});if(!v.ok)return {state:'rejected',reason:'retry_later',nothingPaid:true};if(v.required_action==='refuse')return {state:'rejected',reason:v.code??'refused',nothingPaid:true,say_to_user:(v.explain_zh??'')+' / '+(v.explain_en??'')};
@@ -773,7 +773,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       return r&&typeof r==='object'&&!Array.isArray(r)?{...r,order_recorded:!!r.purchaseKey}:r;}
     /* t1278 S3: an x402 (eip3009) request handed to pay / payAny goes through the SAME gate as paidFetch (new-payee Face ID, per-AI caps, allowances,
        unattended total, anomaly, >= 500 USDC trust-list rule) and is recorded with its tier, so it counts toward the everyday 24h sums */
-    if(n&&n.ok!==false&&n.mode==='eip3009'&&n.payee){const host=undefined;/* t1280 M1 (§6#140): this 402 object came from the AI's own JSON; its resource URL is not a site the server visited, so it never matches a host-scoped allowance (paidFetch uses the URL the server fetched) */
+    if(n&&n.ok!==false&&n.mode==='eip3009'&&n.payee){const host=undefined;/* t1280 M1 (decision 140): this 402 object came from the AI's own JSON; its resource URL is not a site the server visited, so it never matches a host-scoped allowance (paidFetch uses the URL the server fetched) */
       const sc={chainId:n.chainId,token:n.token};const g=await gate({payee:n.payee,amount,agentId:o.agentId,source:o.addressSource,mode:'x402',purpose,host,scope:sc});if(g.reject){const {guardRefusal,...rj}=g.reject;return rj;}
       const tier=g.tier??'x402';const ord=g.mandate?{...(order??{}),purpose:MD.classifyCategory({purpose:o.purpose,item:order?.item,merchant:order?.merchant,host}),mandateId:g.mandate.id}:order;
       const ctx={tier,payee:n.payee,host,purpose,status:g.v?.status??null,order:ord,source:o.addressSource,mandate:g.mandate?{id:g.mandate.id,kind:g.mandate.kind}:null};
@@ -828,7 +828,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   /** Merchant order status (read-only GET on the status URL the merchant's own order response gave; https only; credential for that host only, never echoed). */
   async function merchantStatus(url,{credential}={}){let u;try{u=new URL(String(url));}catch{return {ok:false,error:'bad_status_url'};}
     const local=['127.0.0.1','localhost'].includes(u.hostname);if(u.protocol!=='https:'&&!(local&&cfg.allowHttpMerchantForTests))return {ok:false,error:'status_url_not_https'};
-    // t1204 §6#93: the AI's own order credential for this call only (memory, never stored); owner config stays a fallback
+    // t1204 decision 93: the AI's own order credential for this call only (memory, never stored); owner config stays a fallback
     let auth=credential?{Authorization:'Bearer '+String(credential)}:null;if(!auth)try{auth=authHeaderFor(cfg.signedOrderAuth,u.toString().replace(/^http:/,'https:'));}catch{}
     if(!auth&&local&&cfg.allowHttpMerchantForTests&&cfg.testBearerForLocal)auth={Authorization:'Bearer '+(typeof cfg.testBearerForLocal==='function'?cfg.testBearerForLocal():cfg.testBearerForLocal)};
     try{const r=await mfetch(cfg)(u.toString(),{headers:{accept:'application/json',...(auth??{})},redirect:'error',signal:AbortSignal.timeout(cfg.signedOrderTimeoutMs??15000)});
@@ -842,7 +842,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     return {...rest,state:'paused_reservation_open',reason:'wallet_paused_for_safety',reservationOpen:true,nothingPaid:false,withheld:true,
       fix:'AI payments are paused for safety. Kipurse does not hand out the open reservation; it expires and is reclaimed. Do not retry.',/* t1279 R12: no in-app cancel exists yet -> do not promise one */
       say_to_user:'AI 付款已暂停：这笔已预留，启付不会交给商家，到期后自动退回。/ AI payments are paused: Kipurse will not hand this reserved payment to the merchant; it is returned when it expires.'};};
-  /* t1279 R2 (§6#139): while paused an AI must not read the prepared x402 authorization back from the ledger (get_purchase / GET /v1/purchases/:key) */
+  /* t1279 R2 (decision 139): while paused an AI must not read the prepared x402 authorization back from the ledger (get_purchase / GET /v1/purchases/:key) */
   const purchaseForAI=key=>{const r=ledger.get(key);if(!r||typeof r!=='object'||!isPaused())return r;const strip=o=>{if(!o||typeof o!=='object')return o;const {auth:_a,digest:_d,paymentHeader:_h,...rest}=o;return rest;};let res=r.result;if(typeof res==='string'){try{res=JSON.parse(res);}catch{res=null;}}if(res&&typeof res==='object'){res=strip(res);if(res.pending&&typeof res.pending==='object'){const {x402:_x,...p}=res.pending;res={...res,pending:p};}}return {...strip(r),...(res!==undefined?{result:res}:{}),withheld:true};};
   /** t1278 C2: open x402 reservations this server prepared (ledger view, no chain read): what the app offers to cancel after a stop */
   const openReservations=()=>{const out=[];try{for(const row of ledger.db.prepare(`SELECT purchase_key,payee,amount,result FROM purchases WHERE state IN ('prepared','submitted')`).all()){let res=null;try{res=JSON.parse(row.result??'null');}catch{res=null;}/* t1279 R8: a prepare tx still confirming is open too */
@@ -882,7 +882,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const local=['127.0.0.1','localhost'].includes(u.hostname);if(u.protocol!=='https:'&&!(local&&cfg.allowHttpMerchantForTests))return {state:'rejected',reason:'signed_order_url_not_https'};
     const ver=await verifierAddr();u.searchParams.set('signedOrder','1');u.searchParams.set('payer',p.account);u.searchParams.set('chainId',String(cfg.chainId));u.searchParams.set('verifier',ver);
     // merchant credential (e.g. ExampleShop listing ownerToken): https + own host only; never echoed (errors are redacted)
-    // t1204 §6#93: the credential the AI put in this order (held in memory for this one call only, keyed by the exact URL) comes first
+    // t1204 decision 93: the credential the AI put in this order (held in memory for this one call only, keyed by the exact URL) comes first
     const aiCred=soCred.get(String(url0));let auth=aiCred?{Authorization:'Bearer '+aiCred}:null;
     if(!auth)try{auth=authHeaderFor(cfg.signedOrderAuth,u.toString());}catch{return {state:'rejected',reason:'merchant_credential_unavailable',detail:'the merchant needs its order credential for the signed order; put it in orderParams (from the user or the merchant)'};}
     if(!auth&&(cfg.signedOrderAuth??[]).some(r=>{const d=String(r.host).toLowerCase();return u.hostname===d||u.hostname.endsWith('.'+d);})&&!(local&&cfg.allowHttpMerchantForTests))return {state:'rejected',reason:'merchant_credential_unavailable'};
@@ -909,7 +909,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   const say2=(zh,en)=>zh+' / '+en;
   async function discover(origin){const k=String(origin);const c=discCache.get(k);if(c&&c.t>Date.now()-10*60e3)return c.d;
     const d=await discoverMerchant(origin,{fetch:mfetch(cfg),chainId:cfg.chainId,usdc:USDC_OF[cfg.chainId],allowHttp:!!cfg.allowHttpMerchantForTests});discCache.set(k,{t:Date.now(),d});return d;}
-  /** t1240 §6#110: check a merchant's signed order DTO (UsdcSignedOrder: payee, amountAtomic, orderId, orderDeadline, chainId, adapter, payer, signer,
+  /** t1240 decision 110: check a merchant's signed order DTO (UsdcSignedOrder: payee, amountAtomic, orderId, orderDeadline, chainId, adapter, payer, signer,
    *  signature) against the order response v and the signer published on its origin d0. null = not usable (the normal path is taken). */
   async function signed54(so,v,d0){
     const A=k=>/^0x[0-9a-fA-F]{40}$/.test(String(so?.[k]??''));if(!A('payee')||!A('adapter')||!A('signer')||!A('payer'))return null;
@@ -922,13 +922,13 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(v.payment.expiresAt!=null&&o.deadline>BigInt(v.payment.expiresAt))return null;if(o.deadline<=nowS+60n)return null;
     return {signer:getAddress(o.signer),name:String(d0.host).toLowerCase(),request:req};}
   /* =================================================================================================================================
-   * t1241 (handbook §6#111, owner 2026-11-21 ~18:05 CT): LAYERED MERCHANT TRUST (叠加信任). Merchants change NOTHING for Kipurse.
+   * t1241 (decision 111, owner 2026-11-21 ~18:05 CT): LAYERED MERCHANT TRUST ([zh]). Merchants change NOTHING for Kipurse.
    * Only with V5.4 + the owner signer grant hook (cfg.signerGrant) + an attestor (cfg.attestor; the separate attestor service in prod).
-   * Auto-pay of a merchant order needs ALL of: ① the owner's Face ID trust of <domain> whose ONE order signer is attestor(<domain>)
-   * (V5.4 grant); ② deposit address / amount / expiry ONLY from Kipurse's own create-order call on the merchant's https origin;
-   * ③ a valid merchant signature from the signer it publishes on its own origin, when it publishes one (else "unsigned merchant":
-   * half the trust caps per payment and per day); ④ a fresh deposit address (no USDC, no tx), not sanctioned / scam / look-alike;
-   * ⑤ the attestor's own independent re-check + signature (2-of-2); ⑥ the on-chain caps (paySignedTrusted); ⑦ after paying, the merchant
+   * Auto-pay of a merchant order needs ALL of: (1) the owner's Face ID trust of <domain> whose ONE order signer is attestor(<domain>)
+   * (V5.4 grant); (2) deposit address / amount / expiry ONLY from Kipurse's own create-order call on the merchant's https origin;
+   * (3) a valid merchant signature from the signer it publishes on its own origin, when it publishes one (else "unsigned merchant":
+   * half the trust caps per payment and per day); (4) a fresh deposit address (no USDC, no tx), not sanctioned / scam / look-alike;
+   * (5) the attestor's own independent re-check + signature (2-of-2); (6) the on-chain caps (paySignedTrusted); (7) after paying, the merchant
    * must confirm within the window, else the domain is paused for auto-pay (attestor refuses) and the owner is told.
    * Anything not met: the existing path (payAny -> owner ask), whose card then offers "trust <domain>" (signer = attestor(<domain>)).
    * ================================================================================================================================= */
@@ -947,7 +947,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   async function resumeDomain(domain){const d=lc(domain);try{ledger.db.prepare(`DELETE FROM layered_domain WHERE domain=?`).run(d);}catch{}try{await cfg.attestor?.resume?.(d);}catch{}try{cfg.obs?.log?.('merchant_auto_pay_resumed',{domain:d});}catch{}return {ok:true,domain:d,paused:false};}
   const RECEIVED=/^(paid|payment_received|received|processing|succeeded|fulfilled|complete|completed|confirmed|done|success|delivered|active|live|placed|won|ranked)$/i;
   const NOT_OK=/^(manual_review|needs_review|review|underpaid|overpaid|mismatch)$/i;
-  /** ⑦ one look at the merchant's order status of an auto-paid order: confirmed -> done; failed / review / window over -> pause the domain */
+  /** (7) one look at the merchant's order status of an auto-paid order: confirmed -> done; failed / review / window over -> pause the domain */
   async function checkConfirm(key){lpTimers.delete(key);let row=null;try{row=ledger.db.prepare(`SELECT * FROM layered_pay WHERE purchase_key=?`).get(String(key));}catch{}if(!row||row.state!=='watching')return row?.state??null;
     let st=null;if(row.status_url){const m=await merchantStatus(row.status_url,{credential:lpCred.get(key)}).catch(()=>null);if(m?.ok)st=readMerchantStatus(m.body);}
     const ms=String(st?.merchantStatus??'');const set=(s)=>{try{ledger.db.prepare(`UPDATE layered_pay SET state=?,checked_at=?,merchant_status=? WHERE purchase_key=?`).run(s,Date.now(),ms.slice(0,40)||null,String(key));}catch{}};
@@ -967,7 +967,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
   async function layered(order,v,d0,o,{cred}){
     const domain=lc(v.merchant);if(!validDomain(domain,{allowLocal:!!cfg.allowHttpMerchantForTests}))return null;
     const nowS=Number(await chainNow());const log=(k,x)=>{try{cfg.obs?.log?.(k,{domain,...x});}catch{}};
-    // ③ evidence: a merchant that publishes a signer must sign THIS payee + amount (any declared EIP-712 form, any verifying contract)
+    // (3) evidence: a merchant that publishes a signer must sign THIS payee + amount (any declared EIP-712 form, any verifying contract)
     let merchantSigned=false;
     if(d0.expectedSigner){const decl=(d0.routes??[d0]).map(x=>x.signedOrder).find(Boolean)??null;
       const ev=await verifyMerchantSignature({so:order?.signedOrder,expectedSigner:d0.expectedSigner,payee:v.payment.to,amountAtomic:v.payment.amountAtomic,chainId:cfg.chainId,declared:decl,nowS,wallet:p.account});
@@ -985,7 +985,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(!g)return {...base,why:'no_owner_grant'};
     {const lk=strip(signedPurchaseKeyV5(g.merchant,attestorOrderId(domain,v.payment.id)));const prev=ledger.get(lk);
       if(prev&&['claimed','submitted','prepared','paid'].includes(prev.state))return {...base,result:{state:prev.state==='paid'?'already_paid':'in_progress',purchaseKey:lk,txHash:prev.tx_hash??null,nothingPaidNow:true}};}
-    // ④ the deposit address: sanctions / scam list / look-alike / dust (verifyPayee) and FRESH (no USDC, no transaction yet)
+    // (4) the deposit address: sanctions / scam list / look-alike / dust (verifyPayee) and FRESH (no USDC, no transaction yet)
     {const sx=await sanctioned(v.payment.to);if(sx)return {...base,askSigner:null,why:'sanctioned'};}
     const vp=await verifyPayee({address:v.payment.to});if(!vp.ok)return {...base,why:'payee_check_unavailable'};
     if(vp.required_action!=='none'){log('layered_payee_refused',{status:vp.status});return {...base,askSigner:null,why:'payee_'+String(vp.code??vp.status)};}
@@ -998,7 +998,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       if(spent+amt+fe>BigInt(g.daily)/2n)return {...base,why:'over_unsigned_half_daily'};}
     const ik=o.idempotencyKey?String(o.idempotencyKey).slice(0,120)+':att':null;if(!ik)return {...base,why:'idempotency_key_required'};
     {const rr=replayOf(ik);let x=null;try{x=rr?JSON.parse(rr.response):null;}catch{x=null;}if(x&&x.state==='rejected'&&x.nothingPaid!==false&&!x.txHash)return {...base,why:'pay_'+String(x.reason??'rejected')};if(x)return {...base,result:x,extra:{layered:true,replay:true}};}/* exactly-once: the stored answer of this derived key */
-    // ⑤ the attestor's own independent check + signature (2-of-2); the gateway holds no attestor key
+    // (5) the attestor's own independent check + signature (2-of-2); the gateway holds no attestor key
     let at=null;try{at=await cfg.attestor.attest({domain,ref:v.payment.id,purchaseId:v.purchaseId??undefined,statusUrl:v.statusUrl,payee:v.payment.to,amountAtomic:String(v.payment.amountAtomic),expiresAt:v.payment.expiresAt,
       payer:p.account,chainId:cfg.chainId,adapter:cfg.adapter,...(cred?{credential:String(cred)}:{}),...(merchantSigned?{merchantSignedOrder:order.signedOrder}:{})});}catch{at=null;}
     if(!at?.ok){log('layered_attestor_refused',{code:String(at?.code??'unavailable').slice(0,40)});return {...base,why:'attestor_'+String(at?.code??'unavailable')};}
@@ -1019,7 +1019,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       if(r.state==='retry_later')return {...base,result:r};return {...base,why:'pay_'+String(r.reason??'rejected')};}
     return {...base,result:r,extra:{layered:true,attested:true,merchantSigned,trustDomain:domain}};}
   const payMerchantOrder=async({origin,orderParams={},merchantPurchaseId,signedOrder,...o})=>{
-    // t1204 §6#93 (owner: AI fills the order content, Kipurse only pays): the AI sends the merchant's documented order fields (incl. a
+    // t1204 decision 93 (owner: AI fills the order content, Kipurse only pays): the AI sends the merchant's documented order fields (incl. a
     // listing/management token the user gave it); Kipurse forwards them as-is to that merchant's https origin only, never stores, logs
     // or echoes them, and still decides payee/amount/expiry only from the merchant's order response + the owner's limits.
     const P=orderParams&&typeof orderParams==='object'&&!Array.isArray(orderParams)?{...orderParams}:{};
@@ -1040,10 +1040,10 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const cred=aiCred??tok;const f=mfetch(cfg);
     const done=(r,v,extra={})=>{const out=deepRedact({...r,...extra,merchant:v.merchant,merchantPurchaseId,statusUrl:v.statusUrl,discovered:{section:d.section,create:d.create.path,status:d.status?.path??null,sources:d.sources}},secrets);
       if(cred)Object.defineProperty(out,'_merchantAuth',{value:cred,enumerable:false});/* in-memory only, for the follow-up status poll of THIS call */return out;};
-    /* t1240 §6#110: V5.4 + owner signer grants on: ask the merchant for an order signed for THIS adapter and bound to THIS wallet, only when its
+    /* t1240 decision 110: V5.4 + owner signer grants on: ask the merchant for an order signed for THIS adapter and bound to THIS wallet, only when its
        public capabilities say it signs for this adapter, names the payer field and publish a signer on its own origin (else: exactly as before) */
     const so54=!V51&&typeof cfg.signerGrant==='function'&&!!d.signedOrder?.available&&!!d.signedOrder.optIn&&!!d.signedOrder.payerParam&&!!d0.expectedSigner&&lc(d.signedOrder.verifyingContract)===lc(cfg.adapter);
-    /* t1241 §6#111 ③: layered mode asks a merchant that publishes its own order signer and documents the signedOrder opt-in for its usual signed
+    /* t1241 decision 111 (3): layered mode asks a merchant that publishes its own order signer and documents the signedOrder opt-in for its usual signed
        order (no payer, no Kipurse contract: the merchant changes nothing); the signature is evidence only */
     const laySo=LAY&&!so54&&!!d.signedOrder?.available&&!!d.signedOrder.optIn&&!!d0.expectedSigner;
     let order;try{const rq=buildCreateOrder(d,P,{credential:aiCred?null:tok,purchaseId:merchantPurchaseId,signedOrder:!!(signedOrder&&V51)||so54||laySo,payer:so54?p.account:null});
@@ -1056,20 +1056,20 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const att=V51&&!o.noAttest?(cfg.attestors?.[lc(v.merchant)]??null):null; // ONE attestor key per trusted domain (a signer binds to exactly one merchant on chain)
     if(att){const so=await attestOrder(att,v,{payer:p.account,chainId:cfg.chainId,verifier:await verifierAddr(),types:ORDER_TYPES51,domain:orderDomain51});
       const r=await pay({...o,request:serverReq(so)});return done(r,v,{attested:true});}
-    /* t1240 §6#110: a merchant-signed order (checked here: signature, published signer, this chain / adapter / wallet, same payee / amount /
+    /* t1240 decision 110: a merchant-signed order (checked here: signature, published signer, this chain / adapter / wallet, same payee / amount /
        expiry as the order response). With the owner's grant for that signer -> pay it on the signed route (paySignedTrusted; the chain re-checks
        all of it). Without a grant -> unchanged path below; the owner ask then carries the signer so ONE "trust" covers this merchant's later orders. */
     let sv=null;if(so54&&order?.signedOrder&&order.signedOrder.available!==false){try{sv=await signed54(order.signedOrder,v,d0);}catch{sv=null;}}
     if(sv){let g=null;try{g=await cfg.signerGrant({account:p.account,signer:sv.signer,order:{payer:p.account},nowS:Number(await chainNow())});}catch{g=null;}
       if(g){const r=await pay({...o,request:sv.request,merchant:v.merchant,verifiedDomain:v.merchant});
         if(!(r?.state==='rejected'&&r?.nothingPaid!==false))return done(r,v,{signedTrusted:true});}}
-    /* t1241 §6#111: layered merchant trust (V5.4 + grant hook + attestor only; a merchant-signed order for our adapter above keeps its own path) */
+    /* t1241 decision 111: layered merchant trust (V5.4 + grant hook + attestor only; a merchant-signed order for our adapter above keeps its own path) */
     let lay=null;if(LAY&&!(sv&&cfg.signerGrant)){try{lay=await layered(order,v,d0,o,{cred});}catch(e){lay=null;try{cfg.obs?.log?.('layered_error',{e:String(e?.message??e).slice(0,80)});}catch{}}
       if(lay?.result)return done(lay.result,v,lay.extra??{});}
     const soUrl=v.signedOrderOffered&&v.statusUrl?v.statusUrl:o.signedOrderUrl;
     if(soUrl&&aiCred)soCred.set(String(soUrl),aiCred);
     try{const r=await payAny({...o,verifiedDomain:v.merchant,payment:v.payment,merchant:v.merchant,signedOrderUrl:soUrl});const out=done(r,v);
-      /* t1212 §6#97 (owner: 「改，新收款方一次 Face ID 批准就付这一笔」): a refused order payment carries, in memory only, exactly what the server
+      /* t1212 decision 97 (owner: "[zh]"): a refused order payment carries, in memory only, exactly what the server
          would pay after the owner's ONE Face ID (payee / amount / order id from the merchant's checked order response; never the AI's order fields). */
       if(r?.state==='rejected')Object.defineProperty(out,'_askSpec',{value:{kind:'payAny',args:{payment:v.payment,merchant:v.merchant,verifiedDomain:v.merchant,...(o.orderRef!==undefined?{orderRef:o.orderRef}:{}),order:o.order,purpose:o.purpose,addressSource:o.addressSource},
         ...(sv?{signer:sv.signer,signerMerchant:sv.name}:{})/* t1240: verified merchant signer for the owner's trust (never from the AI) */,
@@ -1159,7 +1159,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
       amount:n.amount.toString(),fee:r.fee,networkFee:r.networkFee,gasRecovery:r.gasRecovery,total:(n.amount+BigInt(r.fee??0)+BigInt(r.networkFee??0)).toString(),body:(await readCapped(second)).text.slice(0,20000)};
     ledger.update(r.purchaseKey,agentId,second.ok?{state:'paid',settle_tx:settlement?.transaction??null,result:{...out,vault:r.vault,digest:r.digest}}:{state:'prepared',result:{...r,merchantResponse:out}});
     // ONE sponsored tx per x402 payment: no inline markSettled. Fees wait in the adapter until settleRoutine closes reservations in a batch.
-    // t1252 (§6#121, V5.5): markSettledInline = the VAULT closes it with its own USDC-gas UserOp (Circle uses the allowance the cap-sized prepare permit left)
+    // t1252 (decision 121, V5.5): markSettledInline = the VAULT closes it with its own USDC-gas UserOp (Circle uses the allowance the cap-sized prepare permit left)
     if(second.ok&&cfg.markSettledInline===true)pendingClose.push(markSettledOne(r.digest,r.auth).then(x=>{try{cfg.obs?.log?.('x402_mark_settled',{state:x?.state});}catch{}return x;}).catch(e=>{try{cfg.obs?.log?.('x402_mark_settled',{state:'error',error:String(e?.shortMessage??e?.message??e).slice(0,120)});}catch{}}));
     // t1250 V5.5 (R2-02; cfg.afterX402Settled is set only when KIPURSE_V55=1): markSettled right away from an ORDINARY account, because the vault's
     // gas permits stay refused until the settled reservation leaves its cached reserve. Never blocks or changes this answer.
@@ -1292,7 +1292,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     const {typedData,digest}=denySignerTypedData(ownerCtx,{account:p.account,signer,nonce,deadline});return j({ok:true,action:'deny_signer',signer:getAddress(signer),nonce,deadline,typedData,digest,ownerDirectCall:walletCall('setDeniedSigner',[getAddress(signer),true])});}
   async function denySignerSubmit({signer,nonce,deadline,signature}){const tx=await write('denySignerBySig',[p.account,getAddress(signer),nonce,BigInt(deadline),signature],{label:'denySignerBySig:'+signer});return {state:'signer_denied',txHash:tx.hash};}
   /** One-time owner approval for a single direct / x402 purchase above its tier caps (still within the permission caps). */
-  /* t1170u §6#82: owner asks. spec = {kind:'payAny'|'pay', args} exactly as the AI called it. */
+  /* t1170 decision 82: owner asks. spec = {kind:'payAny'|'pay', args} exactly as the AI called it. */
   const askRequest=async spec=>{const a=spec?.args??{};if(spec?.kind==='payAny'){const x=normalizePaymentRequest(a.payment,{chainId:cfg.chainId,merchant:a.merchant,orderRef:a.orderRef,expiresAt:a.expiresAt});
       if(!x.ok||x.kind!=='request')return null;return {request:x.request,fallbackOrderId:x.merchantOrderId??undefined};}
     if(spec?.kind==='pay'&&a.request&&!a.parsedId)return {request:a.request,fallbackOrderId:a.fallbackOrderId};return null;};
@@ -1307,7 +1307,7 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     if(newPayee){const m=MD.match({purpose:purposeKey(a.purpose)??undefined,payee:n.payee,amount:n.amount,agentId});if(m.ok&&(m.mandate.kind==='one_off'||m.mandate.kind==='recurring'||m.mandate.payees?.includes(lc(n.payee))))newPayee=false;}
     let pk=null;try{pk=identity(n,{repeatKey:a.repeatKey,intentId:a.intentId}).ledgerKey;}catch{pk=null;}/* t1264: the order identity (owner-ask dedupe) */
     const out={ok:true,payee:getAddress(lc(n.payee)),amount:n.amount.toString(),newPayee,purchaseKey:pk};
-    /* t1212 §6#97: a known payee is asked only when an ON-CHAIN payee cap refuses it (an allowance approval can never lift that cap, so the
+    /* t1212 decision 97: a known payee is asked only when an ON-CHAIN payee cap refuses it (an allowance approval can never lift that cap, so the
        old path asked again and again); everything else about a known payee stays as it was */
     if(!newPayee){let pa=null;try{pa=await preflight(normReq(n),{agentId,intentId:a.intentId,repeatKey:a.repeatKey});}catch{}const tierCap=(pa?.reasons??[]).filter(x=>ONCHAIN_TIER.test(x));
       if(!tierCap.length)return out;let po=null;try{po=await preflight(normReq(n),{agentId:'owner',intentId:a.intentId,repeatKey:a.repeatKey});}catch{}
@@ -1412,11 +1412,11 @@ export function createEngineV5(cfg,{ledgerFile,agentDefault='agent',writer,clien
     ownerInstruction:'Send this link to your HUMAN owner and wait. Only he can approve, by signing with his own Base Account on that page. Then poll kipurse_get_trust_request_status until "trusted".'}:{};
   const requestTrustFromOwner=wrap(async o=>{if(!TR)throw Error('trust requests not configured');const r=TR.request(o);return {...r,...approvalLink(r)};});
   const trustRequestStatus=wrap(async ({id})=>{if(!TR)throw Error('trust requests not configured');const r=TR.status(id);return {...r,...approvalLink(r)};});
-  /* t1241 §6#111: layered trust controls for the launcher / app (owner side only; never an AI tool) */
+  /* t1241 decision 111: layered trust controls for the launcher / app (owner side only; never an AI tool) */
   const layeredTrust={enabled:LAY,pauseDomain,resumeDomain,checkConfirm,
     pausedDomains:()=>{try{return ledger.db.prepare(`SELECT domain,paused_at AS pausedAt,reason FROM layered_domain WHERE paused_at IS NOT NULL`).all();}catch{return [];}},
     payments:(domain)=>{try{return ledger.db.prepare(`SELECT purchase_key AS purchaseKey,domain,amount,created_at AS createdAt,merchant_signed AS merchantSigned,state,merchant_status AS merchantStatus FROM layered_pay WHERE (? IS NULL OR domain=?) ORDER BY created_at DESC LIMIT 50`).all(domain??null,domain??null);}catch{return [];}}};
-  /* t1243 §6#113: run fn holding this wallet's one-in-flight-tx lock (the background trust of an approved ask), so an AI payment meanwhile
+  /* t1243 decision 113: run fn holding this wallet's one-in-flight-tx lock (the background trust of an approved ask), so an AI payment meanwhile
      is told retry_later (nothing sent) instead of racing the vault's userOp nonce. Waits for a running payment; after waitMs it runs anyway
      (the on-chain nonce still makes every op one-time, 0A#7 layer 5). */
   async function withWalletTx(fn,{waitMs=60000,pollMs=200}={}){const t0=Date.now();let rel=txLock.try(p.account);

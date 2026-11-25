@@ -1,4 +1,4 @@
-// t1158u (handbook §6#77): Siri gets the same payment ability as every other AI. At Siri connect approval (phone Face ID) the server
+// t1158 (decision 77): Siri gets the same payment ability as every other AI. At Siri connect approval (phone Face ID) the server
 // issues ONE Siri-scoped, revocable agent credential (agentId 'siri'). The app keeps it in the Keychain (this device only, unlocked).
 // It only authorizes POST /siri/buy (the same kipurse_buy path, limits, trust list, 0.1% fee, duplicate protection as other AIs).
 // Only its SHA-256 is stored; it is bound to the phone signer that approved it (a new / revoked phone voids it).

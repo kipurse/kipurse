@@ -25,7 +25,7 @@ contract BlockAllRegistry {
     function isPayeeOf(bytes32, address) external pure returns (bool) { return false; }
 }
 
-/// Stateless fuzz tests for the LIVE V5.4 adapter / trust (t1214 §6#118). Each test maps to THREAT_MODEL ids.
+/// Stateless fuzz tests for the LIVE V5.4 adapter / trust (t1214 decision 118). Each test maps to THREAT_MODEL ids.
 contract V54FuzzTest is V54Base {
     uint256 ref_;
 
@@ -266,7 +266,7 @@ contract V54FuzzTest is V54Base {
         assertEq(a4.pendingFees(), 0);
         assertEq(PayerVaultV5(v).reserved(), 0);
     }
-    /// One x402 owner approval = one reservation, even after the owner cancelled it (t1181u).
+    /// One x402 owner approval = one reservation, even after the owner cancelled it (t1181).
     function testFuzz_x402ApprovalSingleUse(uint256 a) public {
         a = bound(a, 1, SINGLE);
         KipurseAdapterV54.Auth memory au = authV(stranger, a, ++ref_);

@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1068u: AI 生活 / 钱包 / 设置 root titles share one Y (top-aligned).
+/// t1068: AI [zh] root titles share one Y (top-aligned).
 final class T1068TitleAlignUITests: XCTestCase {
   var app: XCUIApplication!
   func launch(_ args: [String]) {

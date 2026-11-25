@@ -20,7 +20,7 @@ const hasOrderFields=a=>ORDER_FIELDS.every(k=>a.includes(k));
 /** capabilities: any section with method POST + path + response listing depositAddress/amountAtomic/expiresAt (+ statusEndpoint). */
 function fromCapabilities(cap,{chainId}){const out=[];
   for(const [key,s] of Object.entries(cap??{})){if(!s||typeof s!=='object'||Array.isArray(s))continue;
-    // t1204 §6#93: also a "returns a payment request" section (top-level required + paymentRequestField, e.g. publish-and-prepare-first-bid)
+    // t1204 decision 93: also a "returns a payment request" section (top-level required + paymentRequestField, e.g. publish-and-prepare-first-bid)
     const pr=typeof s.paymentRequestField==='string'&&Array.isArray(s.required)&&!Array.isArray(s.response);
     if(String(s.method).toUpperCase()!=='POST'||typeof s.path!=='string'||(!pr&&(!Array.isArray(s.response)||!hasOrderFields(s.response.map(fieldName)))))continue;
     if(s.status&&lc(s.status)!=='live')continue;if(s.available===false)continue;if(s.chainId!==undefined&&Number(s.chainId)!==chainId)continue;
@@ -35,7 +35,7 @@ function fromCapabilities(cap,{chainId}){const out=[];
       statuses:st.statuses??s.statuses??null,terminalStatuses:s.terminalStatuses??null,
       signedOrder:s.signedOrder?{available:!!s.signedOrder.available,optIn:optional.includes('signedOrder')?'signedOrder':null,verifyingContract:s.signedOrder.verifyingContract??null,
         domainVersion:s.signedOrder.paymentOrderDomainVersion??null,payer:s.signedOrder.paymentOrderPayer??null,type:s.signedOrder.paymentOrder??null,
-        /* t1240 §6#110: the order-create field that binds the signed order to the paying wallet (V5.4 signer trust needs payer = this wallet) */payerParam:typeof s.signedOrder.payerParam==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(s.signedOrder.payerParam)?s.signedOrder.payerParam:null,
+        /* t1240 decision 110: the order-create field that binds the signed order to the paying wallet (V5.4 signer trust needs payer = this wallet) */payerParam:typeof s.signedOrder.payerParam==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(s.signedOrder.payerParam)?s.signedOrder.payerParam:null,
         v51:(s.kipurseV51??s.signedOrder.kipurseV51)?.available?{via:(s.kipurseV51??s.signedOrder.kipurseV51).via??null,dtoVersion:(s.kipurseV51??s.signedOrder.kipurseV51).dtoVersion??null,chains:((s.kipurseV51??s.signedOrder.kipurseV51).chains??[]).map(c=>({chainId:Number(c.chainId),verifier:getAddress(lc(c.verifier))}))}:null}:null});}
   // a payment-request section without its own chain/token/cap inherits them from a sibling order section of the SAME merchant doc
   const base=out.find(x=>!x.create.responseField&&x.tokenContract);
@@ -62,7 +62,7 @@ export async function discoverMerchant(origin0,{fetch:f=globalThis.fetch,chainId
   if(capPath){try{cap=await get(f,origin+capPath,'json',timeoutMs);sources.capabilities=origin+capPath;}catch{}}
   if(!cap&&!oa)throw new DiscoveryError('no_merchant_docs','neither capabilities nor openapi.json readable');
   const C=fromCapabilities(cap,{chainId}),O=fromOpenapi(oa);let d=null;
-  /* t1240 §6#110: the order signer the merchant publishes on its OWN https origin (capabilities.merchant.expectedSigner, origin host must match) */
+  /* t1240 decision 110: the order signer the merchant publishes on its OWN https origin (capabilities.merchant.expectedSigner, origin host must match) */
   const pubSigner=(()=>{const m=cap?.merchant;if(!m||!isAddress(String(m.expectedSigner??''),{strict:false}))return null;try{const o=new URL(String(m.origin)),v=new URL(origin);const okP=u=>u.protocol==='https:'||(allowHttp&&u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname));/* http only for local tests */if(!okP(o)||!okP(v)||o.host.toLowerCase()!==v.host.toLowerCase())return null;}catch{return null;}return getAddress(lc(m.expectedSigner));})();
   // capabilities + openapi must agree when both exist (a payment-request route: openapi must at least list POST <path>)
   const routes=[];for(const c of C){const o=O.find(x=>x.path===c.create.path);if(oa&&!o&&!(c.create.responseField&&oa.paths?.[c.create.path]?.post))continue;routes.push({...c,openapi:o??null});}
@@ -80,11 +80,11 @@ export async function discoverMerchant(origin0,{fetch:f=globalThis.fetch,chainId
   const main=fin(d);const alts=[];for(const r of routes){if(r===d)continue;try{alts.push(fin(r));}catch{}}
   return {...main,routes:[main,...alts]};}
 const SECRET_KEY=/token|secret|password|passwd|credential|apikey|api_key|authorization|bearer|recovery|handoff|private/i;
-/** t1204 §6#93: values the AI passed that must never leave toward logs / ledger / errors / responses (the merchant credential + anything secret-named). */
+/** t1204 decision 93: values the AI passed that must never leave toward logs / ledger / errors / responses (the merchant credential + anything secret-named). */
 export function orderSecrets(d,params){const out=new Set();const P=params&&typeof params==='object'?params:{};
   for(const [k,v] of Object.entries(P)){if((k===d?.create?.bodyAuth||SECRET_KEY.test(k))&&!/idempot/i.test(k)&&(typeof v==='string'||typeof v==='number')&&String(v).length>=4)out.add(String(v));}
   return [...out];}
-/** t1204 §6#93: which documented order route the AI's fields fit. Kipurse fills only its own idempotency key; everything else comes from the AI.
+/** t1204 decision 93: which documented order route the AI's fields fit. Kipurse fills only its own idempotency key; everything else comes from the AI.
  *  Returns {ok,route} or {ok:false,missing,route,alternatives}. fallbackCredential: an owner-configured credential may fill the body credential. */
 export function selectRoute(d,params,{fallbackCredential=false}={}){const P=params&&typeof params==='object'&&!Array.isArray(params)?params:{};const routes=d.routes?.length?d.routes:[d];
   const miss=r=>r.create.required.filter(k=>P[k]===undefined&&k!==r.create.idempotencyField&&!(k===r.create.bodyAuth&&fallbackCredential));
@@ -119,7 +119,7 @@ export function orderToPayment(order,d,{chainId=8453,usdc,nowS=Math.floor(Date.n
 export function buildCreateOrder(d,params,{credential,purchaseId,signedOrder=false,payer=null}={}){
   const body={...params};if(d.create.idempotencyField&&body[d.create.idempotencyField]===undefined){if(!purchaseId)throw new DiscoveryError('idempotency_key_required',d.create.idempotencyField);body[d.create.idempotencyField]=purchaseId;}
   const headers={'content-type':d.create.contentType,accept:'application/json'};
-  // t1204 §6#93: the AI supplies the merchant's order fields (including a body credential such as a listing token); an owner-configured credential is only a fallback
+  // t1204 decision 93: the AI supplies the merchant's order fields (including a body credential such as a listing token); an owner-configured credential is only a fallback
   if(d.create.bodyAuth){if(body[d.create.bodyAuth]===undefined||body[d.create.bodyAuth]===null||body[d.create.bodyAuth]===''){if(!credential)throw new DiscoveryError('missing_order_fields',d.create.required.filter(k=>body[k]===undefined||k===d.create.bodyAuth).join(','));body[d.create.bodyAuth]=credential;}}
   else if(credential)headers.authorization='Bearer '+credential;
   if(signedOrder&&d.signedOrder?.optIn)body[d.signedOrder.optIn]=true;

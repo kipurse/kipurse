@@ -1,7 +1,7 @@
 import Foundation
 
 /// t1094: first-connect AI spending limits. Amounts stay blank until the owner types them.
-/// The red line is the first real problem, never 「请输入金额」 once all three amounts parse.
+/// The red line is the first real problem, never "[zh]" once all three amounts parse.
 public enum AILimitGate {
   public enum Caps: Equatable {
     /// The chain read failed. Different from a wallet that has no safety limit yet.
@@ -56,8 +56,8 @@ public enum AILimitGate {
     }
   }
 
-  /// t1245 (§6#115 U18): the status line under the three amounts stays hidden until the owner typed something or tried to save;
-  /// a blank page never opens with a yellow 「请填写每笔金额」.
+  /// t1245 (decision 115 U18): the status line under the three amounts stays hidden until the owner typed something or tried to save;
+  /// a blank page never opens with a yellow "[zh]".
   public static func showsLine(single: String, daily: String, term: String, attempted: Bool = false) -> Bool {
     attempted || ![single, daily, term].allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty }
   }
@@ -100,7 +100,7 @@ public extension WalletState {
     return WalletState(.object(o))
   }
   /// Merge a chain caps read into an existing shell or session state (keeps balance, ledger, owner).
-  /// t1129u: also keeps the permission window (start/end) and where the value came from ("chain" = re-read every refresh).
+  /// t1129: also keeps the permission window (start/end) and where the value came from ("chain" = re-read every refresh).
   func withSafetyCaps(_ caps: AILimitGate.Caps, start: Int64? = nil, end: Int64? = nil, source: String? = nil) -> WalletState {
     guard case .object(var o) = raw else { return self }
     o.removeValue(forKey: "capsUnreadable")

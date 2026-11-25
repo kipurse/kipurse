@@ -9,24 +9,24 @@ public enum Principles {
   public static let holdAboveUSDC = 500.0      // only non-trusted payees
   public static let arrivedRequiresOnchainTx = true
   public static let onrampDestinationIsUserWallet = true
-  /// t604u (2026-10-27, locked): gas and fees ALWAYS in USDC, never ETH, for every user-facing on-chain action.
+  /// t604 (2026-10-27, locked): gas and fees ALWAYS in USDC, never ETH, for every user-facing on-chain action.
   public static let gasToken = "USDC"
   public static let ethGasPath = false
-  /// t603u: no preset AI limits; the first limit authorization (in onboarding) is free, later changes cost the actual fee in USDC.
+  /// t603: no preset AI limits; the first limit authorization (in onboarding) is free, later changes cost the actual fee in USDC.
   public static let presetLimits = false
-  /// t609u: everyday limits (server, Face ID, free) are NEVER above the on-chain floor.
+  /// t609: everyday limits (server, Face ID, free) are NEVER above the on-chain floor.
   public static let everydayBelowFloor = true
-  /// t763u (2026-10-29, supersedes t603u): the first limit authorization is paid from the wallet like every later change.
+  /// t763 (2026-10-29, supersedes t603): the first limit authorization is paid from the wallet like every later change.
   public static let firstLimitsFree = false
-  /// t762u/t763u (2026-10-29, LOCKED, owner): 开户必须有 Coinbase Verified Account 链上认证，不接受充值记录；入金、出金只到这个已认证的主人地址；
-  /// 入金/出金/链上手续费、付款失败烧掉的手续费、交易手续费(付给 Kipurse)全部由用户出；Kipurse 不承担一分钱；手续费以 USDC 从余额中扣除，Kipurse 不另收费。
+  /// t762/t763 (2026-10-29, LOCKED, owner): [zh]
+  /// [zh]([zh] Kipurse)[zh]
   public static let kycAttestationRequired = true
   public static let depositHistoryCountsAsKyc = false
   public static let kipurseNetCostUSDC = 0.0
   public static let failedGasPaidByUser = true
   public static let onboardingGasRecouped = true
-  /// t787u 启付安全铁律（永不修改）: 不做大钱包；任何转出都要主人本人签名；服务器只拿小额权限（上限 20 次/天、2 美元/天、0.25 美元/笔），
-  /// 只能提现到本人认证地址；签名页必须校验通过才打开、App 自己核对；储备只放够用的；密钥分开放；一键刹车；上线前外部审计和渗透测试。
+  /// t787 [zh]: [zh]
+  /// [zh]
   public static let noPooledCustody = true
   public static let ownerSignsEveryOutflow = true
   public static let withdrawOnlyToVerifiedOwner = true
@@ -39,7 +39,7 @@ public enum Principles {
     let t787 = noPooledCustody && ownerSignsEveryOutflow && withdrawOnlyToVerifiedOwner && signPagePinRequired && pin && externalAuditBeforeRealUsers
       && sponsorMaxPerDay == 20 && sponsorMaxUSDPerDay == 2.0 && sponsorMaxUSDPerOp == 0.25
     let ok = t787 && kycAttestationRequired && !depositHistoryCountsAsKyc && kipurseNetCostUSDC == 0 && failedGasPaidByUser && onboardingGasRecouped && !firstLimitsFree && gasToken == "USDC" && !ethGasPath
-    assert(ok, "PRINCIPLE_VIOLATION: locked owner rules t762u/t763u/t787u (the owner's decision log)")
+    assert(ok, "PRINCIPLE_VIOLATION: locked owner rules t762/t763/t787 (the owner's decision log)")
     return ok
   }
   /// Text guard: the app never asks the user for ETH.

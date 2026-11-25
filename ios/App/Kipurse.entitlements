@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!-- t1275 (#5): Release entitlements, kept by hand (Debug: App/KipurseDebug.entitlements adds only its own .app.$(KIPURSE_DEBUG_SUFFIX) group). .keys stays FIRST: it is the default group every existing item lives in. -->
+<!-- t147: Release push = production (App Store / TestFlight). t1275 (#5): Release entitlements, kept by hand (Debug: App/KipurseDebug.entitlements adds only its own .app.$(KIPURSE_DEBUG_SUFFIX) group). .keys stays FIRST: it is the default group every existing item lives in. -->
 <dict>
 	<key>aps-environment</key>
-	<string>development</string>
+	<string>production</string>
 	<key>com.apple.developer.devicecheck.appattest-environment</key>
 	<string>production</string>
 	<key>com.apple.security.application-groups</key>

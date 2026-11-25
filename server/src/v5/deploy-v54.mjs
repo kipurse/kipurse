@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1214 (§6#102, owner t1230u "部署和换合约要现在开始准备吧"; §6#101 owner t1227u "我的base账号付"): ONE-TIME page that lets the owner's
-// own Base Account confirm exactly ONE fixed batch, the same practical way as the V5.3 deploy (§6#87–89):
+// t1214 (decision 102, owner t1230 "[zh]"; decision 101 owner t1227 "[zh]"): ONE-TIME page that lets the owner's
+// own Base Account confirm exactly ONE fixed batch, the same practical way as the V5.3 deploy (decision 87–89):
 //   1. deterministic deployer 0x4e59 <- V5.4 adapter init code   (CREATE2 -> 0x99D8…7Aaa; the adapter creates its KipurseTrustV54)
 //   2. USDC.transfer(Kipurse fee address, 0.15 USDC)                - the fee, from the owner's own Base Account USDC, never ETH
 // This is the DEVELOPER's own contract deploy (0A#9.1): Kipurse's paymaster fronts the gas for this exact batch only (callsHash) and the
@@ -9,7 +9,7 @@
 // wallet, key, permission or ledger. One confirmation: Coinbase's estimator handles it (read-only CDP estimate 2026-11-19: call 9,493,432 /
 // verification 115,179 / pre-verification 618,155; stub + final paymaster data OK; simulateHandleOp with those limits executes the batch).
 // Before handing the batch to the page, prepare() asks the sponsor for stub data on the exact op (preflight): if Coinbase would not front
-// the gas, the page shows a calm line and no button, so Coinbase never offers to take ETH instead (§6#90/#91 lesson).
+// the gas, the page shows a calm line and no button, so Coinbase never offers to take ETH instead (decision 90/#91 lesson).
 import fs from 'node:fs';import {createHash,randomBytes} from 'node:crypto';
 import {getAddress,getContractAddress,slice,encodeFunctionData,parseAbi,encodeAbiParameters,toHex} from 'viem';
 import {langOf,X} from './i18n.mjs';import {USDC_BASE,KIPURSE_FEE_TO,USDC_GAS_APPROVE_CAP} from './usdc-gas.mjs';import {commitment} from './batch-commit.mjs';

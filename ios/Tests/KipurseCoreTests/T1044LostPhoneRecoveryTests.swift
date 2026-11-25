@@ -40,12 +40,12 @@ final class T1044LostPhoneRecoveryTests: XCTestCase {
     XCTAssertLessThan(fold.lowerBound, controls.lowerBound)
     let settings = try String(contentsOf: root.appendingPathComponent("App/Sources/Screens.swift"), encoding: .utf8)
     XCTAssertTrue(settings.contains("settings.lostPhone")); XCTAssertFalse(settings.contains("settings.rescueGuide"))
-    XCTAssertFalse(settings.contains("LostPhoneRecovery.subtitle"))   // t1057u: no grey subtitle under the Settings row
-    XCTAssertFalse(settings.contains("settings.copyWallet"))   // t1058u
+    XCTAssertFalse(settings.contains("LostPhoneRecovery.subtitle"))   // t1057: no grey subtitle under the Settings row
+    XCTAssertFalse(settings.contains("settings.copyWallet"))   // t1058
     let card = try String(contentsOf: root.appendingPathComponent("App/Sources/LifeTab.swift"), encoding: .utf8)
-    XCTAssertTrue(card.contains("wallet.copyWallet")); XCTAssertFalse(settings.contains("wallet.copyWallet"))   // t1133u: copy lives only in the top card
-    XCTAssertFalse(settings.contains("T(\"我的钱包地址\""))   // t1133u: standalone row removed
-    XCTAssertFalse(card.contains("shortAddr4"))   // t1133u: card shows the full address
+    XCTAssertTrue(card.contains("wallet.copyWallet")); XCTAssertFalse(settings.contains("wallet.copyWallet"))   // t1133: copy lives only in the top card
+    XCTAssertFalse(settings.contains("T(\"我的钱包地址\""))   // t1133: standalone row removed
+    XCTAssertFalse(card.contains("shortAddr4"))   // t1133: card shows the full address
   }
   func testDeletionPDFUsesSameInstructionsPreservesFullLinkAndEnglishHasNoChinese() throws {
     let old = Loc.override; defer { Loc.override = old }

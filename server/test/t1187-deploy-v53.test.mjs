@@ -1,4 +1,4 @@
-// t1187 (§6#87): one-time V5.3 deploy page. Fixed batch only (factory, adapter via 0x4e59, USDC fee leg), paid in USDC by the owner's
+// t1187 (decision 87): one-time V5.3 deploy page. Fixed batch only (factory, adapter via 0x4e59, USDC fee leg), paid in USDC by the owner's
 // Base Account (sponsor fronts gas for the exact batch only), inert once both contracts have code. No ETH, no new paymaster env.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import {webcrypto} from 'node:crypto';import {Readable} from 'node:stream';
 import {encodeFunctionData,parseAbi,getAddress} from 'viem';
@@ -24,7 +24,7 @@ test('plan: exactly the fixed two steps, sha256-pinned, CREATE2 addresses = pinn
   const sw=JSON.parse(JSON.stringify(RAW));sw.steps.reverse();assert.throws(()=>loadV53Plan(sw));
   const to=JSON.parse(JSON.stringify(RAW));to.steps[0].to=OTHER;assert.throws(()=>loadV53Plan(to),/deployer/);
   const ex=JSON.parse(JSON.stringify(RAW));ex.steps.push(ex.steps[0]);assert.throws(()=>loadV53Plan(ex),/exactly 2/);});
-// t1189 (§6#89): two confirmations (Coinbase's bundler cannot estimate the single ~12M-gas batch): step 1 = factory + 0.05, step 2 = adapter + 0.15.
+// t1189 (decision 89): two confirmations (Coinbase's bundler cannot estimate the single ~12M-gas batch): step 1 = factory + 0.05, step 2 = adapter + 0.15.
 const C1=deployV53Calls(plan,1),C2=deployV53Calls(plan,2);const feeData=a=>'0xa9059cbb'+KIPURSE_FEE_TO.slice(2).padStart(64,'0')+a.toString(16).padStart(64,'0');
 test('batches: step 1 = factory + 0.05 USDC, step 2 = adapter + 0.15 USDC (0.20 in total) to the fixed fee address; no ETH value anywhere',()=>{
   assert.equal(C1.length,2);assert.equal(C2.length,2);assert.equal(C1[0].data,plan.steps[0].data);assert.equal(C2[0].data,plan.steps[1].data);

@@ -32,7 +32,7 @@ export function createTrustRequests({store=plainStore,file,chainId,now=()=>Math.
     const s1=uintStr(single,'single'),tot=uintStr(total??single,'total');if(BigInt(s1)>BigInt(tot))throw Object.assign(Error('TRUSTREQ: per-payment cap must be <= total cap'),{code:'single_above_total'});
     const d=Number(expiresInDays);if(!(d>0&&d<=365))throw Object.assign(Error('TRUSTREQ: expiry 1-365 days'),{code:'trust_days_1_to_365'});
     const addr=getAddress(String(payee).toLowerCase());
-    /* t1240 §6#110: order signers (only the owner-ask path passes them: the merchant's verified signer); agents' MCP/HTTP calls never do */
+    /* t1240 decision 110: order signers (only the owner-ask path passes them: the merchant's verified signer); agents' MCP/HTTP calls never do */
     if(!Array.isArray(signers)||signers.length>3||signers.some(x=>!isAddress(String(x??''),{strict:false})||/^0x0{40}$/i.test(String(x))))throw Object.assign(Error('TRUSTREQ: bad signers'),{code:'bad_signers'});
     const sg=[...new Set(signers.map(x=>getAddress(String(x).toLowerCase())))];
     // idempotent: an open request for the same payee on this chain is returned as-is (any agent; no duplicates for the owner)

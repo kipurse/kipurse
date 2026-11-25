@@ -12,7 +12,7 @@ import {abiFor} from './abi.mjs';
 import {circleCharge,permitAmount as sizePermit,paymasterSelector,circleCandidate} from './paymaster.mjs';
 
 export const ENTRYPOINT_V07='0x0000000071727De22E5E9d8BAf0edAc6f37da032';
-// t1239 §6#109: Base v07 = Circle's USDC paymaster for EntryPoint v0.7 that the vaults allowlist on chain (0xc0de9762… has no code on Base)
+// t1239 decision 109: Base v07 = Circle's USDC paymaster for EntryPoint v0.7 that the vaults allowlist on chain (0xc0de9762… has no code on Base)
 export const CIRCLE_PAYMASTER={8453:{v07:'0x6C973eBe80dCD8660841D4356bf15c32460271C9',v08:'0xc0dec557cc20caccfa15407b240d5b47cad05aa8'},84532:{v07:'0xc0de34489365d618bb2a51f349b634f011492e48'}};
 export const PIMLICO_PUBLIC=chainId=>`https://public.pimlico.io/v2/${chainId}/rpc`;
 export const GAS_MODES=['userop','f2','legacy'];
@@ -20,7 +20,7 @@ const VAULT_ABI=parseAbi(['function execute(address target,uint256 value,bytes d
   'function sessionSigner() view returns (address)','function maxGasPerOp() view returns (uint256)',
   'function paymaster() view returns (address)','function paymaster2() view returns (address)','function bundlerFeeTo() view returns (address)','function maxBundlerFee() view returns (uint96)','function reserved() view returns (uint256)',
   'function opsPerDay() view returns (uint256)','function setOpsPerDay(uint32 n)']);
-// t1185u (handbook §6#85): V5.3 vaults allow at most opsPerDay() session userOps per UTC day (owner-set, default 500). The nonce key is
+// t1185 (decision 85): V5.3 vaults allow at most opsPerDay() session userOps per UTC day (owner-set, default 500). The nonce key is
 // the UTC day index (chain time) and the per-key sequence counts that day's ops. Older vaults (no opsPerDay()) keep nonce key 0.
 // The nonce stays a strictly increasing one-time number inside its key (0A#7 layer 5 unchanged).
 export const DAY=86400;export const SEQ_MASK=(1n<<64n)-1n;
@@ -37,7 +37,7 @@ export async function opsToday({pub,vault,entryPoint=ENTRYPOINT_V07,nowS}){let c
 export const setOpsPerDayCall=(vault,n)=>({to:getAddress(vault),value:0n,data:encodeFunctionData({abi:VAULT_ABI,functionName:'setOpsPerDay',args:[Number(n)]})});
 /** t766: amount of Kipurse dues this op may carry: only via the vault's owner-set fee slot (bundlerFeeTo == ops account), never more than
  *  the dues, the vault's on-chain maxBundlerFee, the payment's network-fee limit, or the vault's free USDC after keeping one op of gas. */
-/** t1008u: old recorded dues are collected ONLY on withdraw, never with an AI payment. */
+/** t1008: old recorded dues are collected ONLY on withdraw, never with an AI payment. */
 export const DUES_ON_PAYMENT=false;
 export function duesAmount({due,feeTo,opsTo,maxFee,netCap,balance,reserved,gasKeep}){if(!due||due<=0n||!feeTo||!opsTo||feeTo.toLowerCase()!==opsTo.toLowerCase())return 0n;
   let a=due;for(const c of [BigInt(maxFee??0),BigInt(netCap??0)])if(c<a)a=c;const free=BigInt(balance??0)-BigInt(reserved??0)-BigInt(gasKeep??0);if(free<a)a=free;return a>0n?a:0n;}
@@ -118,7 +118,7 @@ export function createUserOpWriter({cfg,pub,session,vault,adapter,maxGasPerOp,on
   async function fees(){try{const g=await bundler.rpc('pimlico_getUserOperationGasPrice',[]);return {maxFeePerGas:hexToBigInt(g.standard.maxFeePerGas),maxPriorityFeePerGas:hexToBigInt(g.standard.maxPriorityFeePerGas)};}
     catch{const f=await pub.estimateFeesPerGas();return {maxFeePerGas:f.maxFeePerGas,maxPriorityFeePerGas:f.maxPriorityFeePerGas};}}
   const hashOf=o=>getUserOperationHash({chainId,entryPointAddress:ep,entryPointVersion:'0.7',userOperation:o});
-  // t1185u: day-keyed nonce for V5.3 vaults (see opsToday); key 0 for older vaults. Never sends an op that the vault would refuse.
+  // t1185: day-keyed nonce for V5.3 vaults (see opsToday); key 0 for older vaults. Never sends an op that the vault would refuse.
   const GUARD=Number(cfg.userOp?.midnightGuardS??90);const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   async function nonceNow(){
     let t=await opsToday({pub,vault,entryPoint:ep});/* one block time for both the day key and the guard */
@@ -130,7 +130,7 @@ export function createUserOpWriter({cfg,pub,session,vault,adapter,maxGasPerOp,on
     return t.nonce;}
   async function build(calls0,{permitAtCap=false,raw=null}={}){
     if(!raw)await checkBundlerFee();let calls=!raw&&bf&&bf.amount>0n?[...calls0,{to:token,data:encodeFunctionData({abi:XFER,functionName:'transfer',args:[bf.to,bf.amount]})}]:calls0;
-    // t766u: Kipurse dues (fronted onboarding gas, failed-op debt) ride along in the vault's single fee slot when no bundler fee uses it
+    // t766: Kipurse dues (legacy pre-t1022 onboarding gas, failed-op debt) ride along in the vault's single fee slot when no bundler fee uses it
     let duesTaken=0n;if(DUES_ON_PAYMENT&&!raw&&dues&&!(bf&&bf.amount>0n)){try{const due=BigInt(await dues.get());if(due>0n){const [to,mx,bal,rs]=await Promise.all([pub.readContract({address:vault,abi:VAULT_ABI,functionName:'bundlerFeeTo'}),pub.readContract({address:vault,abi:VAULT_ABI,functionName:'maxBundlerFee'}),pub.readContract({address:token,abi:ERC20,functionName:'balanceOf',args:[vault]}),pub.readContract({address:vault,abi:VAULT_ABI,functionName:'reserved'})]);
       duesTaken=duesAmount({due,feeTo:to,opsTo:dues.to,maxFee:mx,netCap:maxGasPerOp,balance:bal,reserved:rs,gasKeep:maxGasPerOp});
       if(duesTaken>0n)calls=[...calls,{to:token,data:encodeFunctionData({abi:XFER,functionName:'transfer',args:[getAddress(dues.to),duesTaken]})}];else dues.blocked?.(getAddress(to)===getAddress(dues.to)?'no_room':'fee_slot_not_set');}}catch{duesTaken=0n;}}

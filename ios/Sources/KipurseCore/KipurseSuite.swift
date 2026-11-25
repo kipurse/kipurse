@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1197u (handbook §6#92): two Kipurse contract suites live side by side on Base.
+/// t1197 (decision 92): two Kipurse contract suites live side by side on Base.
 /// NEW wallets open on V5.3 (daily operations cap, vault fee reserve); the operator's original wallet and every wallet
 /// opened before stay on V5.2, untouched. The phone picks the suite per wallet:
 ///  - a new opening: the suite whose vault (computed ON THE PHONE, CREATE2) equals the server's vault, then cross-checked on chain;
@@ -13,11 +13,11 @@ public struct KipurseSuite: Equatable, Sendable {
                                        factory: "0x6ce7bc537379a6e10b88d1e98a5c3803a9812be9", vaultImpl: "0xc53ab278fe26b31f85b5ccc73eb5a7dd81e05038")
   public static let v53 = KipurseSuite(name: "v5.3", adapter: "0xb150030be35903AdEE466d7733Bf0841B667033C", trust: "0xda1dcc6677f352ba551feb8ca0f39d46b41535c3",
                                        factory: OpsCap.v53Factory, vaultImpl: OpsCap.v53VaultImpl)
-  /// t1214 (§6#102): V5.4 = V5.3 + "trust a merchant's order signer" (kind-5 grant). Only the owner's migrated wallet uses it, after his own
+  /// t1214 (decision 102): V5.4 = V5.3 + "trust a merchant's order signer" (kind-5 grant). Only the owner's migrated wallet uses it, after his own
   /// Base Account switched it; never matched for a new opening (not in `all`). Adapter / trust / vault implementation are public chain constants.
   public static let v54 = KipurseSuite(name: "v5.4", adapter: "0x99D8dFEC40023F53F6e451f9afFF7Efc223B7Aaa", trust: "0x22eF1633252653932076cB911b155F9D7f73A9E9",
                                        factory: OpsCap.v53Factory, vaultImpl: "0x99D11aFAc77B4E8Ea8AF00C543eee36a74591bBc")
-  /// t1250 (handbook §6#119): V5.5 = the internal-review fixes (KR-01…KR-08, KL-5) in NEW contracts, deployed by CREATE2 through the public
+  /// t1250 (decision 119): V5.5 = the internal-review fixes (KR-01…KR-08, KL-5) in NEW contracts, deployed by CREATE2 through the public
   /// deterministic deployer (gw/mainnet/v55-deploy-plan.json). Wallets on V5.5 are NEW wallets with owners [Base Account, KipurseKeySeatV2, SPM]
   /// (the owner's move from V5.4, or a new opening while the server's KIPURSE_V55 flag is on). Matched first for a new opening, but only when the
   /// server's vault IS this wallet's V5.5 vault computed here; an existing wallet switches to V5.5 only when that vault also has code on chain.
@@ -55,10 +55,10 @@ public struct KipurseSuite: Equatable, Sendable {
   static let agreedCode: (String) async -> String? = { a in await ChainRPC.agreed("eth_getCode", [a, "latest"]) }
   @discardableResult public static func detect(wallet: String?, serverVault: String?, code: ((String) async -> String?)? = nil) async -> KipurseSuite {
     guard let w = wallet, Hex.decode(w)?.count == 20 else { return active }
-    // t1214 (§6#102): the owner's own V5.2 -> V5.4 switch (and its rollback), both signed by his Base Account. Only these two moves, and only
+    // t1214 (decision 102): the owner's own V5.2 -> V5.4 switch (and its rollback), both signed by his Base Account. Only these two moves, and only
     // when the server's vault is exactly this wallet's vault of the target suite (computed here); V5.4 also needs that vault's code on chain.
     let sv = serverVault?.lowercased()
-    // t1250 (§6#119): the owner's new V5.5 wallet (or a wallet opened on V5.5): the server's vault is exactly this wallet's V5.5 vault (computed here)
+    // t1250 (decision 119): the owner's new V5.5 wallet (or a wallet opened on V5.5): the server's vault is exactly this wallet's V5.5 vault (computed here)
     // and that vault has code on chain. Never moves a wallet already remembered on another suite (a V5.5 wallet is always a NEW address).
     if stored(wallet: w) == nil, let v = sv, v == v55.vault(wallet: w) {
       let c = await (code ?? agreedCode)(v)

@@ -6,7 +6,7 @@ import CryptoKit
 /// Mainnet (real money) rules shared by the app and the unit tests. Pure functions only.
 public enum Mainnet {
   /// Operator's mainnet server (Info.plist via Config/Local.xcconfig). Unconfigured -> an unroutable placeholder.
-  /// The operator's server (global endpoints: wallet discovery, new-user 开通).
+  /// The operator's server (global endpoints: wallet discovery, new-user [zh]).
   public static var base: URL { Operator.server ?? URL(string: "https://kipurse.invalid")! }
   /// This user's wallet on that server (every per-user endpoint).
   public static var server: URL { let p = Operator.tenantPath; return p.isEmpty ? base : base.appendingPathComponent(String(p.dropFirst())) }
@@ -71,7 +71,7 @@ public enum Mainnet {
     if let os = openSingle, let od = openDaily { c.queryItems! += [.init(name: "openSingle", value: f(os)), .init(name: "openDaily", value: f(od))] }
     return c.url
   }
-  /// t1281 (§6#141 ①): the owner's limits for strangers (付给陌生收款方). nil = OK, else a short reason. Same rules and order as the
+  /// t1281 (decision 141 (1)): the owner's limits for strangers ([zh]). nil = OK, else a short reason. Same rules and order as the
   /// server (RequestVerify.strangerChoiceError = gw strangerChoiceError): 0 < per payment <= normal per payment, 0 < per day <= normal
   /// per day, per payment <= per day. Call it after limitsError (the normal limits must be valid first).
   public static func strangerError(single: String, daily: String, openSingle: String, openDaily: String) -> String? {
@@ -129,7 +129,7 @@ public struct LedgerRow: Identifiable, Equatable {
   public let tx: String, t: Date, account: String, kind: String, delta: Int64, balance: Int64?, zh: String
   /// AI payment order record (optional): what, who, the user's own words, budget, trial-only flag.
   public var orderItem: String? = nil, orderMerchant: String? = nil, orderQuote: String? = nil, orderBudget: String? = nil, orderTrial: Bool = false, orderTier: String? = nil, orderSource: String? = nil, payeeName: String? = nil, payeeAddress: String? = nil
-  /// t1129u: network fee paid from the wallet's own USDC inside this transaction (withdraw fee, safety-limit change, Face ID…).
+  /// t1129: network fee paid from the wallet's own USDC inside this transaction (withdraw fee, safety-limit change, Face ID…).
   public var fee: Int64? = nil
   public var id: String { tx + account }
   public var isVault: Bool { account == "vault" }

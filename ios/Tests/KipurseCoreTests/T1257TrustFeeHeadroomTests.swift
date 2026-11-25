@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1257 (handbook §6#126): the owner's real case — AI limits 1000 / 1000, the gateway's trust 1000 per payment / 1001 per day
+/// t1257 (decision 126): the owner's real case — AI limits 1000 / 1000, the gateway's trust 1000 per payment / 1001 per day
 /// (daily + 0.1% fee headroom, because the chain counts amount + fee per day). It must pass; anything above the headroom must not.
 final class T1257TrustFeeHeadroomTests: XCTestCase {
   func msg(_ s: String, _ d: String) -> OwnerTrustMessage {

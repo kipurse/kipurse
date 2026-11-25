@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1279 (handbook §6#139): regressions for the re-audit findings R1, R3, R4, R5, R7 (each test failed on the code before the fix).
+// t1279 (decision 139): regressions for the re-audit findings R1, R3, R4, R5, R7 (each test failed on the code before the fix).
 import test from 'node:test';import assert from 'node:assert/strict';import http from 'node:http';
 import {zeroAddress,HttpRequestError} from 'viem';import {privateKeyToAccount,generatePrivateKey} from 'viem/accounts';
 import {engineFor,ADAPTER,MERCH} from './helpers/v5-fixture.mjs';import {detect} from '../src/v4/detector.mjs';

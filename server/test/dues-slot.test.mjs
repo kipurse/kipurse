@@ -1,4 +1,4 @@
-// t767u: new wallets set the vault fee slot to Kipurse's ops account (repay fronted onboarding gas from AI payments), only for apps that can check it.
+// t767: new wallets set the vault fee slot to Kipurse's ops account (repay fronted onboarding gas from AI payments), only for apps that can check it.
 import test from 'node:test';import assert from 'node:assert/strict';import {decodeFunctionData,parseAbi,getAddress} from 'viem';
 import {buildMigrationPlanV5} from '../src/v5/plan.mjs';import {DUES_SLOT,DUES_SLOT_NOTE} from '../src/v5/onboard-new.mjs';
 const W='0x1000000000000000000000000000000000000001',O='0x2000000000000000000000000000000000000002',AD='0xc7d7c8b03e94576bc3c99a7e37827e07f7d9a4e8',V='0x4000000000000000000000000000000000000004',EX='0x5000000000000000000000000000000000000005';

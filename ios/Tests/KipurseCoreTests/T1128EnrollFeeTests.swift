@@ -1,6 +1,6 @@
 import XCTest
 @testable import KipurseCore
-/// t1128u (§6#66): the restored post-opening enroll is accepted ONLY in the wallet-pays shape (fee <= 0.05 to Kipurse's fee address,
+/// t1128 (decision 66): the restored post-opening enroll is accepted ONLY in the wallet-pays shape (fee <= 0.05 to Kipurse's fee address,
 /// from the Kipurse wallet), checked on a batch the t1128 server tree actually built.
 final class T1128EnrollFeeTests: XCTestCase {
   private var fx: [String: [String: Any]] {

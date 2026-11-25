@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1116u: everyday withdraw = any amount or everything. The ACTUAL live /owner/withdraw/prepare reply for 5 USDC from the owner's
+/// t1116: everyday withdraw = any amount or everything. The ACTUAL live /owner/withdraw/prepare reply for 5 USDC from the owner's
 /// wallet 0x5150 (production release 20261112-171344, fetched read-only 2026-11-12 11:14 CST; nothing signed or sent) is fed to the
 /// App's real checks (WithdrawAmount.preparedMatches + OwnerExit.verifyAnyPlan, the functions MainWithdrawView.go() calls).
 final class T1116WithdrawAmountTests: XCTestCase {

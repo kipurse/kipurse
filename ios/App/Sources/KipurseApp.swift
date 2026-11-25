@@ -8,7 +8,7 @@ struct KipurseApp: App {
   @StateObject private var model = AppModel()
   @StateObject private var pay = PayDraftCenter.shared
   @Environment(\.scenePhase) private var phase
-  /// t653u: dark "indigo night" is the default look; light look is an opt-in in Settings.
+  /// t653: dark "indigo night" is the default look; light look is an opt-in in Settings.
   init() {
     LaunchFlags.releaseStrip()   // t1275 (#6): Release ignores every -demo / -kp… launch flag (first thing, before any model reads them)
     #if KP_ASSISTANT

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1240 (handbook §6#110): on an owner ask, "trust" may name the merchant's ONE order signer under its domain (the server verified the signer the
+/// t1240 (decision 110): on an owner ask, "trust" may name the merchant's ONE order signer under its domain (the server verified the signer the
 /// merchant publishes); without that the trust must not add any signer (unchanged t1170 rule).
 final class T1240OwnerAskSignerTests: XCTestCase {
   let payee = "0x1450e1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3b8", signer = "0xaDB2f2C49F31D59Bc46959818e5c445e1c01aCB8"

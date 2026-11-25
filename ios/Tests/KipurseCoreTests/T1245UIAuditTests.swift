@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1245 (§6#115): one money display rule, the pending badge count and the AI-limit hint gate.
+/// t1245 (decision 115): one money display rule, the pending badge count and the AI-limit hint gate.
 final class T1245UIAuditTests: XCTestCase {
   func testAmountsAlwaysTwoDecimals() {
     XCTAssertEqual(MoneyText.amount(18_500_000), "18.50")
@@ -37,7 +37,7 @@ final class T1245UIAuditTests: XCTestCase {
     XCTAssertEqual(MoneyText.FeeStyle.page([]), .cents)
   }
   func testReceiptHeaderAndRowAgree() {
-    // TxDetail: the header and the 金额 row use the same helper, so 18.5 never shows as both "18.50 USDC" and "$18.5".
+    // TxDetail: the header and the [zh] row use the same helper, so 18.5 never shows as both "18.50 USDC" and "$18.5".
     let a: Int64 = 18_500_000
     XCTAssertEqual("−" + MoneyText.usdc(a), "−18.50 USDC")
     XCTAssertEqual(MoneyText.usdc(a), "18.50 USDC")

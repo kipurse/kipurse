@@ -1,6 +1,6 @@
 import Foundation
 
-/// Account deletion: the confirm phrase, the step order, and the L("手机丢了怎么办") guide built from the server's recovery package.
+/// Account deletion: the confirm phrase, the step order, and the L("[zh]") guide built from the server's recovery package.
 /// Pure (no UI), so it is unit-tested. Methods listed here are only the ones that work for the V5 contracts (see docs/ACCOUNT_DELETION.md).
 public enum AccountDeletion {
   public static let phrase = L("删除我的账户")
@@ -22,7 +22,7 @@ public struct RecoveryGuide: Codable, Equatable {
   public let revokeTo: String?, revokeData: String?
   public let permissionJSON: String?
   public let methods: [Method]
-  /// One-tap L("独立取回确认页") page link (the rescue card rides in the #fragment; no Kipurse server needed).
+  /// One-tap L("[zh]") page link (the rescue card rides in the #fragment; no Kipurse server needed).
   public let rescueUrl: String?
   private var displayMethods: [Method] { Self.methods(wallet: wallet, owner: owner, usdc: usdc, spm: spendPermissionManager, vault: payerVault, explorer: explorer, revokeKnown: revokeData != nil, rescueUrl: rescueUrl) }
   public var simpleMethods: [Method] { displayMethods.filter { $0.advanced != true } }

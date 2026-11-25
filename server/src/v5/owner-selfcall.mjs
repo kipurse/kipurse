@@ -1,4 +1,4 @@
-// t1238 (the owner's decision log §6#106, owner 2026-11-20 ~09:40 CT "三件都同意"): keys.coinbase.com refuses any TOP-LEVEL call that carries a
+// t1238 (decision 106, owner 2026-11-20 ~09:40 CT "[zh]"): keys.coinbase.com refuses any TOP-LEVEL call that carries a
 // Coinbase Smart Wallet owner/upgrade selector ("Account owner or upgrade calls are not allowed."). Every owner change we put in a
 // Base Account batch is therefore a wallet self-call: wallet.execute(wallet, 0, addOwnerAddress/removeOwnerAtIndex(...)). CBSW's
 // onlyOwner accepts msg.sender == the wallet itself, so the on-chain effect is identical. This module is the single source of truth.

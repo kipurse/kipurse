@@ -92,7 +92,7 @@ final class T1071OneTapConnectUITests: XCTestCase {
     XCTAssertTrue(go.isEnabled)
     XCTAssertEqual(app.descendants(matching: .any)["ai.limits.state"].value as? String, "chosen")
     go.tap()
-    // t1254 (§6#123): first a 「下一步」 page (limits not in effect yet, where Face ID comes); nothing launched until the owner taps
+    // t1254 (decision 123): first a "[zh]" page (limits not in effect yet, where Face ID comes); nothing launched until the owner taps
     XCTAssertTrue(app.staticTexts["handoff.title"].waitForExistence(timeout: 5))
     let staged = app.descendants(matching: .any)["handoff.staged"]
     XCTAssertTrue(staged.exists)
@@ -102,7 +102,7 @@ final class T1071OneTapConnectUITests: XCTestCase {
     XCTAssertEqual(launched(), "https://muse.ai/chat")
     XCTAssertFalse(app.staticTexts["connect.done"].exists)
   }
-  /// t1254: 「先不连」 on the 「下一步」 page launches nothing and grants nothing; another outside AI (Grok) gets the same page.
+  /// t1254: "[zh]" on the "[zh]" page launches nothing and grants nothing; another outside AI (Grok) gets the same page.
   @MainActor func testHandoffLaterLaunchesNothingAndCardsGetThePage() {
     for (lang, agent) in [("zh", "life.agent.muse"), ("en", "life.agent.grok")] {
       launch(lang)
@@ -276,12 +276,12 @@ final class T1071OneTapConnectUITests: XCTestCase {
     shot("t1071-siri-ready-en")
   }
 
-  /// t1157u: approved with no read session. The cache an old server left lists an empty "oauth-siri" row first and no saved limits;
-  /// the connect reply's limits are applied (-kpT1157Reply). Home Siri shows 已授权 (not 未连接) and a tap opens the phrases, never setup.
+  /// t1157: approved with no read session. The cache an old server left lists an empty "oauth-siri" row first and no saved limits;
+  /// the connect reply's limits are applied (-kpT1157Reply). Home Siri shows [zh] (not [zh]) and a tap opens the phrases, never setup.
   @MainActor func checkT1157(_ lang: String) {
     launch(lang, extra: ["-kpT1157", "-kpT1157Reply", "-kpStaleCache", "-kpSiriOn"])
     let cell = app.descendants(matching: .any)["life.agent.siri"]; XCTAssertTrue(cell.waitForExistence(timeout: 10))
-    XCTAssertTrue(cell.label.hasPrefix(lang == "zh" ? "Siri, 在线" : "Siri, Online"), cell.label)   // t1164u (§6#79): connected = always lit 在线
+    XCTAssertTrue(cell.label.hasPrefix(lang == "zh" ? "Siri, 在线" : "Siri, Online"), cell.label)   // t1164 (decision 79): connected = always lit 在线
     XCTAssertFalse(cell.label.contains(lang == "zh" ? "未连接" : "Offline"), cell.label)   // t1245 U2: English status is "Offline"
     shot("t1157-home-siri-\(lang)")
     cell.tap()
@@ -293,7 +293,7 @@ final class T1071OneTapConnectUITests: XCTestCase {
   }
   @MainActor func testT1157ApprovedNoSessionSiriLitAndPhrasesZh() { checkT1157("zh") }
   @MainActor func testT1157ApprovedNoSessionSiriLitAndPhrasesEn() { checkT1157("en") }
-  /// t1158u (§6#77): Siri pays like every AI — the Siri phrases page carries the owner's sentence (帮我付款) and says saved
+  /// t1158 (decision 77): Siri pays like every AI — the Siri phrases page carries the owner's sentence ([zh]) and says saved
   /// (trust-list) payees inside the allowance pay with no Face ID. Text only; same page, no new controls.
   @MainActor func checkT1158(_ lang: String) {
     func has(_ t: String) -> XCUIElement { app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", t)).firstMatch }
@@ -321,7 +321,7 @@ final class T1071OneTapConnectUITests: XCTestCase {
   @MainActor func testT1158SiriPayPhrasesZh() { checkT1158("zh") }
   @MainActor func testT1158SiriPayPhrasesEn() { checkT1158("en") }
 
-  /// t1094: three amounts filled, wallet safety caps unset — never 「请输入金额」, Continue stays off.
+  /// t1094: three amounts filled, wallet safety caps unset — never "[zh]", Continue stays off.
   @MainActor func testFilledAmountsWithUnsetCapsShowsReason() {
     for lang in ["zh", "en"] {
       launch(lang, extra: ["-kpCapsUnset"])

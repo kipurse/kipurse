@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1253 (handbook §6#122): the phone follows the V5.4 -> V5.5 move only on its own chain checks. Values = the owner's real move
+/// t1253 (decision 122): the phone follows the V5.4 -> V5.5 move only on its own chain checks. Values = the owner's real move
 /// (Base block 60955xxx): owner Base Account, seat V2, new wallet, and the phone key registered in the seat.
 final class T1253MoveFollowTests: XCTestCase {
   let owner = "0x4242b022A8296cB18B0E0b1Cb9879C518170A718"

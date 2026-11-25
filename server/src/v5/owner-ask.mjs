@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1170u (handbook §6#82, locked): a NEW payee (not established by the owner) whose amount is above any AI auto limit is not simply
+// t1170 (decision 82, locked): a NEW payee (not established by the owner) whose amount is above any AI auto limit is not simply
 // refused: the AI gets decision ask_owner + a ready-to-relay zh/en question, the owner gets a push + an in-app card with
-// 「认识并信任」「只付这一次」「拒绝」. Only the owner's in-app tap + Face ID releases the payment (the AI can never release it); the server
+// "[zh]""[zh]""[zh]". Only the owner's in-app tap + Face ID releases the payment (the AI can never release it); the server
 // then pays this exact request once, with the owner's on-chain approval, under a derived idempotency key. Valid 24 h.
 // Same request again (same agent + idempotency key) -> the stored state / result, never a second payment.
 import {fmtUsdc} from './mandates.mjs';
@@ -16,8 +16,8 @@ export function createOwnerAsks({db,now=()=>Date.now(),ttlMs=ASK_TTL_MS}={}){
   db.exec(`CREATE TABLE IF NOT EXISTS owner_ask(approval_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, idem TEXT, spec_json TEXT NOT NULL, payee TEXT NOT NULL, amount TEXT NOT NULL, name TEXT, note TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, state TEXT NOT NULL, mode TEXT, result_json TEXT, reminded_at INTEGER, decided_at INTEGER);
     CREATE TABLE IF NOT EXISTS owner_ask_key(agent_id TEXT NOT NULL, idem TEXT NOT NULL, approval_id TEXT NOT NULL, PRIMARY KEY(agent_id,idem));
     CREATE TABLE IF NOT EXISTS owner_ask_req(agent_id TEXT NOT NULL, idem TEXT NOT NULL, req_hash TEXT NOT NULL, PRIMARY KEY(agent_id,idem));`);
-  /* t1259 (§6#129): a merchant order with its own expiry (expiresAt, unix s or ms) can't be paid after it -> the ask expires then too */
-  /* t1260 (§6#130): also a merchant-SIGNED order's own deadline (signedOrder.deadline / orderDeadline, directly or inside payment / request).
+  /* t1259 (decision 129): a merchant order with its own expiry (expiresAt, unix s or ms) can't be paid after it -> the ask expires then too */
+  /* t1260 (decision 130): also a merchant-SIGNED order's own deadline (signedOrder.deadline / orderDeadline, directly or inside payment / request).
      The earliest one counts. ownerApproval (the AI's own approval window) is never read. */
   const ms=v=>{const x=Number(v);return x>0?(x>1e12?x:x*1000):null;};
   const orderEnd=a=>{const so=[a?.signedOrder,a?.payment?.signedOrder,a?.request?.signedOrder,typeof a?.payment==='object'?a.payment:null];
@@ -55,7 +55,7 @@ export function createOwnerAsks({db,now=()=>Date.now(),ttlMs=ASK_TTL_MS}={}){
   const remind=(id,agentId,gapMs=300e3)=>{const a=get(id);if(!a||a.agentId!==String(agentId))return {ok:false,error:'not_found'};if(a.state!=='pending')return {ok:false,error:'not_pending',state:a.state};
     if(a.remindedAt&&now()-a.remindedAt<gapMs)return {ok:false,error:'too_soon',retryAfterSec:Math.ceil((gapMs-(now()-a.remindedAt))/1000)};
     db.prepare(`UPDATE owner_ask SET reminded_at=? WHERE approval_id=?`).run(now(),a.approvalId);return {ok:true,ask:a};};
-  /* t1243 §6#113: the background trust's final result, written into the finished ask's result (never changes its state / payment) */
+  /* t1243 decision 113: the background trust's final result, written into the finished ask's result (never changes its state / payment) */
   const setTrust=(id,trust)=>{const a=get(id);if(!a||!['paid','failed'].includes(a.state))return null;const r={...(a.result??{}),trust:trust??null};
     db.prepare(`UPDATE owner_ask SET result_json=? WHERE approval_id=? AND state IN ('paid','failed')`).run(JSON.stringify(r),String(id));return get(id);};
   /* t1243: trust answers of the last hour (the app shows "trust taking effect" -> trusted / failed) */
@@ -63,7 +63,7 @@ export function createOwnerAsks({db,now=()=>Date.now(),ttlMs=ASK_TTL_MS}={}){
     .map(x=>get(x.approval_id)).filter(Boolean).map(a=>({id:a.approvalId,state:a.state,trust:a.result?.trust?{state:a.result.trust.state??null,merchant:a.result.trust.merchant??null,signerGrant:a.result.trust.signerGrant??null,txHash:a.result.trust.txHash??null}:{state:'submitting'}}));
   return {get,put,byKey,reqOf,claim,finish,note,executing,trustOpen,setTrust,recentTrust,reject,expire,remind,ttlMs};}
 
-/** the ready-to-relay owner question (zh + en): payee name, short address, human USDC amount (§6#80), purpose */
+/** the ready-to-relay owner question (zh + en): payee name, short address, human USDC amount (decision 80), purpose */
 export function askQuestion({name,payee,amountAtomic,note}){const amt=fmtUsdc(BigInt(amountAtomic));const nm=cleanName(name);const sh=short(payee);
   const zh=`认识这个收款方吗？AI 想付 ${amt} USDC 给新收款方 ${sh}（用途：${note||'未说明'}）${nm?`，AI 说它是“${nm}”（未核实）`:''}。这笔超过了 AI 自动付款上限，还没有付；AI 可能被骗。如果认识，请在 Kipurse App 里核对完整地址，点「认识并信任」或「只付这一次」并用 Face ID 确认；不认识就点「拒绝」。`;
   const en=`Do you know this payee? The AI wants to pay ${amt} USDC to a new payee ${sh} (for: ${note||'not stated'})${nm?`; the AI calls it "${nm}" (not verified)`:''}. It is above the AI auto-pay limit and nothing has been paid; the AI could be tricked. If you know them, check the full address in the Kipurse app and tap "Trust this payee" or "Pay just this once" with Face ID; otherwise tap "Decline".`;
@@ -113,8 +113,8 @@ export function createAskFlow(E){const ASK=E.ownerAsks;
     if(!ASK||!r||r.state!=='rejected'||!spec)return null;
     /* a stopped AI / a paused wallet / a payee that failed checks is a hard refusal: never turned into an owner ask */
     if(/^(AGENT_STOPPED|wallet_paused|agent_stopped|SANCTION|payee_)/i.test(String(r.reason??''))||r.paused)return null;
-    const dup=r.reason==='POSSIBLE_DUPLICATE_PURCHASE';/* t1280 (§6#140): a suspected duplicate always goes to the owner, whatever the payee tier / auto limit */
-    const c=await E.ownerAskClass(spec,{agentId,refusal:r}).catch(()=>null);if(!c?.ok||!(dup||c.newPayee||c.onchainTierCap))return null;/* t1212 §6#97: or a known payee above an on-chain payee cap */
+    const dup=r.reason==='POSSIBLE_DUPLICATE_PURCHASE';/* t1280 (decision 140): a suspected duplicate always goes to the owner, whatever the payee tier / auto limit */
+    const c=await E.ownerAskClass(spec,{agentId,refusal:r}).catch(()=>null);if(!c?.ok||!(dup||c.newPayee||c.onchainTierCap))return null;/* t1212 decision 97: or a known payee above an on-chain payee cap */
     if(dup&&(String(c.payee).toLowerCase()!==String(r.payee).toLowerCase()||String(c.amount)!==String(r.amountAtomic)))return null;
     if(c.overWallet)return overWalletView({payee:c.payee,amountAtomic:c.amount,name,reason:c.walletReason});
     if(!dup&&!c.overAuto)return null;/* within every auto limit: the existing one-time approval flow stays as it is */

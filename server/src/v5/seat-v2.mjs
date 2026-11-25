@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (handbook §6#119): Face ID KEY SEAT V2 (V5.5) - addresses, the six owner digests, the phone signature wrapper and the KPTR inline
+// t1250 (decision 119): Face ID KEY SEAT V2 (V5.5) - addresses, the six owner digests, the phone signature wrapper and the KPTR inline
 // trust blob. Mirrors KipurseKeySeatV2 exactly; test/fixtures/v55-vectors.json pins every value against the deployed contracts on a fork.
 // V55-01: the seat builds every digest ITSELF (hard-coded typehashes, domain "Kipurse Owner" / "5" / chainId / V5.5 adapter). The app and
 // this server compute the same digests LOCALLY and never sign a digest returned by a contract view.

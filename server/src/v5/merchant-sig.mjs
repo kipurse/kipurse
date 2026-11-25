@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1241 (handbook §6#111 ③, layered merchant trust): verify the merchant's OWN order signature, in whatever EIP-712 form its public
+// t1241 (decision 111 (3), layered merchant trust): verify the merchant's OWN order signature, in whatever EIP-712 form its public
 // capabilities declare, without asking the merchant to change anything for Kipurse. The signature is EVIDENCE only (never sent on chain):
 // the signer must be the one the merchant publishes on its own https origin (capabilities.merchant.expectedSigner) and the signed
 // payee / amount must be exactly the deposit address / amount of the order response. Any verifyingContract and payer 0 are fine here

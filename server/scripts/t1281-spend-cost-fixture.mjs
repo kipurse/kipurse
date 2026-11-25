@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1281 (handbook §6#141, rule 0A#10): cross-test vectors for the ONE spend-cost formula (src/v5/spend-cost.mjs), read by the app's
+// t1281 (decision 141, rule 0A#10): cross-test vectors for the ONE spend-cost formula (src/v5/spend-cost.mjs), read by the app's
 // KipurseCore SpendCost test. Each case: the record as the app sees it (amount, fee, networkFee or null, state, ppm, maxNetworkFee) and
 // the server's costOf() of the same record. Regenerate:
 //   node scripts/t1281-spend-cost-fixture.mjs > ~/kipurse-ios/Kipurse/Tests/KipurseCoreTests/t1281-spend-cost.json.txt

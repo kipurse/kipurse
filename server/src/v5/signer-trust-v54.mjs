@@ -1,5 +1,5 @@
 /**
- * t1213 (handbook §6#99 / §6#100): V5.4 signed-merchant auto-pay, OFF unless KIPURSE_V54_SIGNER_TRUST=1 AND the wallet's suite is V5.4.
+ * t1213 (decision 99 / decision 100): V5.4 signed-merchant auto-pay, OFF unless KIPURSE_V54_SIGNER_TRUST=1 AND the wallet's suite is V5.4.
  * Nothing here is wired into today's payment paths: the owner's V5.2 wallet behaves exactly as before.
  *
  * Owner decision (2026-11-19 21:20 CT): a merchant the owner trusted once, whose order carries a valid merchant signature from the
@@ -72,7 +72,7 @@ export function createGrantStore(kv, {now = () => Date.now()} = {}) {
     put(g) { const r = {wallet: getAddress(g.wallet), merchant: g.merchant, name: g.name, signers: g.signers.map(getAddress), single: String(g.single),
       daily: String(g.daily), expiry: Number(g.expiry), grant: g.grant, at: now()}; kv.set(key(r.wallet, r.merchant), JSON.stringify(r));
       for (const sg of r.signers) kv.set(`v54grant-s:${lc(r.wallet)}:${lc(sg)}`, r.merchant);
-      /* t1241 §6#111: index of this wallet's grants (the app's trusted-merchants list) */
+      /* t1241 decision 111: index of this wallet's grants (the app's trusted-merchants list) */
       try { const ik = `v54grant-list:${lc(r.wallet)}`; const l = (() => { try { return JSON.parse(kv.get(ik) ?? '[]'); } catch { return []; } })(); if (!l.includes(lc(r.merchant))) { l.push(lc(r.merchant)); kv.set(ik, JSON.stringify(l.slice(-200))); } } catch {}
       return r; },
     list(w) { let l = []; try { l = JSON.parse(kv.get(`v54grant-list:${lc(w)}`) ?? '[]'); } catch { l = []; } return l.map(m => this.get(w, m)).filter(Boolean); },
@@ -152,7 +152,7 @@ export function createSignerGrantHook({pub, trust, wallet, store, nowS = () => M
       if (merchantId(t.name) !== String(t.merchant).toLowerCase() && merchantId(t.name) !== t.merchant) return null;
       const nonce = randomNonce(), deadline = t.expiry;
       const [ep] = await pub.readContract({address: trust, abi: TRUST_V54_VIEWS, functionName: 'trustOf', args: [getAddress(wallet), t.merchant]});
-      /* t1240 §6#110: the grant is bound to the merchant's trust EPOCH, and the kind-1 trust signed in the same Face ID bumps that epoch by one when it
+      /* t1240 decision 110: the grant is bound to the merchant's trust EPOCH, and the kind-1 trust signed in the same Face ID bumps that epoch by one when it
          lands (setTrust: epoch + 1). A grant for the current epoch is therefore dead the moment the trust lands (fork: Approval() revert on the 2nd order).
          Sign it for epoch + 1: check our local struct hash equals the contract's at the current epoch, then hash the next epoch the same way. */
       const local = e => signerTrustStructHashLocal(getAddress(wallet), t, BigInt(e), nonce, deadline);

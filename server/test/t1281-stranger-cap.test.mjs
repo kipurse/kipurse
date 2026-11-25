@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1281 (owner decision §6#141 ①): the stranger ("open") sub-limit is USER-CHOSEN: 「付给陌生收款方，单笔 / 每天最多 ___」, default = the
+// t1281 (owner decision decision 141 (1)): the stranger ("open") sub-limit is USER-CHOSEN: "[zh]", default = the
 // normal limits. ONE formula (limits-public subCaps) for opening + limit change, the SAME on the phone (RequestVerify.subCaps):
 // this test pins the server side and writes the shared vectors to the iOS repo (Tests/KipurseCoreTests/t1281-stranger-caps.json.txt),
 // which the Swift test T1281StrangerCapTests replays against the phone formula (owner rule 0A#10: phone/server same formula + cross-test).

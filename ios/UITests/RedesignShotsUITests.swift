@@ -24,7 +24,7 @@ final class RedesignShotsUITests: XCTestCase {
       if tap("simple.tips") { shot(p + "safety-tips") }
       go(["-demo", "main", "-tab", "settings", "-kp.lang", L, "-kpSkipFaceID"]); if tap("settings.phone") { shot(p + "faceid-approvals") }
       go(["-demo", "main", "-tab", "settings", "-kp.lang", L, "-kpSkipFaceID"]); app.swipeUp(); app.swipeUp(); app.swipeUp(); shot(p + "settings-bottom")
-      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpSkipFaceID"]); if tap("approve.open") { shot(p + "approve-sheet") }   // §6#110: 待你批准 on AI 生活
+      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpSkipFaceID"]); if tap("approve.open") { shot(p + "approve-sheet") }   // decision 110: 待你批准 on AI 生活
       go(["-kpIdentityOK", "-kpUnbound", "-kp.lang", L]); shot(p + "unbound-home")
       go(["-demo", "main-all", "-tab", "agents", "-kp.lang", L, "-kpSkipFaceID"]); shot(p + "agents")
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID"]); if tap("home.withdraw") { shot(p + "withdraw") }

@@ -1,5 +1,5 @@
 import Foundation
-/// t613u beginner mode: plain words, guided setup. No preset is ever selected for the user.
+/// t613 beginner mode: plain words, guided setup. No preset is ever selected for the user.
 public enum Beginner {
   /// t796: onboarding progress, plain words (step i of 3).
   public static func progress(_ step: Int, zh: Bool) -> String { zh ? "第 \(step) 步，共 3 步" : "Step \(step) of 3" }
@@ -7,11 +7,12 @@ public enum Beginner {
   public static func plainAmount(_ v: Double) -> String { v >= 1 ? String(Int(v.rounded())) : String(format: "%.2f", v) }
   /// t796: correct English plural.
   public static func plural(_ n: Int, _ one: String, _ many: String) -> String { "\(n) " + (n == 1 ? one : many) }
-  /// t852 (owner): ONE fixed account-opening fee, the same for every user; Kipurse fronts it, taken once with the first AI payment.
+  /// t852 (owner): ONE account-opening fee constant (legacy display value). Since t1022 the user pays the actual opening fee in USDC in the same
+  /// confirmation; Kipurse fronts nothing.
   public static let openingFeeUSDC = "0.05"
   public static var openingFeeZh: String { "开通手续费按实际网络费（以开户页报价为准），用 USDC 在充值之外另从你的 Coinbase 钱包（Base 账户）扣，不从这次充值里扣，也不从启付钱包扣；已包含首次钱包安全上限和 Face ID 批准，只收这一次。" }
   public static var openingFeeEn: String { "The opening fee is the actual network cost (see the quote on the opening page), paid in USDC from your Coinbase wallet (Base account) on top of your deposit, not taken out of the deposit or your Kipurse wallet. It already covers your first wallet safety limits and Face ID approvals, and is charged once." }
-  /// How Kipurse names the currency everywhere (owner decision t613u).
+  /// How Kipurse names the currency everywhere (owner decision t613).
   public static let currencyZh = "USDC（美元稳定币）"
   public static let currencyEn = "USDC (US dollar stablecoin)"
   public static let coinbaseWhyZh = "需要一个 Coinbase 账户（开户不收费，约 5 分钟）。第 1 步（必须）：先开一个 Coinbase 账户并通过它的身份认证。用 Coinbase 做身份认证，保护你的钱。启付自己不做实名认证，也不收集你的证件。"
@@ -39,12 +40,14 @@ public enum Beginner {
       return Plan(key: k, zh: zh, en: en, single: single, daily: daily, term: daily * 30, days: 90) }
     return [mk("cautious", "保守", "Cautious", 0.5), mk("normal", "一般", "Normal", 1), mk("roomy", "宽松", "Roomy", 2)]
   }
+  /// t1246: daily-spend-only suggestions (owner removed the what-AI-buys question).
+  public static func plans(spend: Spend) -> [Plan] { plans(use: .shopping, spend: spend) }
   /// Initial selection is ALWAYS nil (owner forbids forced presets).
   public static let initialSelection: Int? = nil
 }
 
-/// t619u (owner decision): OWN addresses (wallet, Coinbase wallet, phone approver) are shortened by default (0x1234…abcd);
-/// full only after an explicit 显示完整地址 / 复制. PAYEE addresses are ALWAYS shown in full before a payment or trust approval.
+/// t619 (owner decision): OWN addresses (wallet, Coinbase wallet, phone approver) are shortened by default (0x1234…abcd);
+/// full only after an explicit [zh]. PAYEE addresses are ALWAYS shown in full before a payment or trust approval.
 public enum AddressDisplay {
   public static func short(_ a: String) -> String { a.count > 12 ? "\(a.prefix(6))…\(a.suffix(4))" : a }
   /// Full address, grouped in 4s for character-by-character checking (look-alike highlighting is done on top of this).
@@ -53,7 +56,7 @@ public enum AddressDisplay {
   public static func payee(_ a: String) -> String { full(a) }
 }
 
-/// t620u 安全小贴士. Every line is checked against the current design (see the owner's decision log t620u).
+/// t620 [zh]. Every line is checked against the current design (see the owner's decision log t620).
 public enum SafetyTips {
   public static let zh = [
     "你的钱包地址是公开的，就像收款用的银行账号。别人只知道地址，拿不走你的钱：钱只会在你设的上限内、或经你批准才会付出去。我们平时把地址缩短显示，是为了保护你的隐私。",

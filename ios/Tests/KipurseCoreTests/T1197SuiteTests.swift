@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1197u (handbook §6#92): new wallets on V5.3, 0x5150 and older wallets stay on V5.2 - the phone picks the suite per wallet.
+/// t1197 (decision 92): new wallets on V5.3, 0x5150 and older wallets stay on V5.2 - the phone picks the suite per wallet.
 final class T1197SuiteTests: XCTestCase {
   let W = "0x0eBd05A4a2226a59790600a54129f4b0E90fC817", v53 = "0xe635ab8852c3cb3b2125d3cb45018657ef73946b", v52 = "0x5d0136641655ad46eff24b243c3555a714f4317b"
   let owner0 = "0x515010c2e41F98CdDd76B819EE69DC832c0939B6", owner0Vault = "0x08FdA35764ea7999E69f644688552ff91b277d42"

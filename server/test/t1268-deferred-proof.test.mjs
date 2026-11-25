@@ -1,4 +1,4 @@
-// t1268 (handbook §6#133, locked rule 0A #2): no Face ID at sign-in. An unproven "bind" stays provable for the read-grant lifetime (30 d),
+// t1268 (decision 133, locked rule 0A #2): no Face ID at sign-in. An unproven "bind" stays provable for the read-grant lifetime (30 d),
 // so the app can prove with the Face ID of the first action that needs it; everything else keeps the short TTL.
 import test from 'node:test';import assert from 'node:assert/strict';import {verifyMessage} from 'viem';import {privateKeyToAccount,generatePrivateKey} from 'viem/accounts';
 import {createSignin} from '../src/v5/signin.mjs';

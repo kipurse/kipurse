@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1250 (§6#119): V5.5 page = this file with the V5.5 paymaster prefix (modes: deploy = next deploy batch, move = V5.4 -> V5.5).
+// t1250 (decision 119): V5.5 page = this file with the V5.5 paymaster prefix (modes: deploy = next deploy batch, move = V5.4 -> V5.5).
 // static/v55.js is the migrate-v54 bundle with this one substitution (no bundler on this machine); keep both in step.
-// t1214 (§6#102 / §6#101): the owner's "switch to V5.4" page (and its rollback, ?mode=rollback). Opened ONLY from the developer/test App,
+// t1214 (decision 102 / decision 101): the owner's "switch to V5.4" page (and its rollback, ?mode=rollback). Opened ONLY from the developer/test App,
 // which decoded and checked the batch first and put its SHA-256 commitment in the link (#vh=, never sent to a server). The KPVH guard
 // refuses any batch that differs by one byte. The owner's Base Account confirms once in Coinbase; the fee is the actual cost in USDC from
 // the Kipurse wallet inside the same batch (Kipurse's paymaster fronts the gas for that exact batch only). Never ETH, no auto-retry.

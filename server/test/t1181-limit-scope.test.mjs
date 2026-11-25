@@ -1,4 +1,4 @@
-// t1181u (handbook §6#84): off-chain limits are pinned to ONE network + ONE token, and one owner approval prepares at most one x402 reservation.
+// t1181 (decision 84): off-chain limits are pinned to ONE network + ONE token, and one owner approval prepares at most one x402 reservation.
 import test from 'node:test';import assert from 'node:assert/strict';import {getAddress} from 'viem';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';import {createHash} from 'node:crypto';
 import {engineFor,direct,USDC,PAYEE,WALLET} from './helpers/v5-fixture.mjs';

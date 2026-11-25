@@ -25,7 +25,7 @@ final class UnboundTests: XCTestCase {
     for zh in [true, false] {
       Loc.override = zh ? "zh" : "en"; defer { Loc.override = nil }
       XCTAssertEqual(Unbound.bindLabel, zh ? "开启 Face ID 批准" : "Turn on Face ID approvals")
-      XCTAssertEqual(Unbound.siriLabel, zh ? "更新 Face ID 批准" : "Update Face ID approvals")   // t1127u: no Face ID fee after opening
+      XCTAssertEqual(Unbound.siriLabel, zh ? "更新 Face ID 批准" : "Update Face ID approvals")   // t1127: no Face ID fee after opening
       XCTAssertEqual(GasCheck.Kind.phoneUpgrade.title, Unbound.bindLabel)
       XCTAssertTrue(GasCheck.phoneSignerWhat.contains(zh ? "不需要开通 Siri" : "needs Siri"))
       XCTAssertTrue(GasCheck.phoneSiriWhat.contains(zh ? "不升级也不影响 Face ID" : "Face ID still works"))

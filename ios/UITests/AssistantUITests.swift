@@ -49,7 +49,7 @@ final class AssistantUITests: XCTestCase {
     for e in p + y { let s = "\(e)"; XCTAssertFalse(s.contains("0x"), s); XCTAssertFalse(s.contains("19.79"), s) }   // demo balance 19.79
   }
   func testViewAnnotationsOnHome() async throws {
-    // t803: only on-screen views are annotated. §6#110: approvals (待你批准) now sit at the top of AI 生活.
+    // t803: only on-screen views are annotated. decision 110: approvals ([zh]) now sit at the top of AI [zh].
     await MainActor.run { app.tabBars.buttons.element(boundBy: 0).tap(); let r = app.descendants(matching: .any)["approve.open"].firstMatch; var n = 0; while !(r.exists && r.isHittable) && n < 6 { app.swipeUp(); n += 1 } }
     try await Task.sleep(nanoseconds: 1_000_000_000)
     let a = try await defs.entities["PaymentEntity"].viewAnnotations() + defs.entities["ApprovalEntity"].viewAnnotations()

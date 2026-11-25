@@ -3,7 +3,7 @@ import Security
 import LocalAuthentication
 import KipurseCore
 
-/// First screen of every new install: "用 Coinbase 登录". The user's Coinbase wallet is the identity; the leftover phone key in the
+/// First screen of every new install: "[zh]". The user's Coinbase wallet is the identity; the leftover phone key in the
 /// keychain (it survives app deletion) is only reused when the server proves it is still the approver of THIS account's wallet.
 enum SigninAPI {
   static func post(_ p: String, _ b: [String: Any]) async throws -> [String: Any] {
@@ -74,8 +74,8 @@ extension PhoneKey {
     var body: [String: Any] = [:]
     // t1027: public key ONLY from cache / fresh create — never PhoneKey.existing() here (ReturnRef = Face ID on launch/login).
     if let (x, y) = PhoneKey.cachedXY() { body = ["x": Hex.encode(x), "y": Hex.encode(y)] }
-    else if !PhoneKey.isPresent(), let (x, y) = try? OnboardAPI.key() { body = ["x": Hex.encode(x), "y": Hex.encode(y)] }   // t1001u: fresh key, no Face ID
-    if OnboardAPI.on, body["x"] != nil, let s = CoinbaseIdentity.presetSetup { body["setup"] = s }   // t603u: no preset; a NEW account picks its own limits in the guided step
+    else if !PhoneKey.isPresent(), let (x, y) = try? OnboardAPI.key() { body = ["x": Hex.encode(x), "y": Hex.encode(y)] }   // t1001: fresh key, no Face ID
+    if OnboardAPI.on, body["x"] != nil, let s = CoinbaseIdentity.presetSetup { body["setup"] = s }   // t603: no preset; a NEW account picks its own limits in the guided step
     let sentXY: ([UInt8], [UInt8])? = (body["x"] as? String).flatMap(Hex.decode).flatMap { x in (body["y"] as? String).flatMap(Hex.decode).map { (x, $0) } }
     // t1268: the one-page setup only opens for a PROVEN key, so with a setup the key signs the app-chosen id up front (one Face ID).
     // Without a setup nothing is signed here: a "reconnect" needs no proof (no Face ID on sign-in), a "bind" proves after the answer.
@@ -136,15 +136,15 @@ extension PhoneKey {
       m.identityVerified(); phase = .reconnecting
       await m.enterWalletWithoutFaceID()   // t1027 / 0A.2: land in wallet with no Face ID
       if m.state == nil { phase = .idle }
-    case .bind:   // t849 + t1001u LOCKED: a returning user lands straight in the wallet home (read-only grant for this phone key).
+    case .bind:   // t849 + t1001 LOCKED: a returning user lands straight in the wallet home (read-only grant for this phone key).
       // Never a Face ID / phone-key setup step first: with 0 balance its network fee can't be paid (dead loop). Face ID approvals
-      // are offered later, only when there is a balance and an action needs them (设置 → Face ID 批准, or the approval that needs it).
+      // are offered later, only when there is a balance and an action needs them ([zh] → Face ID [zh], or the approval that needs it).
       guard await Self.chainConfirms(wallet: r.wallet, owner: owner, hints: r.approverHints) else { phase = .failed(Self.notConfirmed); return }
       UserDefaults.standard.set(owner, forKey: CoinbaseIdentity.ownerKey)
       Unbound.remember(wallet: r.wallet, path: Self.path(r))
       Operator.setWallet(r.wallet, owner: owner, path: Self.path(r))
       m.identityVerified(); phase = .reconnecting
-      if let p = owedProof { OwedSigninProof.save(id: p.id, poll: p.poll, digest: p.digest, x: p.x, y: p.y) }; owedProof = nil   // t1268 §6#133 (0A #2): no Face ID at sign-in; proved by the first action that needs Face ID
+      if let p = owedProof { OwedSigninProof.save(id: p.id, poll: p.poll, digest: p.digest, x: p.x, y: p.y) }; owedProof = nil   // t1268 decision 133 (0A #2): no Face ID at sign-in; proved by the first action that needs Face ID
       #if DEBUG
       if Unbound.isMockSignin { m.state = AppModel.demoState("main-zero"); return }   // UI test: the wallet home the server would return, 0 balance
       #endif
@@ -335,7 +335,7 @@ private struct AIWalletHero: View {
     }
   }
   // t1053: official logos suspended inside a curved glass bead, never a planar icon tile.
-  // t1060: same AgentGlassBead as AI 生活 (build-35 soft rim); orbit/depth unchanged.
+  // t1060: same AgentGlassBead as AI [zh] (build-35 soft rim); orbit/depth unchanged.
   private func agent(_ i: Int, angle a: Double) -> some View {
     let depth = sin(a), size = 43.0 + depth * 4
     return ZStack {
@@ -533,7 +533,7 @@ struct WelcomeIntro: View {
 }
 
 
-/// t1268 (handbook §6#133, locked rule 0A #2): the key proof a "bind" sign-in still owes (no Face ID at sign-in). The first action that needs
+/// t1268 (decision 133, locked rule 0A #2): the key proof a "bind" sign-in still owes (no Face ID at sign-in). The first action that needs
 /// Face ID on this phone (turning on Face ID approvals) proves it with that same Face ID, so the server writes the 30-day read grant and the
 /// enrollment's owner check passes. Holds no secret beyond the sign-in poll token; cleared when used or after 30 days.
 enum OwedSigninProof {

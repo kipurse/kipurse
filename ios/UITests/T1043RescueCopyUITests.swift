@@ -39,7 +39,7 @@ final class T1043RescueCopyUITests: XCTestCase {
     XCTAssertTrue(fourth.exists)
     let auto = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", lang == "zh" ? "页面会自动找到" : "page automatically finds")).firstMatch
     XCTAssertTrue(auto.exists)
-    // t1245 (§6#115 U39): the address now sits on its own line under this step (never split after "https://"); same URL.
+    // t1245 (decision 115 U39): the address now sits on its own line under this step (never split after "https://"); same URL.
     let url = app.descendants(matching: .any).matching(identifier: "lost.url").firstMatch
     XCTAssertTrue(url.exists); XCTAssertTrue(url.label.contains("https://kipurse.github.io/rescue/"), url.label)
     for banned in ["之前保存", "完整链接", "截图", "PDF", "saved earlier", "complete recovery link"] { XCTAssertFalse(auto.label.contains(banned)) }

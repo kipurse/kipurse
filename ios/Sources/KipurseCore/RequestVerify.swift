@@ -9,9 +9,9 @@ public enum RequestVerify {
 
   public struct Permission: Equatable { public var account, spender, token: String; public var allowance, period, start, end: UInt64?; public var policy: [String] }
   public struct Choice { public var single, daily, term: String; public var days: Int?
-    /// t1185u (§6#85): daily on-chain operations the owner picked (nil = unchanged; no setOpsPerDay call allowed).
+    /// t1185 (decision 85): daily on-chain operations the owner picked (nil = unchanged; no setOpsPerDay call allowed).
     public var opsPerDay: Int?
-    /// t1281 (§6#141 ①): the owner's own limits for strangers (atomic USDC; both nil = an older server / legacy formula, see subCaps).
+    /// t1281 (decision 141 (1)): the owner's own limits for strangers (atomic USDC; both nil = an older server / legacy formula, see subCaps).
     public var openSingle: String?, openDaily: String?
     public init(single: String, daily: String, term: String, days: Int?, opsPerDay: Int? = nil, openSingle: String? = nil, openDaily: String? = nil) { self.single = single; self.daily = daily; self.term = term; self.days = days; self.opsPerDay = opsPerDay; self.openSingle = openSingle; self.openDaily = openDaily } }
   public struct Result: Equatable { public var problems: [String] = []; public var notes: [String] = []; public var ok: Bool { problems.isEmpty }
@@ -40,16 +40,6 @@ public enum RequestVerify {
     for i in 0..<12 { if i == 0 || i == 1 || i == 9 { guard let x = pr.addr(i * 32) else { return nil }; pol.append(x) } else { guard let x = pr.dec(i * 32) else { return nil }; pol.append(x) } }
     return Permission(account: a, spender: s, token: tok, allowance: r.u64(t + 96), period: r.u64(t + 128), start: r.u64(t + 160), end: r.u64(t + 192), policy: pol)
   }
-  /// USDC.approve(Pimlico ERC-20 paymaster, amount in (0, 0.05 USDC]). nil = OK.
-  public static func paymasterApproveProblem(_ c: [String: Any]) -> String? {
-    guard let to = c["to"] as? String, lc(to) == lc(usdc) else { return "fee approve is not USDC" }
-    if let v = c["value"] as? String, v != "0x0", v != "0" { return "fee approve sends value" }
-    guard let d = (c["data"] as? String).flatMap(Hex.decode), d.count == 68, Hex.encode(Array(d.prefix(4))) == "0x095ea7b3" else { return "fee approve is not an ERC-20 approve" }
-    let r = R(b: Array(d.dropFirst(4)))
-    guard let spender = r.addr(0), UsdcGas.approveTargetAllowed(spender) else { return "fee approve pays someone other than the USDC paymaster" }
-    guard let amt = r.dec(32), let n = UInt64(amt), n > 0, n <= UsdcGas.approveCapAtomic else { return "fee approve above 0.05 USDC" }
-    return nil
-  }
   /// wallet.execute(USDC, 0, transfer(owner, fee<=0.05 USDC)). nil = OK.
   public static func feeRefundProblem(_ c: [String: Any], wallet: String, owner: String?, alsoTo: String? = nil) -> String? {
     guard let o = owner, let to = c["to"] as? String, lc(to) == lc(wallet), let d = (c["data"] as? String).flatMap(Hex.decode), d.count >= 4, Hex.encode(Array(d.prefix(4))) == "0xb61d27f6" else { return "unexpected extra call" }
@@ -63,19 +53,16 @@ public enum RequestVerify {
   }
   /// One wallet call: wallet.executeBatch([...]) whose inner calls may ONLY be revoke/approve on the Spend Permission Manager and
   /// registerPermission on the Kipurse adapter, all for THIS wallet, with exactly the caps the user picked.
-  /// t767u: Kipurse ops account and per-op cap for repaying fronted onboarding gas (vault fee slot). Fixed here, never from the server.
-  /// t1123u: the official Kipurse fee address (= server DUES_SLOT / withdraw feeTo / OwnerExit.withdrawFeeTo / UsdcGas.feeTo). Was the stale 0xfc0E…345B.
+  /// t767: Kipurse ops account and per-op cap for legacy dues (pre-t1022 onboarding gas; vault fee slot). Fixed here, never from the server.
+  /// t1123: the official Kipurse fee address (= server DUES_SLOT / withdraw feeTo / OwnerExit.withdrawFeeTo / UsdcGas.feeTo). Was the stale 0xfc0E…345B.
   public static let duesTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9", duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
   public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false, requireRevoke: Bool = false) -> Result {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
-    // t1103: wallet-pays is exactly USDC.approve(Pimlico, <= 0.05) then the cap change. No refund, no other call.
-    if walletPays {
-      if inCalls.count != 2 { bad("wallet pays the fee itself; no refund"); return res }
-      if let why = paymasterApproveProblem(inCalls[0]) { bad(why); return res }
-    }
-    // t606u: an optional 2nd call = the wallet refunds the network fee (USDC only, max 0.05) to YOUR Coinbase wallet.
-    var calls = walletPays ? [inCalls[1]] : inCalls
-    if !walletPays && calls.count == 2 { let rf = calls[1]; calls = [calls[0]]
+    // t147: the retired third-party ERC-20 paymaster (Pimlico) shape is never signed. Later changes use limitsReply (Kipurse sponsor route).
+    if walletPays { bad("the retired USDC paymaster path is not supported"); return res }
+    // t606: an optional 2nd call = the wallet refunds the network fee (USDC only, max 0.05) to YOUR Coinbase wallet.
+    var calls = inCalls
+    if calls.count == 2 { let rf = calls[1]; calls = [calls[0]]
       if let why = feeRefundProblem(rf, wallet: wallet, owner: owner) { bad(why) } else { res.notes.append("wallet pays the network fee in USDC") } }
     if chainId != 8453 { bad("wrong chain \(chainId)") }
     guard calls.count == 1, let c = calls.first, let to = c["to"] as? String, let data = (c["data"] as? String).flatMap(Hex.decode) else { bad("expected exactly one call"); return res }
@@ -90,7 +77,7 @@ public enum RequestVerify {
       guard let target = r.addr(e), let val = r.dec(e + 32), let dofs = r.int(e + 64), let inner = r.bytes(e + dofs), inner.count >= 4 else { bad("bad inner call"); return res }
       if val != "0" { bad("inner call sends ETH") }
       let sel = String(Hex.encode(Array(inner.prefix(4))).dropFirst(2)); let ir = R(b: Array(inner.dropFirst(4)))
-      // t767u: optional LAST inner call vault.setBundlerFee(Kipurse ops, <= 0.05 USDC): only to this wallet's vault, only once
+      // t767: optional LAST inner call vault.setBundlerFee(Kipurse ops, <= 0.05 USDC): only to this wallet's vault, only once
       if sel == selSetBundlerFee {
         if i != n - 1 || dues > 0 { bad("fee-slot step in an unexpected place") }
         if vault == nil || lc(target) != lc(vault!) { bad("fee-slot step targets something other than your vault") }
@@ -98,7 +85,7 @@ public enum RequestVerify {
         if let m = ir.dec(32), let mv = UInt64(m), mv <= duesMaxPerOp, mv > 0 {} else { bad("fee-slot cap is above 0.05 USDC") }
         dues += 1; res.notes.append("account-opening fee fronted by Kipurse: 0.05 USDC, taken once with the first AI payment"); continue
       }
-      // t1185u (§6#85): optional vault.setOpsPerDay(n) - ONLY to this wallet's V5.3 vault (computed on the phone), ONLY the number you picked, once
+      // t1185 (decision 85): optional vault.setOpsPerDay(n) - ONLY to this wallet's V5.3 vault (computed on the phone), ONLY the number you picked, once
       if sel == OpsCap.selSetOpsPerDay {
         guard let want = choice.opsPerDay else { bad("changes the daily operations although you did not"); continue }
         if opsSet > 0 { bad("daily operations set twice") }
@@ -191,7 +178,7 @@ public enum RequestVerify {
     return p
   }
 
-  // MARK: t1281 (owner decision §6#141 ①) - THE stranger sub-limit formula, identical to the server's (gw src/v5/limits-public.mjs
+  // MARK: t1281 (owner decision decision 141 (1)) - THE stranger sub-limit formula, identical to the server's (gw src/v5/limits-public.mjs
   // subCaps / strangerChoiceError; cross-test gw test/t1281-stranger-cap.test.mjs -> t1281-stranger-caps.json.txt).
   // "Stranger" = a payee you have not trusted that is not registry-listed: policy [5] openSingle = per payment (amount only),
   // [6] openDaily = per day INCLUDING fees, one counter for all strangers.
@@ -242,17 +229,16 @@ public enum RequestVerify {
   }
 
   /// t1104: the App's check of a /owner/limits/prepare reply (calls exactly as the server sent them).
-  /// Wallet-pays (feeFrom = kipurse_wallet): the WHOLE batch goes to limitsBatch(walletPays:), which allows only
-  /// [USDC.approve(Pimlico 0x6666…c68b, 0 < n <= 0.05 USDC), cap change]. The older UsdcGas.split rules (approve only to the
-  /// CDP paymaster, <= 0.25 USDC) stay exactly as before for every other batch.
+  /// t147: the old wallet-pays shape (a third-party ERC-20 paymaster approve) is refused. The UsdcGas.split rules (approve only to the
+  /// CDP paymaster, <= 0.25 USDC) stay exactly as before for every other batch. The live path is limitsReply.
   public static func limitsPrepared(calls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, owner: String?, walletPays: Bool, now: Date = Date()) -> Result {
-    if walletPays { return limitsBatch(calls: calls, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: true, requireRevoke: true) }
+    if walletPays { return Result(problems: ["the retired USDC paymaster path is not supported"]) }
     let ug = UsdcGas.split(calls, wallet: wallet)
     if !ug.problems.isEmpty || ug.deposit > 0 { return Result(problems: ug.problems.isEmpty ? ["USDC deposit inside a limits change"] : ug.problems) }
     return limitsBatch(calls: ug.rest, wallet: wallet, chainId: chainId, choice: choice, currentExecutor: nil, owner: owner, now: now, walletPays: false, requireRevoke: true)
   }
 
-  // MARK: t1123u (§6#63) — later limit changes: the network fee comes from the Kipurse wallet's USDC in the SAME confirmation.
+  // MARK: t1123 (decision 63) — later limit changes: the network fee comes from the Kipurse wallet's USDC in the SAME confirmation.
   /// Server feeFrom for the only limits batch this build signs.
   public static let limitsWalletFeeFrom = "kipurse_wallet_fee"
   /// Fee ceiling for one limits change (0.01 USDC, exclusive), same as the server cap.
@@ -276,7 +262,7 @@ public enum RequestVerify {
   /// The App's whole check of a /owner/limits/prepare reply (what MainnetViews calls before the signing page opens).
   /// Accepts ONLY: feeFrom kipurse_wallet_fee, sent from YOUR Base Account (it only signs, needs no USDC), paymaster = Kipurse's
   /// sponsor route for this batch, and exactly [wallet -> Kipurse fee address F (< 0.01 USDC), the cap change you chose].
-  /// Refuses the paused relay (wallet -> your Base Account + Pimlico approve), the Pimlico approve shape, a refund to you, and anything else.
+  /// Refuses the retired relay (wallet -> your Base Account + a third-party paymaster approve), any paymaster approve, a refund to you, and anything else.
   public static func limitsReply(_ j: [String: Any], wallet: String, owner: String?, choice: Choice, now: Date = Date()) -> LimitsReply {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
     guard (j["feeFrom"] as? String) == limitsWalletFeeFrom else { bad("this change does not take the fee from your Kipurse wallet in the same confirmation"); return LimitsReply(result: res, from: nil, fee: nil) }
@@ -297,7 +283,7 @@ public enum RequestVerify {
     return LimitsReply(result: res, from: res.ok ? o : nil, fee: leg.fee)
   }
 
-  // MARK: t1139u (§6#71, owner decision t1139 option a) — resume after an emergency stop lifts the ON-CHAIN pause too.
+  // MARK: t1139 (decision 71, owner decision t1139 option a) — resume after an emergency stop lifts the ON-CHAIN pause too.
   /// The only resume batch this build signs: [Kipurse wallet -> Kipurse fee address F (0 < F < 0.01 USDC), wallet.execute(KipurseTrust, 0, setPaused(false))],
   /// sent from YOUR Base Account (it only signs, pays no ETH), through Kipurse's sponsor route registered for exactly this batch (ur-).
   public static let resumePaymasterPrefix = "https://pay.kipurse.com/onboard/new/paymaster?id=ur-"

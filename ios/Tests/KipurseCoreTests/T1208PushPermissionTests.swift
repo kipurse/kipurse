@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1208u / handbook §6#94: the app asks iOS for notification permission once a mainnet session / bound wallet exists, never in demo,
+/// t1208 / decision 94: the app asks iOS for notification permission once a mainnet session / bound wallet exists, never in demo,
 /// never again after iOS decided; registers with APNs after a grant; uploads a new token only with a session.
 final class T1208PushPermissionTests: XCTestCase {
   func testAsksOnceWhenSessionOrWalletAndUndecided() {

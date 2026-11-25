@@ -1,7 +1,7 @@
 import LocalAuthentication
 import KipurseCore
 
-/// t1255 (handbook §6#124): iOS locks Face ID after too many failed matches (LAError.biometryLockout). The only way back is the
+/// t1255 (decision 124): iOS locks Face ID after too many failed matches (LAError.biometryLockout). The only way back is the
 /// device passcode. Before any Face ID approval / sign-in, this asks for the passcode on the system sheet ONLY to unlock Face ID.
 /// It approves nothing: every Kipurse Secure Enclave key still needs Face ID afterwards (approvals never accept the passcode).
 enum FaceIDUnlock {

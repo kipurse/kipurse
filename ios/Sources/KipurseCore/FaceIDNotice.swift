@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1153u (owner t1153s5250, handbook §6#74): calm guidance when the Face ID approval key cannot be used.
+/// t1153 (owner t1153s5250, decision 74): calm guidance when the Face ID approval key cannot be used.
 /// LAError -6 (biometryNotAvailable) = Face ID is turned off for Kipurse in iOS Settings (or never allowed).
 /// An invalidated .biometryCurrentSet key (Face ID was reset / re-enrolled) = turn Face ID approvals on again.
 /// Compared by raw value so KipurseCore does not import LocalAuthentication.
@@ -12,7 +12,7 @@ public enum FaceIDNotice: Equatable {
   public static let keyZH = "这台 iPhone 的 Face ID 有变化，批准钥匙已失效。请到 设置 › Face ID 批准 重新开启。这次没有批准，也没有扣钱。"
   public static let keyEN = "Face ID changed on this iPhone, so the approval key no longer works. Go to Settings › Face ID approvals and turn it on again. Nothing was approved or charged."
 
-  /// t1255 (§6#124): iOS locked Face ID after too many failed matches. The passcode only unlocks Face ID; it never approves.
+  /// t1255 (decision 124): iOS locked Face ID after too many failed matches. The passcode only unlocks Face ID; it never approves.
   public static let lockZH = "Face ID 失败次数太多，iPhone 暂时锁住了 Face ID。点「重试」，输入锁屏密码解锁 Face ID（密码只用来解锁 Face ID，不会批准任何东西），然后再用 Face ID 批准。这次没有批准，也没有扣钱。"
   public static let lockEN = "Too many failed Face ID tries, so iPhone locked Face ID for now. Tap Retry and enter your passcode to unlock Face ID (the passcode only unlocks Face ID and approves nothing), then approve with Face ID. Nothing was approved or charged."
   /// The reason shown on the system passcode sheet.

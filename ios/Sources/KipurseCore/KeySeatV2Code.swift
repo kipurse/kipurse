@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// t1250 (handbook §6#119): creation code of KipurseKeySeatV2 (work/t1214/contracts/src/KipurseKeySeatV2.sol; forge 1.10.0, solc 0.8.37,
+// t1250 (decision 119): creation code of KipurseKeySeatV2 (work/t1214/contracts/src/KipurseKeySeatV2.sol; forge 1.10.0, solc 0.8.37,
 // via_ir, optimizer 200, cancun). Copied from gw/src/v5/key-seat-v2-artifact.json; keccak256 = 0x7a9079a6…897f (pinned in the V5.5 vectors test).
 extension KeySeat {
   static let creationCodeV2: String = "0x" + [

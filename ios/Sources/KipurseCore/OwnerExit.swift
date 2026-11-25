@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// "提现到我的账户": the wallet's own owner (the user's Coinbase wallet) sends ONE batch to the wallet:
+/// "[zh]": the wallet's own owner (the user's Coinbase wallet) sends ONE batch to the wallet:
 ///   [wallet.execute(vault, 0, sweep())]  (only if the wallet has a small fee reserve)
 ///   wallet.execute(USDC, 0, transfer(owner, amount))
 /// The phone rebuilds this batch itself and refuses anything else (RequestVerify), so a server can never change where the money goes.

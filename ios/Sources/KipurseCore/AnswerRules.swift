@@ -9,7 +9,7 @@ public enum AnswerRules {
   public static let nameZh: [String:String] = ["termDays":L("授权天数"),"perPayment":L("每笔上限"),"perDay":L("每天上限"),"termTotal":L("整个期间上限"),
     "unrecognizedPerPayment":L("陌生收款方每笔上限"),"unrecognizedPerDay":L("陌生收款方每天上限"),"depositDailyLimit":L("每天充值上限"),"withdraw":L("提现金额")]
 
-  /// "1.5" -> 1_500_000. Fullwidth digits OK. Only '.' (or 。．) is the decimal point. ',' '，' or a space may group thousands,
+  /// "1.5" -> 1_500_000. Fullwidth digits OK. Only '.' (or [zh]) is the decimal point. ',' '[zh]' or a space may group thousands,
   /// but ONLY as strict 3-digit groups ("1,000" / "12,345.67" / "1 000 000"); "3,5" is rejected (never silently 35 or 3.5).
   public static func parseUSDC(_ raw: String) -> Int64? {
     var s = String(raw.trimmingCharacters(in: .whitespaces).map { c -> Character in

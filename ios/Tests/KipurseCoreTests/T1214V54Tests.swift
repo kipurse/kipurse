@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1214 (handbook §6#100/#102): the kind-5 signer-trust grant digest the phone signs (same vector as the forked V5.4 contract) and the
+/// t1214 (decision 100/#102): the kind-5 signer-trust grant digest the phone signs (same vector as the forked V5.4 contract) and the
 /// phone's V5.2 -> V5.4 switch after the owner-signed migration (and back after a rollback).
 final class T1214V54Tests: XCTestCase {
   let owner0 = "0x515010c2e41F98CdDd76B819EE69DC832c0939B6", v52Vault = "0x08FdA35764ea7999E69f644688552ff91b277d42", v54Vault = "0x4B1597a46600fbD610f07229F6396881a2edF075"
@@ -18,7 +18,7 @@ final class T1214V54Tests: XCTestCase {
     var none = grant; none.signers = []; XCTAssertNil(PhoneTrust.signerTrustDigest(none), "a grant without a signer is never signed")
   }
   func testGrantMustMatchTheCard() {
-    let card = OwnerTrustMessage(account: owner0, merchant: mer, name: "shop.example", epoch: "0" /* t1240: the grant (epoch 1) is for the epoch AFTER this trust lands */, payees: ["0x12aC413cb96b5F40983869eBA957a0228e6f6773"], signers: [signer],
+    let card = OwnerTrustMessage(account: owner0, merchant: mer, name: "shop.example", epoch: "0" /* t1240: the grant (epoch 1) is for the epoch AFTER this trust lands */, payees: ["0x5Ee0000000000000000000000000000000005Ee0"], signers: [signer],
                                  single: "6000000", daily: "12012000", expiry: "1799971200", nonce: "0x" + String(repeating: "22", count: 32), deadline: "1799971200")
     XCTAssertEqual(PhoneTrust.signerTrustProblems(grant, card: card, wallet: owner0), [])
     var sameEpoch = card; sameEpoch.epoch = "1"; XCTAssertFalse(PhoneTrust.signerTrustProblems(grant, card: sameEpoch, wallet: owner0).isEmpty, "t1240: a grant for the current epoch dies when the trust lands")

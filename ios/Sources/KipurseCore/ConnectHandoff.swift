@@ -1,6 +1,6 @@
 import Foundation
 
-/// t1254 (handbook §6#123): the "next step" page shown after 「继续」 on the first-connect limits page, BEFORE the app jumps to an
+/// t1254 (decision 123): the "next step" page shown after "[zh]" on the first-connect limits page, BEFORE the app jumps to an
 /// outside AI (Muse or another agent app). It says plainly that the limits are not in effect yet and where the one Face ID
 /// confirmation will happen. Display only: nothing here saves, grants or signs.
 public enum ConnectHandoff {

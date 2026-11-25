@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1241 (handbook §6#111): layered merchant trust on the phone. The trust part still names exactly ONE signer under the merchant's domain
+/// t1241 (decision 111): layered merchant trust on the phone. The trust part still names exactly ONE signer under the merchant's domain
 /// (now Kipurse's attestor for that domain, given by the server); the card says whether the merchant itself signs (unsigned: half limits).
 final class T1241LayeredTrustTests: XCTestCase {
   private let att = "0xB2EA874D9A64326925032dF4DE2654cffc581203", payee = "0x4ce264e7b3683370879153388e345da28b6f0d6e"

@@ -1,4 +1,4 @@
-// t1247 (handbook §6#117, App Review 5.1.1(v)): "delete my data" also removes push device tokens and the onramp email/phone verification.
+// t1247 (decision 117, App Review 5.1.1(v)): "delete my data" also removes push device tokens and the onramp email/phone verification.
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
 import {kvUserParts} from '../src/v5/user-data.mjs';import {createMemoryKV,kvKey} from '../src/v5/store.mjs';
 test('erase removes push tokens, move flag, onramp verification and orders of THIS wallet only',async()=>{

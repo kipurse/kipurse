@@ -2,7 +2,7 @@ import Foundation
 import Security
 import KipurseCore
 
-/// t1158u (§6#77): Siri's own pay-only credential. The server issues it only in the reply to the phone-signed (Face ID) Siri
+/// t1158 (decision 77): Siri's own pay-only credential. The server issues it only in the reply to the phone-signed (Face ID) Siri
 /// connect approval, stores only its hash bound to this phone, accepts it ONLY on POST /siri/buy (every cap, the trust list,
 /// Siri's own stop and the pause still apply) and revokes it when Siri is disconnected / stopped or AI payments are stopped.
 /// Kept in this device's Keychain (never synced, never in a backup), readable once the phone was unlocked after boot so

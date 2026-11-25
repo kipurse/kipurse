@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1238 (handbook §6#108): mirror of the Base Account popup's batch check, read from keys.coinbase.com's public script on 2026-11-20
-// (chunk.cd68c7e3a50d77361475.js, functions jne / Mne). Coinbase can change it at any time (§6#107): this only catches what we know.
+// t1238 (decision 108): mirror of the Base Account popup's batch check, read from keys.coinbase.com's public script on 2026-11-20
+// (chunk.cd68c7e3a50d77361475.js, functions jne / Mne). Coinbase can change it at any time (decision 107): this only catches what we know.
 //   - "Self calls are not allowed."             : any call to the Base Account itself
 //   - "Spend permission calls are not allowed." : any top-level call to the SpendPermissionManager
 //   - "Account owner or upgrade calls are not allowed." : addOwnerAddress / addOwnerPublicKey / removeOwnerAtIndex / removeLastOwner /

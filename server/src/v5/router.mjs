@@ -27,7 +27,7 @@ export const readRaw=async(req,max=65536)=>{if(req.__raw!==undefined)return req.
 /** Bounded LRU of per-wallet runtimes. load(rec) builds one; close() is called on eviction. Concurrent first loads share one promise. */
 export function createTenantCache({reg,load,max=500}){const T=new Map();
   async function get(w){const k=String(w).toLowerCase();let t=T.get(k);if(t){T.delete(k);T.set(k,t);return t;}
-    const rec=reg.get(w);if(!rec||rec.retired)return null;t=load(rec);/* t1265 (§6#120): a retired (moved-away) wallet is never built or served */T.set(k,t);try{t=await t;T.set(k,t);}catch(e){T.delete(k);throw e;}
+    const rec=reg.get(w);if(!rec||rec.retired)return null;t=load(rec);/* t1265 (decision 120): a retired (moved-away) wallet is never built or served */T.set(k,t);try{t=await t;T.set(k,t);}catch(e){T.delete(k);throw e;}
     while(T.size>max){const [ok,ov]=T.entries().next().value;T.delete(ok);try{(await ov).close();}catch{}}return t;}
   return {get,size:()=>T.size,values:()=>T.values(),drop:async w=>{const k=String(w).toLowerCase(),t=T.get(k);T.delete(k);try{(await t)?.close();}catch{}}};}
 /** Per-wallet pool of ready MCP servers (one per agent identity). Building the tool set is the expensive part of an MCP request.

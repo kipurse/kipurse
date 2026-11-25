@@ -11,7 +11,7 @@ public enum SiriAnswers {
     var t = zh ? "Kipurse 余额 \(AnswerRules.format(s.balance)) USDC" : "Kipurse balance: \(AnswerRules.format(s.balance)) USDC"
     if let a = s.capSingle, let b = s.capDaily {
       t += zh ? "。每笔最多 \(AnswerRules.format(a))，每天最多 \(AnswerRules.format(b)) USDC" : ". Up to \(AnswerRules.format(a)) per payment, \(AnswerRules.format(b)) USDC per day"
-      if let c = s.capTerm { t += zh ? "，总额最多 \(AnswerRules.format(c)) USDC" : ", \(AnswerRules.format(c)) USDC in total" }   // t1129u: the total limit was set but never said
+      if let c = s.capTerm { t += zh ? "，总额最多 \(AnswerRules.format(c)) USDC" : ", \(AnswerRules.format(c)) USDC in total" }   // t1129: the total limit was set but never said
       if let e = s.capEnd { t += zh ? "，到 \(day(e, zh: true)) 结束" : ", until \(day(e, zh: false))" }
     }
     return t + (zh ? "。" : ".")

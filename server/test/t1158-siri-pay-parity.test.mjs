@@ -1,4 +1,4 @@
-// t1158u (handbook §6#77): Siri has the same payment ability as every other AI. Server side:
+// t1158 (decision 77): Siri has the same payment ability as every other AI. Server side:
 // a Siri-scoped revocable credential issued on the signed Siri approval (hash only, bound to the phone signer), accepted ONLY by
 // POST /siri/buy; revoked by Siri disconnect / emergency stop / pause / a newer Siri approval; trust-list names resolved on the
 // server; an owner-approved over-limit Siri payment is completed once with a derived idempotency key.

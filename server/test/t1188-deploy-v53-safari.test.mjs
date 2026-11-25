@@ -1,4 +1,4 @@
-// t1188 (§6#88): the one-time deploy page must work like the proven sign pages on the owner's iPhone: HEAD 200 (SDK COOP check),
+// t1188 (decision 88): the one-time deploy page must work like the proven sign pages on the owner's iPhone: HEAD 200 (SDK COOP check),
 // another app's built-in browser is recognised and calmly sent to Safari (no button there), the tap opens Coinbase first, no loops.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {Readable} from 'node:stream';import {getAddress} from 'viem';
 import {loadV53Plan,createDeployV53} from '../src/v5/deploy-v53.mjs';import {readRaw} from '../src/v5/router.mjs';

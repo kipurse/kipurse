@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1241 (handbook §6#111 ⑤): the gateway's client for the separate attestor service (mainnet/attestor-server.mjs). Same API as the in-process
+// t1241 (decision 111 (5)): the gateway's client for the separate attestor service (mainnet/attestor-server.mjs). Same API as the in-process
 // createAttestor(): address(domain), attest(request), pause(domain, reason), resume(domain), paused(domain). Unix socket (default) or a
 // 127.0.0.1 URL. The gateway never holds an attestor key: without the service's signature the V5.4 signed route cannot pay.
 import http from 'node:http';

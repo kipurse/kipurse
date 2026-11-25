@@ -30,7 +30,7 @@ test('wiring: launcher asserts at boot; kit config has zero margin; texts say ac
   const E=fs.readFileSync(new URL('../src/v5/engine.mjs',import.meta.url),'utf8');assert.doesNotMatch(E,/marginBps\?\?[1-9]/);
   const O=fs.readFileSync(new URL('../src/v5/onramp.mjs',import.meta.url),'utf8');assert.match(O,/destinationAddress/);
 });
-// t787u iron rules: pooled custody / withdraw redirect / skipping the sign-page pin / raised sponsor caps refuse to boot
+// t787 iron rules: pooled custody / withdraw redirect / skipping the sign-page pin / raised sponsor caps refuse to boot
 test('t787 security iron rules are locked',async()=>{const {assertPrinciples,PRINCIPLES:P}=await import('../src/v5/principles.mjs');
   assert.equal(P.noPooledCustody,true);assert.equal(P.withdrawOnlyToVerifiedOwner,true);assert.equal(P.signPagePinRequired,true);assert.deepEqual({...P.sponsorCaps},{maxPerDay:20,maxUsdPerDay:2,maxUsdPerOp:0.25});
   assert.ok(Object.isFrozen(P)&&Object.isFrozen(P.sponsorCaps));

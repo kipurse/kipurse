@@ -1,4 +1,4 @@
-// t1241 (handbook §6#111): layered merchant trust in the engine (V5.4 + owner grant hook + attestor). A merchant that changes NOTHING for
+// t1241 (decision 111): layered merchant trust in the engine (V5.4 + owner grant hook + attestor). A merchant that changes NOTHING for
 // Kipurse: deposit address / amount / expiry only from Kipurse's own create-order call; merchant signature required when it publishes a
 // signer; unsigned merchants auto-pay only up to HALF the trust caps; the attestor re-checks independently; unconfirmed -> domain paused.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,readFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {randomBytes} from 'node:crypto';

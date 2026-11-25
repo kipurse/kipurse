@@ -1,4 +1,4 @@
-// t1210 (handbook §6#95, owner t1214u/t1216u): an AI repeating a still-pending identical request gets the SAME card back (dedupe unchanged, no new
+// t1210 (decision 95, owner t1214/t1216): an AI repeating a still-pending identical request gets the SAME card back (dedupe unchanged, no new
 // request, nothing paid) and the owner's phone is pushed again, at most once per 5 minutes. kipurse_remind_owner also works for buy / allowance
 // requests, only for the AI that made them. Nothing here can approve or pay.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';

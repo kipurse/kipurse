@@ -28,7 +28,7 @@ final class OpeningDepositT1020Tests: XCTestCase {
     XCTAssertTrue(n.zh.contains("0.0444") && n.zh.contains("实际网络费"), n.zh)
     XCTAssertTrue(n.en.contains("0.0444") && n.en.contains("actual network"), n.en)
     let fallback = UsdcGas.feeNote(quotedUSDC: nil)
-    XCTAssertTrue(fallback.zh.contains("实际网络费") && fallback.zh.contains("在充值之外另从你的 Coinbase 钱包（Base 账户）扣"))   // t1114u
+    XCTAssertTrue(fallback.zh.contains("实际网络费") && fallback.zh.contains("在充值之外另从你的 Coinbase 钱包（Base 账户）扣"))   // t1114
     XCTAssertFalse(fallback.zh.contains("0.05"))
     for w in ["免费", "垫付", "赞助"] { XCTAssertFalse(n.zh.contains(w)); XCTAssertFalse(fallback.zh.contains(w)) }
   }

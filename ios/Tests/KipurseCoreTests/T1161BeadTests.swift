@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1161u (§6#78): every AI's home bead is honest — 在线 only after a real call in the last 5 min, on the row the AI really used;
+/// t1161 (decision 78): every AI's home bead is honest — [zh] only after a real call in the last 5 min, on the row the AI really used;
 /// Siri intents mark Siri used (read-only marker, throttled, never faked).
 final class T1161BeadTests: XCTestCase {
   private func j(_ o: Any) -> JSONValue { try! JSONDecoder().decode(JSONValue.self, from: JSONSerialization.data(withJSONObject: o)) }
@@ -22,7 +22,7 @@ final class T1161BeadTests: XCTestCase {
     for n in ["Muse", "Grok", "Claude", "Siri"] {
       XCTAssertEqual(phase(rows(5), n, now).1, .online, n)
       XCTAssertEqual(phase(rows(299), n, now).1, .online, n)
-      XCTAssertEqual(phase(rows(360), n, now).1, .online, "t1164u: 6 min ago still lit " + n)
+      XCTAssertEqual(phase(rows(360), n, now).1, .online, "t1164: 6 min ago still lit " + n)
       XCTAssertEqual(phase(rows(86400 * 40), n, now).1, .online, n)
     }
   }
@@ -36,7 +36,7 @@ final class T1161BeadTests: XCTestCase {
     XCTAssertEqual(phase(claude, "Claude", now).0, "oauth-claude-desktop", "a disconnected row never lights the bead")
     let claudeNever: [[String: Any]] = [["id": "claude", "name": "Claude", "kind": "claude", "connected": false, "lastUsed": ago(86400, now)],
                                         ["id": "oauth-claude-desktop", "name": "Claude", "kind": "claude-desktop", "connected": true]]
-    XCTAssertEqual(phase(claudeNever, "Claude", now).0, "oauth-claude-desktop", "t1164u: connected-but-never-used beats an old disconnected exact row")
+    XCTAssertEqual(phase(claudeNever, "Claude", now).0, "oauth-claude-desktop", "t1164: connected-but-never-used beats an old disconnected exact row")
     XCTAssertEqual(phase(claudeNever, "Claude", now).1, .online)
     XCTAssertEqual(phase([["id": "oauth-siri", "name": "Siri", "kind": "custom", "connected": true]], "Siri", now).0, nil, "the hidden oauth-siri record never counts")
     let muse: [[String: Any]] = [["id": "oauth-muse", "name": "Muse", "kind": "muse", "connected": true, "lastUsed": ago(20, now)],
@@ -50,10 +50,10 @@ final class T1161BeadTests: XCTestCase {
   func testNeverFakeOnline() {
     let now = Date()
     XCTAssertEqual(phase([["id": "grok-bot", "name": "Grok Bot", "connected": false, "lastUsed": ago(1, now)]], "Grok", now).1, .offline, "expired / revoked = 未连接 even if just used")
-    XCTAssertEqual(phase([["id": "grok-bot", "name": "Grok Bot", "connected": true]], "Grok", now).1, .online, "t1164u: never used but connected = lit")
+    XCTAssertEqual(phase([["id": "grok-bot", "name": "Grok Bot", "connected": true]], "Grok", now).1, .online, "t1164: never used but connected = lit")
     XCTAssertEqual(phase([["id": "muse", "name": "Muse", "connected": true, "revoked": true, "lastUsed": ago(1, now)]], "Muse", now).0, nil)
     XCTAssertEqual(AgentPhase.derive(connected: true, paused: false, allPaused: false, pendingPayments: 0, lastUsed: now.addingTimeInterval(60), now: now), .online, "server clock 1 min ahead")
-    XCTAssertEqual(AgentPhase.derive(connected: true, paused: false, allPaused: false, pendingPayments: 0, lastUsed: now.addingTimeInterval(3600), now: now), .online, "t1164u: lastUsed no longer matters")
+    XCTAssertEqual(AgentPhase.derive(connected: true, paused: false, allPaused: false, pendingPayments: 0, lastUsed: now.addingTimeInterval(3600), now: now), .online, "t1164: lastUsed no longer matters")
   }
   func testLastUsedParsesServerFormats() {
     XCTAssertNotNil(AgentMatch.lastUsed(.string("2026-11-17T16:40:12.345Z")))

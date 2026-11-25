@@ -1,5 +1,5 @@
 import Foundation
-/// t1022u: Kipurse paymaster fronts gas; the SAME confirmation repays the opening fee in USDC from the user's Base Account
+/// t1022: the sponsor paymaster only covers this exact batch, which pays the full opening fee in USDC from the user's Base Account in the SAME confirmation (Kipurse pays nothing)
 /// (transfer to the ops account) and may also deposit into the Kipurse wallet. Never ETH. No dues. CDP erc20_usdc stays off
 /// (Coinbase console has no ERC-20 USDC gas option). Mirrors server src/v5/usdc-gas.mjs.
 public enum UsdcGas {
@@ -7,13 +7,13 @@ public enum UsdcGas {
   public static let paymaster = "0x2faeb0760d4230ef2ac21496bb4f0b47d634fd4c" // CDP ERC-20 (unused while switch off)
   public static let feeTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9" // Kipurse ops — same-tx repay
   public static let approveCap: UInt64 = 250_000
-  /// Hard cap on same-tx repay (0.25 USDC). Actual fee comes from the server quote (t1026u).
+  /// Hard cap on same-tx repay (0.25 USDC). Actual fee comes from the server quote (t1026).
   public static let openingFeeCap: UInt64 = 250_000
-  @available(*, deprecated, message: "t1026u: use quote.feeUSDC; this is the hard cap")
+  @available(*, deprecated, message: "t1026: use quote.feeUSDC; this is the hard cap")
   public static let openingFee: UInt64 = openingFeeCap
   static let selApprove = "0x095ea7b3", selTransfer = "0xa9059cbb"
   public struct Split { public var leading: [[String: Any]] = []; public var rest: [[String: Any]] = []; public var problems: [String] = []; public var deposit: UInt64 = 0; public var approved: UInt64 = 0; public var feeRepaid: UInt64 = 0; public var vaultSeed: UInt64 = 0 }
-  /// t1185u (§6#86): opening also moves 0.10..0.20 USDC (server: 0.15) of the owner's own money from his Base Account into his wallet's
+  /// t1185 (decision 86): opening also moves 0.10..0.20 USDC (server: 0.15) of the owner's own money from his Base Account into his wallet's
   /// fee reserve (the payer vault) so the first AI payment works. Only to the vault THIS phone computes for this wallet, only as the LAST step, once.
   public static let vaultSeedMin: UInt64 = 100_000, vaultSeedMax: UInt64 = 200_000
   /// Payer vault of a wallet, computed on the phone for each known Kipurse suite (V5.2 live, V5.3): CREATE2(factory, salt = wallet, EIP-1167 clone of impl).
@@ -38,7 +38,7 @@ public enum UsdcGas {
     var s = Split(); var leading = true
     for (ci, c) in calls.enumerated() {
       let to = (c["to"] as? String ?? "").lowercased()
-      // t1185u (§6#86): trailing fee-reserve seed (the vault must be one this phone computed for this wallet, and = the server's vault)
+      // t1185 (decision 86): trailing fee-reserve seed (the vault must be one this phone computed for this wallet, and = the server's vault)
       if !leading && to == usdc && ci == calls.count - 1 && s.vaultSeed == 0, let v = vault?.lowercased(), vaults(wallet: wallet).contains(v) || v == KipurseSuite.v55.vault(wallet: wallet),   // t1250: + the V5.5 vault
          let d = c["data"] as? String, let p = args(d), p.sel == selTransfer, p.addr == v, let amt = p.amount, amt >= vaultSeedMin, amt <= vaultSeedMax,
          ["0x0", "0x", "0", ""].contains((c["value"] as? String ?? "0x0").lowercased()) { s.vaultSeed = amt; continue }
@@ -59,8 +59,8 @@ public enum UsdcGas {
     }
     return s
   }
-  /// Fallback when quote not loaded yet (t1026u: show quoted amount when available).
-  /// t1114u (§6#60): the server charges the opening fee as its own USDC transfer from the user's Base account, on top of the
+  /// Fallback when quote not loaded yet (t1026: show quoted amount when available).
+  /// t1114 (decision 60): the server charges the opening fee as its own USDC transfer from the user's Base account, on top of the
   /// deposit; it is not taken out of the deposit amount.
   public static let feeNoteZh = "开通手续费按实际网络费，在充值之外另从你的 Coinbase 钱包（Base 账户）扣，不从这次充值里扣；Kipurse 不出这笔钱。"
   public static let feeNoteEn = "Opening fee is the actual network cost, charged separately from your Coinbase wallet (Base account) on top of your deposit, not taken out of this deposit. Kipurse does not pay it."
@@ -72,22 +72,15 @@ public enum UsdcGas {
             "Opening fee about \(a) USDC (actual network cost), charged separately from your Coinbase wallet (Base account) on top of your deposit, not taken out of this deposit. Kipurse does not pay it.")
   }
 
-  // t1097: wallet-safety-cap change paid from the Kipurse smart wallet's own USDC (Pimlico ERC-20 paymaster, EntryPoint v0.6).
+  // t1097 / t147: wallet-safety-cap change fee comes from the Kipurse wallet's own USDC through Kipurse's existing sponsor route
+  // (RequestVerify.limitsReply). The old third-party ERC-20 paymaster path (Pimlico) is removed; this build never approves it.
   public static let baseUSDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-  public static let erc20Paymaster = "0x6666666666667849c56f2850848ce1c4da65c68b"
-  public static let entryPointV06 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
-  public static let paymasterMethods: Set<String> = ["pm_getPaymasterStubData", "pm_getPaymasterData", "pimlico_getTokenQuotes"]
   /// 0.01 USDC, in atomic units. A quoted fee at or above this is not offered for signing.
   public static let defaultFeeCapAtomic: UInt64 = 10_000
-  /// USDC.approve to the Pimlico paymaster may not exceed 0.05 USDC.
-  public static let approveCapAtomic: UInt64 = 50_000
   public static let feeFrom = "kipurse_wallet"
   public static let insufficientCode = "kipurse_balance_insufficient_for_fee"
   public static let insufficientZH = "启付余额不足以支付网络费"
 
-  public static func paymasterMethodAllowed(_ method: String) -> Bool { paymasterMethods.contains(method) }
-  /// The only spender a wallet-pays cap change may approve.
-  public static func approveTargetAllowed(_ address: String) -> Bool { address.lowercased() == erc20Paymaster.lowercased() }
 
   /// #vh sender. The new path commits the Kipurse smart wallet; the old path commits the Base Account.
   public static func limitsSender(owner: String, wallet: String, fromWallet: Bool) -> String { fromWallet ? wallet : owner }

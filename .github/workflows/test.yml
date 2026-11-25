@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: Apache-2.0
+# Tests for every part of the repository: gateway (server), test shop, contracts (Foundry) and the KipurseCore Swift package.
+# No secrets, no network beyond package registries and the pinned contract dependencies. Fork tests (test/fork) are not run here.
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: npm ci
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+      - name: node --test
+        working-directory: server
+        run: npm test
+  testshop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: npm ci (the shop's tests use the gateway code in ../server as the client)
+        run: |
+          (cd server && npm ci --no-audit --no-fund)
+          (cd testshop && npm ci --no-audit --no-fund)
+      - name: node --test
+        working-directory: testshop
+        run: npm test
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+      - name: pinned dependencies
+        working-directory: contracts
+        run: ./install-deps.sh
+      - name: forge test (unit, fuzz, invariant)
+        working-directory: contracts
+        run: forge test
+  swift-package:
+    runs-on: ubuntu-24.04
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: swift test (KipurseCore)
+        working-directory: ios
+        run: swift test

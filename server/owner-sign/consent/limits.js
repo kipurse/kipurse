@@ -16,15 +16,8 @@ var kpVH=async a=>{const p=a&&a.params&&a.params[0];const h=new URLSearchParams(
   if(p&&!vh&&vw&&kpVHW(p,vw))return a;
   const en=document.documentElement.lang!=='zh';throw Error(vh?(en?'Stopped: this is not exactly what your Kipurse app checked. Nothing was sent.':'已停止：内容和启付 App 检查过的不一致，没有转出任何钱。'):(en?'Please start this from the Kipurse app. If you already did, update Kipurse in the App Store first. For your safety, a confirmation only works after the app has checked it. Nothing was sent.':'请从启付 App 里开始。如果你已经是从 App 里点的，请先到 App Store 更新启付。为了安全，只有启付 App 先检查过的内容才能确认。没有转出任何钱。'));};
 /* /KPVH-GUARD */
-/* KP-RELAY v1 (t1105): the owner's Base Account only relays. Exactly 3 calls from the owner: wallet -> owner F USDC (F <= 0.01),
-   USDC.approve(Pimlico ERC-20 paymaster, F), the cap change. Anything else -> nothing is sent. */
-var kpRelayOK=e=>{try{const lc=x=>String(x||"").toLowerCase(),C=e&&e.calls||[],pd=x=>x.padStart(64,"0"),W=lc(e.wallet).replace(/^0x/,""),O=lc(e.owner).replace(/^0x/,""),U="833589fcd6edb6e08f4c7c32d4f71b54bda02913",PM="6666666666667849c56f2850848ce1c4da65c68b";
-  if(C.length!==3||!/^[0-9a-f]{40}$/.test(W)||!/^[0-9a-f]{40}$/.test(O)||W===O||lc(e.from)!=="0x"+O||Number(e.chainId)!==8453||e.pm!=="https://pay.kipurse.com/owner/limits/paymaster")return!1;
-  const d0=lc(C[0].data).replace(/^0x/,""),d1=lc(C[1].data).replace(/^0x/,""),d2=lc(C[2].data);
-  if(lc(C[0].to)!=="0x"+W||BigInt(C[0].value||0)!==0n||d0.length!==456||!d0.startsWith("b61d27f6"+pd(U)+pd("0")+pd("60")+pd("44")+"a9059cbb"+pd(O))||d0.slice(400)!=="0".repeat(56))return!1;
-  const F=BigInt("0x"+d0.slice(336,400));if(F<=0n||F>10000n)return!1;
-  if(lc(C[1].to)!=="0x"+U||BigInt(C[1].value||0)!==0n||d1!=="095ea7b3"+pd(PM)+pd(F.toString(16)))return!1;
-  return lc(C[2].to)==="0x"+W&&BigInt(C[2].value||0)===0n&&d2.startsWith("0x34fcd5be")}catch(x){return!1}};
+/* KP-RELAY removed (t147): the relay batch with a third-party ERC-20 paymaster approve is never sent. */
+var kpRelayOK=e=>!1;
 /* /KP-RELAY */
 var KPEN=document.documentElement.lang!=="zh";// SPDX-License-Identifier: AGPL-3.0-only
 // Owner sends ONE Base Account batch that replaces the AI permission with the caps he chose. The server only builds it and checks the chain.

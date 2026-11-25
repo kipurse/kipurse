@@ -1,5 +1,5 @@
-// t1212 (handbook §6#97, owner 2026-11-19 20:59 CT「改，新收款方一次 Face ID 批准就付这一笔」): an AI order payment (merchant order API, §6#93) to a
-// NEW payee above an AI auto limit gets the §6#82 card: ONE Face ID trusts (if chosen) AND approves exactly this payment on chain; the server pays it
+// t1212 (decision 97, owner 2026-11-19 20:59 CT"[zh]"): an AI order payment (merchant order API, decision 93) to a
+// NEW payee above an AI auto limit gets the decision 82 card: ONE Face ID trusts (if chosen) AND approves exactly this payment on chain; the server pays it
 // once (derived key owner-ask:<approvalId>). Before: approving only made an allowance, the on-chain new-payee cap refused again, and a new card came.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {getAddress} from 'viem';
 import {engineFor} from './helpers/v5-fixture.mjs';import {BEGINNER_DEFAULTS} from '../src/v5/mandates.mjs';import {createBuy} from '../src/v5/buy.mjs';import {ownerKey} from '../src/v5/owner-ask.mjs';
@@ -24,11 +24,11 @@ const approverFor=e=>{const reqs={};const T={cap:'C',api:{approve:async(c,id)=>(
 const GOOD={r:'0x01',s:'0x02'};
 const paidRows=e=>e.engine.listPurchases({limit:50}).filter(r=>r.state==='paid');
 
-test('merchant order to a NEW payee above the on-chain new-payee cap -> ONE card (the §6#82 ask), text says trust + pay this 5 USDC; nothing paid; same key -> same card, no new order',async()=>{
+test('merchant order to a NEW payee above the on-chain new-payee cap -> ONE card (the decision 82 ask), text says trust + pay this 5 USDC; nothing paid; same key -> same card, no new order',async()=>{
   const e=mk();const key='idem-a1',pid=uuid();const r=await e.order({key,pid});
   assert.equal(r.decision,'ask_owner');assert.equal(r.state,'awaiting_owner_approval');assert.equal(r.nothingPaid,true);assert.equal(r.route,'merchant_order');assert.match(r.approvalId,/^apr_/);
   assert.equal(r.amount,'5');assert.equal(r.payee.toLowerCase(),e.payee.toLowerCase());assert.match(r.ask_owner_question.zh,/认识这个收款方吗/);
-  assert.equal(e.props.length,1,'one card / one push');const v=e.props[0];assert.ok(v.ask,'the §6#82 card (trust / once / decline)');assert.equal(v.ask.payee,e.payee.toLowerCase());assert.equal(v.ask.amount,'5000000');
+  assert.equal(e.props.length,1,'one card / one push');const v=e.props[0];assert.ok(v.ask,'the decision 82 card (trust / once / decline)');assert.equal(v.ask.payee,e.payee.toLowerCase());assert.equal(v.ask.amount,'5000000');
   assert.match(v.items[0].human.zh,/一次 Face ID 就信任“shop\.example”并付这笔 5 USDC/);assert.match(v.items[0].human.en,/ONE Face ID trusts "shop\.example" and pays this 5 USDC/);
   assert.match(v.items[0].human.zh,/^⚠️ 新收款方 0x/);assert.equal(e.s.writes.length,0,'nothing on chain');assert.equal(paidRows(e).length,0);
   const posts=()=>e.M.calls.filter(c=>c.method==='POST').length;const p0=posts();

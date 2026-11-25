@@ -24,7 +24,7 @@ final class BeginnerAuditUITests: XCTestCase {
       go(["-kpFreshInstall", "-kp.lang", L, "-kpOnboard", "-kpSigninMock", "bind"]); shot(p + "04-signin-existing-bind")
       // 2 empty wallet, first-use guide, funding
       go(["-demo", "main-new", "-kp.lang", L, "-kpSkipFaceID"]); scrollShots(p + "05-new-wallet-guide", 2)
-      // t691: two-page layout opens on 「AI 生活」; wallet actions live on the 「钱包」 page (-tab home)
+      // t691: two-page layout opens on "[zh]"; wallet actions live on the "[zh]" page (-tab home)
       go(["-demo", "main-new", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID", "-kpApplePayMock", "-kpCBV", "later"])
       if tapScroll(app.descendants(matching: .any).matching(identifier: "home.deposit").firstMatch) { scrollShots(p + "06-deposit", 2); back() }
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpArrive"]); shot(p + "07-deposit-arrived")
@@ -50,20 +50,20 @@ final class BeginnerAuditUITests: XCTestCase {
       go(["-demo", "main", "-kp.lang", L, "-kpPayDraft", "-kpOwnerPayMock"]); shot(p + "21-pay-known-payee")
       go(["-demo", "main", "-kp.lang", L, "-kpPayDraft"]); shot(p + "22-siri-pay-confirm")
       // 7 large payment delay / hold
-      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpHold"]); shot(p + "23-hold-banner")   // §6#110: holds live in 待你批准 on AI 生活
+      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpHold"]); shot(p + "23-hold-banner")   // decision 110: holds live in 待你批准 on AI 生活
       // 8 limits, spending summary, activity
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID"]); scrollShots(p + "24-home", 2)
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID"])
       if tapScroll(app.descendants(matching: .any).matching(identifier: "home.limits").firstMatch) { scrollShots(p + "25-limits", 2); back() }
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID"])
       if tapScroll(app.descendants(matching: .any).matching(identifier: "home.allActivity").firstMatch, 8) { scrollShots(p + "26-activity", 2); back() }
-      // t1150u: same demo data as the wallet frames (no -kpLifeDemo), so the life ring and「本月 AI 已花」agree
+      // t1150: same demo data as the wallet frames (no -kpLifeDemo), so the life ring and"[zh]"agree
       go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpSkipFaceID"]); if tapScroll(app.descendants(matching: .any).matching(identifier: "life.all").firstMatch, 8) { scrollShots(p + "26b-life-all", 2) }
       go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpSkipFaceID"]); shot(p + "33-life-unnamed-payee")
       // 9 withdraw, pause, emergency, settings
       go(["-demo", "main", "-tab", "settings", "-kp.lang", L, "-kpSkipFaceID"]); scrollShots(p + "27-settings", 3)
       go(["-demo", "main", "-tab", "home", "-kp.lang", L, "-kpSkipFaceID"]); if tapScroll(app.descendants(matching: .any).matching(identifier: "home.withdraw").firstMatch) { scrollShots(p + "28-withdraw", 1); back() }
-      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpResumeUnbound", "-kpSkipFaceID"]); let pz = app.buttons["safety.pause"]; _ = pz.waitForExistence(timeout: 5); for _ in 0..<8 where pz.exists && !pz.isHittable { app.swipeUp() }; shot(p + "29-resume-unbound")   // §6#110: pause / resume on AI 生活
+      go(["-demo", "main", "-tab", "life", "-kp.lang", L, "-kpResumeUnbound", "-kpSkipFaceID"]); let pz = app.buttons["safety.pause"]; _ = pz.waitForExistence(timeout: 5); for _ in 0..<8 where pz.exists && !pz.isHittable { app.swipeUp() }; shot(p + "29-resume-unbound")   // decision 110: pause / resume on AI 生活
       go(["-kpIdentityOK", "-kpUnbound", "-kp.lang", L]); app.swipeUp(); if tapText(L == "zh" ? "紧急" : "mergency") { scrollShots(p + "30-emergency", 1) }
       go(["-kpIdentityOK", "-kpUnbound", "-kp.lang", L, "-kpEmergencyOffline"]); app.swipeUp(); if tap("unbound.emergency") { shot(p + "30b-emergency-offline") }
       go(["-demo", "main-nomuse", "-tab", "agents", "-kp.lang", L]); if tapText("Muse") { _ = tapText(L == "zh" ? "高级" : "Advanced"); shot(p + "15b-muse-advanced-open") }

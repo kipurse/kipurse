@@ -7,7 +7,7 @@ final class PrinciplesTests: XCTestCase {
     XCTAssertEqual(Principles.phoneUpgradeMarginPct, 0); XCTAssertEqual(Principles.phoneUpgradeMinUSDC, 0); XCTAssertEqual(Principles.holdAboveUSDC, 500)
     XCTAssertTrue(Principles.arrivedRequiresOnchainTx); XCTAssertTrue(Principles.onrampDestinationIsUserWallet)
   }
-  /// t604u: USDC-only gas, locked. t603u: no preset limits, first authorization free.
+  /// t604: USDC-only gas, locked. t603: no preset limits, first authorization free.
   func testUSDCOnlyGas() throws {
     XCTAssertEqual(Principles.gasToken, "USDC"); XCTAssertFalse(Principles.ethGasPath); XCTAssertFalse(Principles.presetLimits); XCTAssertFalse(Principles.firstLimitsFree)
     XCTAssertTrue(Principles.kycAttestationRequired); XCTAssertFalse(Principles.depositHistoryCountsAsKyc); XCTAssertEqual(Principles.kipurseNetCostUSDC, 0); XCTAssertTrue(Principles.failedGasPaidByUser); XCTAssertTrue(Principles.onboardingGasRecouped); XCTAssertTrue(Principles.assertLocked())

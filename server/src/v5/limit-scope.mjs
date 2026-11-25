@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// t1181u (handbook §6#84, audit §6#83 check 3): every OFF-CHAIN limit record (everyday limits, mandates / AI allowances,
+// t1181 (decision 84, audit decision 83 check 3): every OFF-CHAIN limit record (everyday limits, mandates / AI allowances,
 // per-AI caps) is pinned to ONE network (chainId) and ONE token contract, like the on-chain SpendPermission already is.
-//  - Records written before t1181u carry no scope; they are read (and migrated) as the engine's own scope (mainnet: Base 8453 +
+//  - Records written before t1181 carry no scope; they are read (and migrated) as the engine's own scope (mainnet: Base 8453 +
 //    its USDC), so their behaviour for Base USDC payments is unchanged.
 //  - A payment whose network or token differs from a record's scope is REFUSED (nothing paid): a limit set for one chain or
 //    one token can never be spent on another. This only adds refusals; it never makes a payment pass that failed before.

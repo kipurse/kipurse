@@ -1,4 +1,4 @@
-// FORK-ONLY local ERC-4337 bundler (t1185u rehearsal): JSON-RPC subset the userOp writer uses, backed by the anvil fork's real
+// FORK-ONLY local ERC-4337 bundler (t1185 rehearsal): JSON-RPC subset the userOp writer uses, backed by the anvil fork's real
 // EntryPoint v0.7 + real Circle paymaster. eth_sendUserOperation = simulate handleOps (eth_call), then send it from an impersonated
 // bundler EOA. Never used against a real network.
 import http from 'node:http';import {createPublicClient,createWalletClient,createTestClient,http as vh,encodeFunctionData,decodeEventLog,getAddress,hexToBigInt,toHex,decodeErrorResult} from 'viem';

@@ -37,7 +37,7 @@ const T={
   enroll_other_phone:[c(DETERMINISTIC_DEPLOYER,aBad.deployData),c(W,wf('addOwnerAddress',[aBad.address]))],
   revoke_owner:[c(W,wf('removeOwnerAtIndex',[0n,pad(OWNER)]))],
 };
-// t767u: same setup with the dues slot (vault.setBundlerFee(Kipurse ops, 0.05)) as the last inner call, + tampered variants
+// t767: same setup with the dues slot (vault.setBundlerFee(Kipurse ops, 0.05)) as the last inner call, + tampered variants
 const VAULT='0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc',OPS='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
 const plD=(bf)=>buildMigrationPlanV5({chainId:8453,wallet:W,owner:OWNER,adapter:ADAPTER,trust:TRUST,token:USDC,manager:SPM,executor:EXEC,guardian:'0x0000000000000000000000000000000000000000',registry:'0x0000000000000000000000000000000000000000',headroom:false,
   maxFeePpm:'3000',maxNetworkFee:'50000',fee:{ppm:'1000'},stated:{single:ch.single,daily:ch.daily,term:ch.term,openSingle:'100000',openDaily:'1000000',verifiedSingle:ch.single,verifiedDaily:ch.daily},

@@ -1,7 +1,7 @@
 import XCTest
 @testable import KipurseCore
 
-/// t1170u (§6#82): the phone only signs the owner-ask choice it shows, bound to trust | once, for exactly this payee.
+/// t1170 (decision 82): the phone only signs the owner-ask choice it shows, bound to trust | once, for exactly this payee.
 final class T1170OwnerAskTests: XCTestCase {
   let w = "0x00000000000000000000000000000000000000aa"
   var base: String { "Kipurse allowance approval v1\nwallet:\(w)\nid:apr_1\nitems:[]" }

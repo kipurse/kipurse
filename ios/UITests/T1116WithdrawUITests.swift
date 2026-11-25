@@ -1,6 +1,6 @@
 import XCTest
 
-/// t1116u: everyday withdraw = any amount or 「全部」. Demo fixture (nothing is sent): balance = home balance, fee 0.003 USDC.
+/// t1116: everyday withdraw = any amount or "[zh]". Demo fixture (nothing is sent): balance = home balance, fee 0.003 USDC.
 final class T1116WithdrawUITests: XCTestCase {
   var app: XCUIApplication!
   override func setUp() { continueAfterFailure = false }
@@ -26,7 +26,7 @@ final class T1116WithdrawUITests: XCTestCase {
 
   func run(_ L: String) {
     open(L); let zh = L == "zh"
-    // default = 全部 / All, like before: amount = the whole balance, 预计到账 = balance − fee
+    // default = [zh] / All, like before: amount = the whole balance, [zh] = balance − fee
     XCTAssertTrue(app.buttons["withdraw.all"].isSelected)
     XCTAssertTrue(label("withdraw.amount").contains("14.1"), label("withdraw.amount"))
     XCTAssertTrue(app.staticTexts["withdraw.net"].exists); XCTAssertTrue(app.buttons["withdraw.go"].isEnabled)
@@ -34,7 +34,7 @@ final class T1116WithdrawUITests: XCTestCase {
     XCTAssertTrue(app.buttons["withdraw.preset.10"].isEnabled)
     XCTAssertTrue(app.staticTexts["withdraw.fee"].exists); XCTAssertTrue(app.descendants(matching: .any)["withdraw.to"].exists)
     I18nCheck.check(app, L, "t1116 withdraw all"); shot("\(L)-1-all")
-    // custom 5 -> 预计到账 4.997
+    // custom 5 -> [zh] 4.997
     type("5"); done()
     XCTAssertTrue(label("withdraw.amount").contains("5 USDC"), label("withdraw.amount")); XCTAssertFalse(app.buttons["withdraw.all"].isSelected)
     XCTAssertTrue(app.staticTexts["withdraw.net"].label.contains("4.997"), app.staticTexts["withdraw.net"].label)
@@ -61,7 +61,7 @@ final class T1116WithdrawUITests: XCTestCase {
   }
   func testZh() { run("zh") }
   func testEn() { run("en") }
-  /// 全部 again after a custom amount: back to the whole balance; confirm shows the whole balance.
+  /// [zh] again after a custom amount: back to the whole balance; confirm shows the whole balance.
   func testAllAfterCustom() {
     open("zh"); type("2"); done(); let all = app.buttons["withdraw.all"]; reveal(all); all.tap()
     XCTAssertTrue(all.isSelected); XCTAssertTrue(label("withdraw.amount").contains("14.1"))

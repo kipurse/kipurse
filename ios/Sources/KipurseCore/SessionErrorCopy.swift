@@ -1,7 +1,7 @@
 import Foundation
 
-/// t1156u (owner t1156s5267, handbook §6#75): what a save that needs the phone session says when it does not go through.
-/// 「暂时连不上，请稍后再试。」 is only for real network / server errors. Face ID problems get calm guidance; nothing was sent.
+/// t1156 (owner t1156s5267, decision 75): what a save that needs the phone session says when it does not go through.
+/// "[zh]" is only for real network / server errors. Face ID problems get calm guidance; nothing was sent.
 public enum SessionErrorCopy {
   public enum Kind: Equatable { case faceID(FaceIDNotice), noApprovalKey, cancelled, network }
 
@@ -33,7 +33,7 @@ public enum SessionErrorCopy {
   }
 }
 
-/// t1156u: the session-refresh rule for a user-initiated, idempotent save. No session -> sign in once (one Face ID), then POST.
+/// t1156: the session-refresh rule for a user-initiated, idempotent save. No session -> sign in once (one Face ID), then POST.
 /// HTTP 401 (session gone on the server) -> clear, sign in once more, POST once more. Never more than two POSTs.
 public enum SessionRefresh {
   public static func post(hasSession: () -> Bool, signIn: () async throws -> Void, clear: () -> Void,

@@ -21,7 +21,7 @@ enum AssistantHooks {
   static var installed: Bool { stateChanged != nil }
   /// Siri asked to approve / reject: userInfo ["id": Approval.id, "approve": Bool]. The app shows it and asks for Face ID.
   static let decision = Notification.Name("kp.assistant.decision")
-  /// t1161u (§6#78): a Siri intent just marked Siri used on the server -> the app refreshes the home state (Siri bead lights).
+  /// t1161 (decision 78): a Siri intent just marked Siri used on the server -> the app refreshes the home state (Siri bead lights).
   static let siriUsed = Notification.Name("kp.assistant.siriUsed")
 }
 enum AssistantRef { case payee(address: String), payment(txHash: String), approval(id: String) }

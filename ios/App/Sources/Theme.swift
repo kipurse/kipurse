@@ -68,7 +68,7 @@ struct KCanvas: View {
   }
 }
 
-/// t1066u: shared clear transparent glass — NO frosted ultraThinMaterial blur.
+/// t1066: shared clear transparent glass — NO frosted ultraThinMaterial blur.
 /// See-through glossy fill (MockBG shows through), sharp refraction edge, specular highlight, purple→cyan neon rim.
 /// Used by `.card()`, `.glass()`, list row backgrounds, and hero balance card rim.
 enum KPGlass {
