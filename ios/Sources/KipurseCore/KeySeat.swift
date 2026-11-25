@@ -132,7 +132,13 @@ public enum KeySeat {
     guard let o = BatchVerify.addrBytes(owner), let s = BatchVerify.addrBytes(seat), let m = BatchVerify.addrBytes(BatchVerify.spm) else { return nil }
     let w = BatchVerify.w
     // head: offset to bytes[] (0x40), nonce 0; bytes[]: length 3, three offsets (0x60, 0xa0, 0xe0, relative to right after the length word), then each item: len 32 + word
-    return w(0x40) + w(0) + w(3) + w(0x60) + w(0xa0) + w(0xe0) + w(32) + BatchVerify.word(o) + w(32) + BatchVerify.word(s) + w(32) + BatchVerify.word(m)
+    var out: [UInt8] = []
+    out += w(0x40) + w(0) + w(3)
+    out += w(0x60) + w(0xa0) + w(0xe0)
+    out += w(32) + BatchVerify.word(o)
+    out += w(32) + BatchVerify.word(s)
+    out += w(32) + BatchVerify.word(m)
+    return out
   }
   public static func createAccountData(owner: String, trust: String) -> String? {
     guard let seat = address(owner: owner, trust: trust), let e = ownersEncoding(owner: owner, seat: seat) else { return nil }
