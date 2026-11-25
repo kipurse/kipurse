@@ -3,6 +3,8 @@ import XCTest
 
 final class AnswerRulesTests: XCTestCase {
   override class func setUp() { super.setUp(); TestOperator.configure() }
+  override func setUp() { super.setUp(); Loc.override = "zh" }
+  override func tearDown() { Loc.override = nil; super.tearDown() }
   func testParse() {
     XCTAssertEqual(AnswerRules.parseUSDC("1.5"), 1_500_000); XCTAssertEqual(AnswerRules.parseUSDC("0.000001"), 1)
     XCTAssertEqual(AnswerRules.parseUSDC(".5"), 500_000); XCTAssertEqual(AnswerRules.parseUSDC("３．５"), 3_500_000)
@@ -52,6 +54,8 @@ final class AnswerRulesTests: XCTestCase {
 
 final class LinkAndStateTests: XCTestCase {
   override class func setUp() { super.setUp(); TestOperator.configure() }
+  override func setUp() { super.setUp(); Loc.override = "zh" }
+  override func tearDown() { Loc.override = nil; super.tearDown() }
   let code = String(repeating: "ab", count: 24)
   func testOwnerLink() {
     let l = OwnerLink.parse("https://x.trycloudflare.com/login?code=\(code)")
@@ -106,6 +110,8 @@ final class SessionMigrationTests: XCTestCase {
 
 final class AccountDeletionTests: XCTestCase {
   override class func setUp() { super.setUp(); TestOperator.configure() }
+  override func setUp() { super.setUp(); Loc.override = "zh" }
+  override func tearDown() { Loc.override = nil; super.tearDown() }
   func testPhrase() {
     XCTAssertTrue(AccountDeletion.phraseOK("删除我的账户")); XCTAssertTrue(AccountDeletion.phraseOK(" 删除我的账户\n"))
     XCTAssertFalse(AccountDeletion.phraseOK("删除账户")); XCTAssertFalse(AccountDeletion.phraseOK("")); XCTAssertFalse(AccountDeletion.phraseOK("删除我的账户。"))
@@ -192,7 +198,7 @@ final class MainnetTests: XCTestCase {
     XCTAssertTrue(Mainnet.validNonce(String(repeating: "ab", count: 24))); XCTAssertFalse(Mainnet.validNonce("xyz")); XCTAssertFalse(Mainnet.validNonce(String(repeating: "AB", count: 24)))
   }
   func testLimits() {
-    let o = UserDefaults.standard.string(forKey: "kp.lang"); UserDefaults.standard.set("zh", forKey: "kp.lang"); defer { UserDefaults.standard.set(o, forKey: "kp.lang") }
+    let o = Loc.override; Loc.override = "zh"; defer { Loc.override = o }
     XCTAssertNil(Mainnet.limitsError(single: "2", daily: "5", term: "50", days: "90"))
     XCTAssertEqual(Mainnet.limitsError(single: "6", daily: "5", term: "50", days: "90"), "每笔不能大于每天")
     XCTAssertEqual(Mainnet.limitsError(single: "1", daily: "60", term: "50", days: "90"), "每天不能大于总额")

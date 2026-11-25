@@ -2,6 +2,8 @@ import XCTest
 @testable import KipurseCore
 
 final class GasCheckTests: XCTestCase {
+  override func setUp() { super.setUp(); Loc.override = "zh" }
+  override func tearDown() { Loc.override = nil; super.tearDown() }
   func testEstimateAndShortfall() {
     let e = GasCheck.estimate(kind: .phoneUpgrade, gasPriceWei: 6_000_000, balanceWei: 1e12, ethUSD: 4000)
     XCTAssertEqual(e.feeWei, 1_300_000 * 6_000_000 + 500_000_000_000)
