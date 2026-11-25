@@ -18,7 +18,8 @@ final class T1238SelfCallTests: XCTestCase {
   /// wallet.execute(target, value, inner) encoded like viem does.
   static func execute(target: String, value: Int = 0, inner: String) -> String {
     let i = inner.lowercased().replacingOccurrences(of: "0x", with: ""), len = i.count / 2, pad = String(repeating: "0", count: ((len + 31) / 32 * 32 - len) * 2)
-    return BatchVerify.selExecute + String(repeating: "0", count: 24) + target.lowercased().dropFirst(2) + word(value) + word(96) + word(len) + i + pad
+    let addrHex = String(target.lowercased().dropFirst(2))
+    return BatchVerify.selExecute + String(repeating: "0", count: 24) + addrHex + word(value) + word(96) + word(len) + i + pad
   }
   /// Turn every top-level owner change in a batch into the wallet self-call shape the new server sends.
   func wrap(_ c: [[String: Any]], target: String? = nil, value: Int = 0) -> [[String: Any]] {
