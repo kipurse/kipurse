@@ -51,10 +51,11 @@ jobs:
         run: ./install-deps.sh
       - name: forge test (unit, fuzz, invariant)
         working-directory: contracts
+        env:
+          FOUNDRY_OFFLINE: "false"
         run: forge test
   swift-package:
-    runs-on: ubuntu-24.04
-    container: swift:6.0-noble
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
