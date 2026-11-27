@@ -160,7 +160,12 @@ public extension VaultCheck {
 public enum CapsSource {
   /// Merge a chain read: a definitive chain answer (ready / unset) replaces the server's; an unreadable one keeps what is there (last good value).
   public static func merged(_ s: WalletState, chain r: SafetyCaps.Read) -> WalletState {
-    if case .unreadable = r.caps { return s }
+    if case .unreadable = r.caps {
+      // t1282 (decision 156): a failed read with no earlier value used to leave [zh] on "[zh]" forever; mark it unreadable
+      // so the row says "[zh]" (a later good read replaces it). An earlier good / unset value is still kept.
+      let hasValue = (s.raw["caps"] != nil && s.raw["caps"] != .null) || s.raw["capsUnset"]?.bool == true
+      return hasValue || s.raw["capsUnreadable"]?.bool == true ? s : s.withSafetyCaps(.unreadable, source: "chain")
+    }
     return s.withSafetyCaps(r.caps, start: r.start, end: r.end, source: "chain")
   }
   /// A fresh server state keeps the last chain caps of the same wallet (so the server never overrides them between two refreshes).

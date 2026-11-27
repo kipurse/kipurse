@@ -19,7 +19,7 @@ var kpVH=async a=>{const p=a&&a.params&&a.params[0];const h=new URLSearchParams(
 /* KPVH-GUARD withdraw extension (t752): the ONLY other batch this page may send is "withdraw, fee paid by the wallet":
    [optional sweep] + wallet.execute(USDC,0,transfer(KPFEETO, fee <= 0.25 USDC = sponsor per-op cap)) + wallet.execute(USDC,0,transfer(signer, rest)).
    KPFEETO is fixed at build time (empty = off). Nothing can be paid to anyone except the signer and that one address. */
-var KPFEETO='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+var KPFEETO='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 var kpVHWP=p=>{const F=String(KPFEETO).toLowerCase().replace(/^0x/,'');if(!/^[0-9a-f]{40}$/.test(F)||Number(p.chainId)!==8453)return false;
   const C=p.calls||[],f=String(p.from).toLowerCase().replace(/^0x/,''),pd=a=>a.padStart(64,'0');if(!/^[0-9a-f]{40}$/.test(f)||(C.length!==2&&C.length!==3))return false;
   const w=String(C[0].to).toLowerCase();if(!C.every(c=>String(c.to).toLowerCase()===w&&BigInt(c.value||0)===0n))return false;

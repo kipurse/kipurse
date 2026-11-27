@@ -3,7 +3,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createOwnerWithdraw,checkWithdrawCalls,checkWalletPaysCalls,WITHDRAW_MAX_WALLET_FEE} from '../src/v5/owner-withdraw.mjs';
 import {decodeFunctionData} from 'viem';import {WITHDRAW_WALLET_ABI,WITHDRAW_ERC20_ABI} from '../src/v5/owner-withdraw.mjs';
-const W='0x1000000000000000000000000000000000000004',O='0x2000000000000000000000000000000000000002',X='0x2000000000000000000000000000000000000004',T='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',F='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31',V='0x3000000000000000000000000000000000000003',FEE='0xf14EF5Dc4723245866c22C749A0A84AFCebA0Dd9';
+const W='0x1000000000000000000000000000000000000004',O='0x2000000000000000000000000000000000000002',X='0x2000000000000000000000000000000000000004',T='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',F='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31',V='0x3000000000000000000000000000000000000003',FEE='0x82ecF6e2F76eE100E4676dabe193bca6bcab64fD';
 const mk=({bal={[W]:12_340_000n,[O]:0n},unres=0n,vault=null,walletPays=null}={})=>{const st={bal,unres};
   const pub={readContract:async({functionName,args})=>functionName==='isOwnerAddress'?true:functionName==='unreserved'?st.unres:functionName==='balanceOf'?(st.bal[args[0]]??0n):[0n,300000000000n,0n,0n,0n],
     getCode:async({address})=>vault&&address.toLowerCase()===vault.toLowerCase()?'0x60':'0x',estimateGas:async()=>60000n,getGasPrice:async()=>10_000_000n};

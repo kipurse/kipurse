@@ -3,7 +3,7 @@ import Foundation
 /// t767s: the phone reads adapter.vaultAddress(wallet) on-chain itself and refuses when it differs from the server's vault.
 public enum VaultCheck {
   public static let selVaultAddress = "1cb3d314"
-  public static let publicRPC = URL(string: "https://mainnet.base.org")!
+  public static var publicRPC: URL { ChainRPC.publicNodes[0] }   // t1282 (decision 156): was mainnet.base.org (rate-limited); same first node as ChainRPC
   public static func callData(wallet: String) -> String? {
     let h = wallet.lowercased().replacingOccurrences(of: "0x", with: "")
     guard h.count == 40, h.allSatisfy({ $0.isHexDigit }) else { return nil }
@@ -42,6 +42,12 @@ public enum VaultCheck {
   /// t1266 (fix 12): USDC balance only when two different public nodes give the same answer (nil = can't confirm).
   public static func usdcBalanceAgreed(_ holder: String, call: (String, String) async -> String? = { to, data in await ChainRPC.ethCall(to, data, agreed: true) }) async -> Int64? {
     guard let d = addrCall(selBalanceOf, holder), let r = await call(usdc, d) else { return nil }
+    return decodeUInt(r) }
+  /// t1285 (decision 156): the balance to SHOW right away = the first valid answer of all nodes asked at once (primary CDP + free backups).
+  /// The two-node agreed read still runs after it (records, money decisions) and replaces the shown number if they differ.
+  public static func usdcBalanceFast(_ holder: String) async -> Int64? {
+    guard let d = addrCall(selBalanceOf, holder),
+          let r = await ChainRPC.race("eth_call", [["to": usdc, "data": d], "latest"], valid: { VaultCheck.decodeUInt($0) != nil }) else { return nil }
     return decodeUInt(r) }
   /// Coinbase Smart Wallet isOwnerAddress(address)
   public static func isOwner(wallet: String, address: String, rpc: URL? = nil) async -> Bool? {

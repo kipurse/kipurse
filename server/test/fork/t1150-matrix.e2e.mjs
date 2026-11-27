@@ -146,7 +146,7 @@ test('t1150 matrix (t1138 + t1148 dup cases): phone approver V3: new user, Siri 
     const {createLedger}=await import('../../src/v5/ledger.mjs');const dh=(R.steps.filter(s=>s.user==='U1'&&/^deposit 30 USDC/.test(s.step)).pop()?.d?.tx);
     const rc=await pub.getTransactionReceipt({hash:dh});const vault=getAddress(await pub.readContract({address:await adOf(U1.w),abi:AD,functionName:'vaultAddress',args:[U1.w]}));
     const f=join(dir,'dup3-ledger.json');const from=Number(rc.blockNumber)-3;
-    const mk=()=>createLedger({pub,token:USDC,wallet:U1.w,vault,paymasters:[],names:{},owner:U1.ba,feeTo:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',fromBlock:from,file:f,minIntervalMs:0});
+    const mk=()=>createLedger({pub,token:USDC,wallet:U1.w,vault,paymasters:[],names:{},owner:U1.ba,feeTo:'0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd',fromBlock:from,file:f,minIntervalMs:0});
     await mk().refresh();/* first scan */
     for(let i=0;i<3;i++){const j=JSON.parse(fs.readFileSync(f,'utf8'));j.next=from;fs.writeFileSync(f,JSON.stringify(j));const L=mk();await L.refresh();await L.refresh();}/* rewind the scan cursor = server restart rescanning the same blocks, 3x, plus a second scan per instance */
     const cache=JSON.parse(fs.readFileSync(f,'utf8'));const raw=cache.transfers.filter(x=>String(x.tx).toLowerCase()===dh.toLowerCase()&&String(x.to).toLowerCase()===U1.w.toLowerCase());
@@ -341,7 +341,7 @@ test('t1150 matrix (t1138 + t1148 dup cases): phone approver V3: new user, Siri 
     step('U2','resume: Face ID challenge (428) then 202 confirm_on_chain plan (chain still paused -> NOT reported resumed)',c.status===428&&r.status===202&&r.j?.state==='confirm_on_chain'&&!!r.j?.id,{challenge:c.status,status:r.status,keys:Object.keys(r.j??{}),fee:r.j?.fee,err:r.j?.error});
     if(r.status!==202)return;const pl=r.j;
     const F=checkResumeCalls(pl.calls,{wallet:U2.w,trust:U2T,feeTo:RESUME_FEE_TO});
-    step('U2','resume plan: from = owner Base Account, 2 calls = fee leg to 0xf14e…0dd9 + wallet.execute(trust, setPaused(false)), fee < 0.01 USDC, ur- sponsor',
+    step('U2','resume plan: from = owner Base Account, 2 calls = fee leg to the company Safe 0x82ec…64fd + wallet.execute(trust, setPaused(false)), fee < 0.01 USDC, ur- sponsor',
       F!==null&&String(F)===pl.fee.usdc&&F<10_000n&&pl.from.toLowerCase()===U2.ba.toLowerCase()&&pl.owner.toLowerCase()===U2.ba.toLowerCase()&&pl.wallet.toLowerCase()===U2.w.toLowerCase()&&pl.feeTo===RESUME_FEE_TO&&pl.feeFrom==='kipurse_wallet_fee'&&/\/onboard\/new\/paymaster\?id=ur-[0-9a-f]{24}$/.test(pl.pm)&&pl.pm.endsWith(pl.id),
       {fee:pl.fee,feeTo:pl.feeTo,pm:pl.pm.replace(/^.*\?/,'?')});
     {const s1=await state(U2);const b1=await bal(shopA);const p=await aiPay('1','m-4b');
@@ -353,7 +353,7 @@ test('t1150 matrix (t1138 + t1148 dup cases): phone approver V3: new user, Siri 
     step('U2','resume confirm before the chain tx -> not ok (page keeps waiting)',early.status===200&&!early.j?.ok&&!early.j?.error,{res:early.j});
     const wb=await bal(U2.w),fb=await bal(RESUME_FEE_TO);const b=await batch(U2,pl.calls);
     const paid=wb-await bal(U2.w),got=await bal(RESUME_FEE_TO)-fb,cp=await chainPaused();
-    step('U2','resume batch: ONE Base Account tx; wallet paid exactly the quoted fee to 0xf14e…0dd9; isPaused(wallet) = false on chain',b.status==='success'&&paid===F&&got===F&&cp===false,{tx:b.hash,gas:b.gas,actualUsd:b.usd,quotedUSDC:pl.fee.usdc,paid:String(paid),chainPaused:cp});
+    step('U2','resume batch: ONE Base Account tx; wallet paid exactly the quoted fee to the company Safe 0x82ec…64fd; isPaused(wallet) = false on chain',b.status==='success'&&paid===F&&got===F&&cp===false,{tx:b.hash,gas:b.gas,actualUsd:b.usd,quotedUSDC:pl.fee.usdc,paid:String(paid),chainPaused:cp});
     let cf;for(let i=0;i<5&&!(cf?.j?.ok);i++){cf=await call(U2.pre+'/safety/resume',{method:'POST',body:{confirm:pl.id}});if(!cf.j?.ok)await new Promise(r=>setTimeout(r,500));}
     step('U2','resume confirm after the chain tx -> ok (what the page and the App poll)',cf.j?.ok===true,{res:cf.j});
     {const sr=await state(U2);fx('U2.stateAfterResume',sr);const st=await call(U2.pre+'/safety/status',{headers:U2.H});

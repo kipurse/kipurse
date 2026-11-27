@@ -79,7 +79,9 @@ extension WalletState {
     return Self.fourAgents.first { n.lowercased().contains($0.lowercased()) } ?? n
   }
   /// t1281: amount + fee + network fee per payment (KipurseCore SpendCost, same formula as the gateway)
-  func spentThisMonth(now: Date = Date()) -> Int64 { txs.filter { !$0.failed && ($0.date.map { Calendar.current.isDate($0, equalTo: now, toGranularity: .month) } ?? false) }.reduce(0) { $0 + $1.cost(ppm: capFeePpm ?? 1000, maxNetworkFee: capMaxNetworkFee ?? 0) } }
+  /// t1286 (decision 157): no AI payment list on this phone (signed back in, no server read yet) -> this month's payments from [zh] (chain).
+  func spentThisMonth(now: Date = Date()) -> Int64 { txs.isEmpty ? ChainLedger.monthSpend(rows: raw["ledger"]?.array ?? [], now: now) : spentFromPayments(now: now) }
+  func spentFromPayments(now: Date = Date()) -> Int64 { txs.filter { !$0.failed && ($0.date.map { Calendar.current.isDate($0, equalTo: now, toGranularity: .month) } ?? false) }.reduce(0) { $0 + $1.cost(ppm: capFeePpm ?? 1000, maxNetworkFee: capMaxNetworkFee ?? 0) } }
 }
 
 /// Original orb character (m.html .orb): radial body, per-character texture, specular highlight, glowing eyes.
@@ -274,7 +276,10 @@ struct LifeTab: View {
   var body: some View {
     let agents = s.lifeAgents()
     let txs = s.txs.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-    let totals = LifeLedger.monthTotals(txs.map { LifeItem(amount: $0.amount, date: $0.date, failed: $0.failed, category: s.category($0)) }, now: Date())
+    // t1286 (decision 157): no AI payment list on this phone yet -> this month from the wallet's chain payments (category unknown = [zh])
+    let items = txs.isEmpty ? ChainLedger.payments(rows: s.raw["ledger"]?.array ?? []).map { LifeItem(amount: $0.amount, date: $0.date, failed: false, category: .other) }
+                            : txs.map { LifeItem(amount: $0.amount, date: $0.date, failed: $0.failed, category: s.category($0)) }
+    let totals = LifeLedger.monthTotals(items, now: Date())
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: KP.Space.sectionGap) {   // t1039: one rhythm
@@ -460,12 +465,19 @@ struct WalletCard: View {
         Spacer()
         BalanceEyeButton(font: .footnote).colorScheme(.dark)
       }
-      if m.balanceRevealed {
+      if m.balanceRevealed && !s.balanceKnown {   // t1282 (decision 156, owner card t1282s6035): never a placeholder 0
+        HStack(spacing: 10) { ProgressView().tint(.white); Text(T("加载中", "Loading")).font(.system(size: 34, weight: .heavy)) }
+          .padding(.top, 16).accessibilityElement(children: .combine).accessibilityLabel(T("余额加载中", "Balance loading")).accessibilityIdentifier("balance.loading")
+      } else if m.balanceRevealed {
         (Text(groupThousands(parts[0])).font(.system(size: 48, weight: .heavy)).kerning(-1.5)
           + Text("." + (parts.count > 1 ? parts[1] : "00") + " USDC").font(.system(size: 22, weight: .heavy)).foregroundColor(.white.opacity(0.67)))
         .lineLimit(1).minimumScaleFactor(0.5).padding(.top, 16)
         .accessibilityLabel(MoneyText.usdc(s.balance)).accessibilityIdentifier("balance.amount")
         .modifier(RollingNumber(value: Double(s.balance))).animation(Brand.spring, value: s.balance)
+        if s.balanceRefreshing {   // t1285 (decision 156): last balance seen for this wallet, refreshing
+          HStack(spacing: 6) { ProgressView().controlSize(.mini).tint(.white); Text(T("正在刷新", "Refreshing")).font(.caption.weight(.semibold)).foregroundColor(.white.opacity(0.75)) }
+            .accessibilityElement(children: .combine).accessibilityIdentifier("balance.refreshing")
+        }
         HStack(spacing: 6) {   // t991: rate moved out of the crowded header
           Text(T("本月 AI 已花 \(dollars(s.spentThisMonth()))", "AI spent \(dollars(s.spentThisMonth())) this month"))
           Text("·")

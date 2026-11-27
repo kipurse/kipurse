@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {createPhoneEnrollment,FEE_CAP} from '../src/v5/phone-signer.mjs';
 const ps=fs.readFileSync(new URL('../src/v5/phone-signer.mjs',import.meta.url),'utf8');
 const ml=fs.readFileSync(new URL('../mainnet/mainnet-owner-launch.mjs',import.meta.url),'utf8');
-const W='0x5e4c116dd45edc2dbed826be8b97a72499d03fc8',O='0x1da2d5293bd418ab06d16890f17711302c7e74f6',FEE='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+const W='0x5e4c116dd45edc2dbed826be8b97a72499d03fc8',O='0x1da2d5293bd418ab06d16890f17711302c7e74f6',FEE='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 const X='0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296',Y='0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
 const mkPub=({bal=14304957n,gp=6000000n}={})=>({readContract:async({functionName})=>functionName==='balanceOf'?bal:functionName==='latestRoundData'?[0n,300000000000n,0n,BigInt(Math.floor(Date.now()/1e3)),0n]:functionName==='nextOwnerIndex'?0n:false,getBalance:async()=>0n,getGasPrice:async()=>gp,getCode:async()=>'0x'});
 const mk=({S={phone:{pending:{},active:null}},pub=mkPub(),avail=true,pm='https://pay.kipurse.com/onboard/new/paymaster?id=en-x',feeTo=FEE}={})=>{let registered=0,lastReg=null;const E=createPhoneEnrollment({S,save:()=>{},pub,wallet:W,trust:'0x6b91dcb27cf3d69b1d9a6fddeb06ed1af2ed0bf9',owner:O,chainId:8453,base:()=>'https://pay.kipurse.com',caps:()=>({single:0n,daily:0n}),script:()=>'',approverVersion:'v3',

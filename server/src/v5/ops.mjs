@@ -52,6 +52,10 @@ export function deployPlan({ops,factoryBytecode,feeCtlBytecode,adapterBytecode,r
     {name:'lock',callData:encodeFunctionData({abi:OPS_ABI,functionName:'lock',args:[adapter]})}]};
 }
 
+/** t1346 (decision 169): collectFees() can be called by anyone; the adapter pays the accrued 0.1% fees ONLY to the FeeController's on-chain
+ *  recipient (to become the company Safe after the owner's proposeRecipient + 48 h executeRecipient). This builds that one call so whoever
+ *  calls it (a Safe transaction, or any account paying its own gas) does not need the ops account. It sends nothing by itself. */
+export function collectFeesCall(adapter){return {to:getAddress(adapter),value:0n,data:encodeFunctionData({abi:ADAPTER,functionName:'collectFees'})};}
 /** Fee collection as the fee recipient, paying its own gas from the collected USDC. Runs only when accruedFees >= minRatio x the
  *  expected gas charge (default 20x: the gas is <= 5% of what is collected) and >= minCollect; otherwise returns {skipped}.
  *  Optionally forwards `toTreasury` (atomic) in the same op (the contract keeps a 4 x maxGasPerOp gas buffer). Never on a schedule:

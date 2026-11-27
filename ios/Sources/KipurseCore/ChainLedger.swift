@@ -10,10 +10,17 @@ import Foundation
 /// withdraw), merges with rows already shown (no double counting by tx) and recomputes every row's balance from the live balance.
 public enum ChainLedger {
   public static let transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-  /// First scan without a cursor: ~2–5 days on Base. Older history comes from the backward cursor / server ledger.
-  public static let lookbackBlocks: Int64 = 1_000_000
+  /// t1282 (decision 156): Base makes ~5 blocks a second (measured 2026-11-25: 1,000,000 blocks = 55.4 h, ~0.2 s each), so the old
+  /// 1,000,000-block look-back (sized for 2 s blocks) covered barely two days. Look-back is now set in time: 3 days of blocks.
+  public static let blocksPerDay: Int64 = 432_000
+  public static let lookbackBlocks: Int64 = 3 * blocksPerDay
+  /// t1282: after sign-in the records are scanned all the way back to `floorBlock` in bounded rounds (maxLogCalls each), so a
+  /// wallet whose movements are older than the look-back still shows every one. The cursor keeps the progress between refreshes.
+  public static let maxRounds = 14
   /// Hard cap per refresh so a strict public RPC can't burn the phone for minutes; the cursor continues next refresh.
-  public static let maxLogCalls = 40
+  public static let maxLogCalls = 100
+  /// t1286 (decision 157): windows read at the same time (each = 2 eth_getLogs, in / out).
+  public static let parallelWindows = 8
   /// Kipurse wallets did not exist before this block (2026-10, before the first safety-limit permission). Backward scans stop here.
   public static let floorBlock: Int64 = 52_500_000
   /// Kipurse's fixed fee address (same as RequestVerify.duesTo; never changes in the app).
@@ -61,7 +68,9 @@ public enum ChainLedger {
 
   /// Pure: one row per transaction, oldest first, without balances.
   public static func classify(transfers: [Transfer], wallet: String, owner: String?, feeTo: String? = ChainLedger.feeTo) -> [JSONValue] {
-    let w = wallet.lowercased(), o = owner?.lowercased(), fee = feeTo?.lowercased()
+    let w = wallet.lowercased(), o = owner?.lowercased()
+    // t1346: reading history, fees paid to the retired fee addresses (before the switch to the company Safe) still count as fees
+    let fees: Set<String> = feeTo.map { FeeAddress.historicalFeeRecipients.union([$0.lowercased()]) } ?? []
     var order: [String] = []; var by: [String: [Transfer]] = [:]
     let sorted = transfers.sorted { ($0.block, $0.li, $0.t, $0.tx) < ($1.block, $1.li, $1.t, $1.tx) }
     for tr in sorted where (tr.to == w || tr.from == w) && tr.amount > 0 {
@@ -76,8 +85,8 @@ public enum ChainLedger {
       let outSum = outs.reduce(Int64(0)) { $0 + $1.amount }
       let delta = inSum - outSum
       guard delta != 0 else { continue }
-      let feePaid = fee.map { f in outs.filter { $0.to == f }.reduce(Int64(0)) { $0 + $1.amount } } ?? 0
-      let main = outs.filter { fee == nil || $0.to != fee }
+      let feePaid = outs.filter { fees.contains($0.to) }.reduce(Int64(0)) { $0 + $1.amount }
+      let main = outs.filter { !fees.contains($0.to) }
       let sent = main.reduce(Int64(0)) { $0 + $1.amount }
       var kind: String, zh: String
       var detail: [String: JSONValue] = [:]
@@ -186,6 +195,77 @@ public enum ChainLedger {
     return (transfers, scannedTo)
   }
 
+  /// t1286 (decision 157): like `collect`, but up to `parallelWindows` windows at once (oldest first, contiguous). A window that fails
+  /// ends the result there (everything before it is kept); nil = the very first window failed (caller shrinks the chunk).
+  static func collectParallel(wallet: String, pad: String, usdc: String, fromBlock: Int64, toBlock: Int64,
+                              chunk: Int64, nodes: [URL], budget: inout Int) async -> (transfers: [Transfer], scannedTo: Int64)? {
+    var windows: [(Int64, Int64)] = []
+    var b = fromBlock
+    while b <= toBlock, budget - windows.count * 2 >= 2 { let e = min(toBlock, b + chunk - 1); windows.append((b, e)); b = e + 1 }
+    guard !windows.isEmpty else { return nil }
+    var results = [(transfers: [Transfer], scannedTo: Int64)?](repeating: nil, count: windows.count)
+    var i = 0
+    while i < windows.count {
+      let batch = Array(windows[i..<min(windows.count, i + parallelWindows)])
+      let got: [(Int, (transfers: [Transfer], scannedTo: Int64)?)] = await withTaskGroup(of: (Int, (transfers: [Transfer], scannedTo: Int64)?).self) { g in
+        for (k, w) in batch.enumerated() {
+          g.addTask {
+            var one = 2
+            let r = await collect(wallet: wallet, pad: pad, usdc: usdc, fromBlock: w.0, toBlock: w.1, chunk: chunk, nodes: nodes, budget: &one)
+            return (i + k, (r.map { $0.scannedTo >= w.1 } ?? false) ? r : nil)
+          }
+        }
+        var out: [(Int, (transfers: [Transfer], scannedTo: Int64)?)] = []
+        for await x in g { out.append(x) }
+        return out
+      }
+      budget -= batch.count * 2
+      for (k, r) in got { results[k] = r }
+      if batch.indices.contains(where: { results[i + $0] == nil }) { break }
+      i += batch.count
+    }
+    var all: [Transfer] = []; var scannedTo = fromBlock - 1
+    for (k, r) in results.enumerated() { guard let r else { break }; all += r.transfers; scannedTo = windows[k].1 }
+    return scannedTo >= fromBlock ? (all, scannedTo) : nil
+  }
+
+  /// t1286 (decision 157): the block where this wallet's code first exists (binary search with eth_getCode, ~23 reads). Public, never
+  /// changes: kept per wallet. nil = a node can't answer old state (the scan then starts from the look-back as before).
+  static func birthKey(_ w: String) -> String { "kp.chainledger.birth.v1." + w.lowercased() }
+  public static func birth(wallet: String, head: Int64, nodes: [URL] = ChainRPC.nodes) async -> Int64? {
+    if let v = store.object(forKey: birthKey(wallet)) as? NSNumber { return v.int64Value }
+    func hasCode(_ b: Int64) async -> Bool? {
+      guard let c = try? await ChainRPC.call("eth_getCode", [wallet, "0x" + String(b, radix: 16)], nodes: nodes), c.hasPrefix("0x") else { return nil }
+      return c.count > 2
+    }
+    guard let atHead = await hasCode(head), atHead else { return nil }   // not deployed yet: no birth (scan as before)
+    if let atFloor = await hasCode(floorBlock), atFloor { store.set(NSNumber(value: floorBlock), forKey: birthKey(wallet)); return floorBlock }
+    var lo = floorBlock, hi = head
+    while hi - lo > 1 {
+      let mid = lo + (hi - lo) / 2
+      guard let c = await hasCode(mid) else { return nil }
+      if c { hi = mid } else { lo = mid }
+    }
+    store.set(NSNumber(value: hi), forKey: birthKey(wallet)); return hi
+  }
+  /// Before the code existed, money can already arrive at the (known in advance) address: the fast first pass also covers this
+  /// much before the birth block; older blocks down to `floorBlock` are still read in the later rounds.
+  public static let preBirthMargin: Int64 = blocksPerDay
+
+  /// t1286 (decision 157): [zh] when the AI payment list (server) is not on this phone: this calendar month's payments out of
+  /// the wallet (amount + fee, as the chain moved them). Deposits, withdrawals and wallet network fees are not AI spend.
+  public static func monthSpend(rows: [JSONValue], now: Date = Date(), calendar: Calendar = .current) -> Int64 {
+    payments(rows: rows).filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }.reduce(Int64(0)) { $0 + $1.amount }
+  }
+  /// Payments out of the wallet in [zh] (amount as moved on chain, newest order kept). Used only when no AI payment list is here.
+  public static func payments(rows: [JSONValue]) -> [(amount: Int64, date: Date)] {
+    rows.compactMap { r in
+      guard (r["account"]?.string ?? "wallet") == "wallet", r["kind"]?.string == "payment",
+            let d = r["delta"]?.atomic, d < 0, let t = r["t"]?.atomic else { return nil }
+      return (-d, Date(timeIntervalSince1970: TimeInterval(t)))
+    }
+  }
+
   /// Saved scan position per wallet (public chain positions only; no balances, no keys).
   public struct Cursor: Codable, Equatable {
     public var newest: Int64, oldest: Int64
@@ -207,27 +287,50 @@ public enum ChainLedger {
     guard FeatureSwitch.chainRead.on, let pad = topicAddress(wallet) else { return nil }
     guard let latestHex = try? await ChainRPC.call("eth_blockNumber", [], nodes: nodes),
           let latest = Int64(String(latestHex.dropFirst(2)), radix: 16) else { return nil }
-    var cur = cursor(wallet) ?? Cursor(newest: max(floorBlock, latest - lookbackBlocks) - 1, oldest: max(floorBlock, latest - lookbackBlocks))
+    var start = max(floorBlock, latest - lookbackBlocks)
+    var firstPass = false   // t1286: the step that starts from the birth block reads only birth→head (rows show in seconds); older blocks next round
+    if cursor(wallet) == nil, let b = await birth(wallet: wallet, head: latest, nodes: nodes) { start = max(floorBlock, min(start, b - preBirthMargin)); firstPass = true }
+    var cur = cursor(wallet) ?? Cursor(newest: start - 1, oldest: start)
     var budget = maxLogCalls
     var all: [Transfer] = []
     var readSomething = false
     for chunk in [Int64(50_000), Int64(10_000), Int64(2_000), Int64(200)] {
       if cur.newest < latest {
-        if let r = await collect(wallet: wallet, pad: pad, usdc: usdc, fromBlock: cur.newest + 1, toBlock: latest, chunk: chunk, nodes: nodes, budget: &budget) {
+        if let r = await collectParallel(wallet: wallet, pad: pad, usdc: usdc, fromBlock: cur.newest + 1, toBlock: latest, chunk: chunk, nodes: nodes, budget: &budget) {
           all += r.transfers; cur.newest = max(cur.newest, r.scannedTo); readSomething = true
         } else { continue }
       }
-      if cur.newest >= latest, cur.oldest > floorBlock, budget >= 2 {
-        let from = max(floorBlock, cur.oldest - chunk * Int64(budget / 2))
-        if let r = await collect(wallet: wallet, pad: pad, usdc: usdc, fromBlock: from, toBlock: cur.oldest - 1, chunk: chunk, nodes: nodes, budget: &budget) {
-          all += r.transfers; if r.scannedTo >= cur.oldest - 1 { cur.oldest = from }; readSomething = true
+      // t1282 (decision 156): older blocks newest-first, one chunk at a time, so a range a free node can't answer (slow old history)
+      // stops the walk there instead of losing the whole step; the cursor keeps every chunk already read.
+      // Older history is slower on the free node (a 50,000-block range can take > 8 s): a failed chunk is retried once as 10,000.
+      backward: while !firstPass, cur.newest >= latest, cur.oldest > floorBlock, budget >= 2 {
+        for c in (chunk > 10_000 ? [chunk, 10_000] : [chunk]) where budget >= 2 {
+          let to = cur.oldest - 1, from = max(floorBlock, to - c + 1)
+          if let r = await collect(wallet: wallet, pad: pad, usdc: usdc, fromBlock: from, toBlock: to, chunk: c, nodes: nodes, budget: &budget), r.scannedTo >= to {
+            all += r.transfers; cur.oldest = from; readSomething = true; continue backward
+          }
         }
+        break
       }
       break
     }
     guard readSomething else { return nil }
-    saveCursor(cur, wallet)
+    saveCursor(cur, wallet); lastHead[wallet.lowercased()] = latest
     return all
+  }
+  /// t1282 (decision 156): sign-out wiped the shown records but kept this cursor, so after signing back in the scan resumed AFTER the
+  /// blocks that held the wallet's movements and [zh] stayed empty. Every wallet-scoped reset now forgets all cursors (they hold
+  /// only public block numbers) so the next scan starts again and reaches the floor block.
+  public static func forgetAll() {
+    for k in store.dictionaryRepresentation().keys where k.hasPrefix("kp.chainledger.cursor.") { store.removeObject(forKey: k) }
+    lastHead = [:]
+  }
+  /// Head seen by the last scan step per wallet (memory only).
+  static var lastHead: [String: Int64] = [:]
+  /// t1282: true once this wallet's records are scanned from the floor block up to the last head seen.
+  public static func complete(wallet: String) -> Bool {
+    guard let c = cursor(wallet), let h = lastHead[wallet.lowercased()] else { return false }
+    return c.oldest <= floorBlock && c.newest >= h
   }
 
   /// t1129: read new transfers and merge them into the rows already shown. Nil = nothing could be read (keep what is shown).

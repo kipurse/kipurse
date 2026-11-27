@@ -97,17 +97,32 @@ public enum SafetyCaps {
   }
 
   // MARK: chain scan (read-only)
+  // t1282 (decision 156, owner card t1282s6035): FIND the newest permission event with ONE node (only one free public node can scan
+  // large block ranges), then CONFIRM it: a second, different node must show that exact log in that one block, and two nodes
+  // must agree on SpendPermissionManager.isValid(permission) right now. Replaces t1275 "every log scan needs two agreeing nodes"
+  // (no two free nodes can scan Base's ranges any more: mainnet.base.org 429s every eth_getLogs, base.llamarpc.com is down).
 
-  /// Saved per account: blocks already scanned (newest / oldest) and the newest permission event seen for it.
+  /// Saved per account: blocks already scanned (newest / oldest), the newest permission event seen, and whether a second node
+  /// has confirmed that event's block (done once; isValid is re-checked on two nodes every read).
   public struct Memo: Codable, Equatable {
     public var newest: Int64, oldest: Int64
     public var data: String?, revoked: Bool, block: Int64, li: Int64
+    public var blockConfirmed: Bool? = nil
   }
   public static var store: UserDefaults = .standard
-  static func key(_ a: String) -> String { "kp.safetycaps.memo.v2." + a.lowercased() }   // t1275: v2 = built only from two-node-agreed reads (v1 single-node memos are not reused)
+  static func key(_ a: String) -> String { "kp.safetycaps.memo.v3." + a.lowercased() }   // t1282: v3 = one-node find + two-node contract confirm
   public static func memo(_ a: String) -> Memo? { store.data(forKey: key(a)).flatMap { try? JSONDecoder().decode(Memo.self, from: $0) } }
-  static func save(_ m: Memo, _ a: String) { if let d = try? JSONEncoder().encode(m) { store.set(d, forKey: key(a)) } }
-  public static let maxCalls = 30
+  static func save(_ m: Memo?, _ a: String) {
+    if let m, let d = try? JSONEncoder().encode(m) { store.set(d, forKey: key(a)) } else { store.removeObject(forKey: key(a)) }
+  }
+  /// t1282: forget every saved scan (public block numbers / public permission data only) when the wallet-scoped state is reset.
+  public static func forgetAll() {
+    for k in store.dictionaryRepresentation().keys where k.hasPrefix("kp.safetycaps.memo.") { store.removeObject(forKey: k) }
+  }
+  /// Find budget per read. A wallet's permission is normally found in the first few calls (newest first); a wallet that never set
+  /// one walks back to ChainLedger.floorBlock once (~200 calls of 50,000 blocks), then the memo makes later reads cheap.
+  public static let maxCalls = 240
+  public static let chunk: Int64 = 50_000
 
   static var nodes: [URL] {
     var out: [URL] = []
@@ -115,15 +130,21 @@ public enum SafetyCaps {
     return out
   }
 
-  /// Newest permission event for `account` in [from, to] (nil = read failed, .none = no event for this account).
-  static func events(_ account: String, from: Int64, to: Int64) async -> (ok: Bool, best: (data: String, revoked: Bool, block: Int64, li: Int64)?) {
-    let params: [Any] = [["address": manager, "fromBlock": "0x" + String(from, radix: 16), "toBlock": "0x" + String(to, radix: 16),
-                          "topics": [[eventTopic, revokedTopic]]]]
-    guard let raw = await ChainRPC.agreedAny("eth_getLogs", params, nodes: nodes, canon: ChainRPC.logsCanon) else { return (false, nil) }   // t1275: two nodes must agree
-    let arr = (raw as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
-    var best: (data: String, revoked: Bool, block: Int64, li: Int64)?
+  /// isValid((address,address,address,uint160,uint48,uint48,uint48,uint256,bytes)) selector.
+  public static let selIsValid: String = String(Hex.encode(Keccak.hash("isValid(" + tupleSig + ")")).replacingOccurrences(of: "0x", with: "").prefix(8))
+  /// Calldata for isValid(permission) from one event's data (the event data IS abi.encode(permission); old fixtures lack the offset word).
+  public static func isValidCall(_ data: String) -> String? {
+    guard let b = Hex.decode(data), let w0 = base(b) else { return nil }
+    let body = data.lowercased().replacingOccurrences(of: "0x", with: "")
+    return "0x" + selIsValid + (w0 == 1 ? body : String(repeating: "0", count: 62) + "20" + body)
+  }
+
+  typealias Event = (data: String, revoked: Bool, block: Int64, li: Int64)
+  static func best(_ arr: [[String: Any]], _ account: String) -> Event? {
+    var best: Event?
     for l in arr {
       guard let d = l["data"] as? String, let t0 = (l["topics"] as? [String])?.first?.lowercased(),
+            t0 == eventTopic.lowercased() || t0 == revokedTopic.lowercased(),
             let b = Hex.decode(d), let w0 = base(b), b.count >= 32 * (w0 + 1) else { continue }
       let ao = w0 * 32
       let who = "0x" + b[(ao + 12)..<(ao + 32)].map { String(format: "%02x", $0) }.joined()
@@ -132,52 +153,94 @@ public enum SafetyCaps {
       if let cur = best, (cur.block, cur.li) >= (bn, li) { continue }
       best = (d, t0 == revokedTopic.lowercased(), bn, li)
     }
-    return (true, best)
+    return best
+  }
+  static func logParams(_ from: Int64, _ to: Int64) -> [Any] {
+    [["address": manager, "fromBlock": "0x" + String(from, radix: 16), "toBlock": "0x" + String(to, radix: 16), "topics": [[eventTopic, revokedTopic]]]]
+  }
+  static func rows(_ raw: Any) -> [[String: Any]]? { (raw as? [Any]).map { $0.compactMap { $0 as? [String: Any] } } }
+
+  /// FIND (one node): newest permission event for `account` in [from, to]. ok=false = no node could answer.
+  static func events(_ account: String, from: Int64, to: Int64) async -> (ok: Bool, best: Event?, node: URL?) {
+    for n in nodes {
+      guard let raw = try? await ChainRPC.anyTransport(n, "eth_getLogs", logParams(from, to)), let arr = rows(raw) else { continue }
+      return (true, best(arr, account), n)
+    }
+    return (false, nil, nil)
+  }
+
+  /// CONFIRM 1 (once per event): a node other than the finder shows the same log (data, block, index) in that single block.
+  /// true = confirmed, false = a second node answered and the log is not there (the finder lied or was wrong), nil = no second node answered.
+  static func blockCheck(_ m: Memo, account: String, finder: URL?) async -> Bool? {
+    guard let d = m.data?.lowercased() else { return nil }
+    for n in nodes where n != finder {
+      guard let raw = try? await ChainRPC.anyTransport(n, "eth_getLogs", logParams(m.block, m.block)), let arr = rows(raw) else { continue }
+      guard let e = best(arr, account) else { return false }
+      return e.block == m.block && e.li == m.li && e.revoked == m.revoked && e.data.lowercased() == d
+    }
+    return nil
+  }
+
+  /// CONFIRM 2 (every read): two nodes agree on isValid(permission). nil = can't confirm.
+  static func validNow(_ data: String) async -> Bool? {
+    guard let c = isValidCall(data), let r = await ChainRPC.agreedFast("eth_call", [["to": manager, "data": c], "latest"], nodes: nodes) else { return nil }
+    return VaultCheck.decodeBool(r)
   }
 
   static func scan(account: String) async -> Read {
     guard FeatureSwitch.chainRead.on else { return Read(caps: .unreadable) }
-    guard let latest = await ChainRPC.agreedHead(nodes: nodes) else { return fromMemo(memo(account), account) ?? Read(caps: .unreadable) }   // t1275: a block both nodes have
-    var m = memo(account) ?? Memo(newest: latest, oldest: latest + 1, data: nil, revoked: false, block: 0, li: 0)
-    var calls = 0
-    let chunk: Int64 = 50_000
-    func take(_ e: (data: String, revoked: Bool, block: Int64, li: Int64)) {
-      guard (e.block, e.li) > (m.block, m.li) || (m.data == nil && !m.revoked) else { return }
-      if e.revoked {
-        // Only a revoke of the permission we show (or with nothing shown yet) clears it; revoking an older one changes nothing.
-        guard m.data == nil || m.data?.lowercased() == e.data.lowercased() else { return }
-        m.data = nil; m.revoked = true
-      } else { m.data = e.data; m.revoked = false }
-      m.block = e.block; m.li = e.li
-    }
-    // 1) new blocks since the last read (oldest first so the cursor never skips a gap).
-    while m.newest < latest && calls < maxCalls {
-      let from = m.newest + 1, to = min(latest, from + chunk - 1); calls += 1
-      let r = await events(account, from: from, to: to)
-      guard r.ok else { break }
-      if let e = r.best { take(e) }
-      m.newest = to
-    }
-    // 2) nothing found yet: walk back (newest first) until an event or the floor.
-    if m.data == nil && !m.revoked {
-      while m.oldest > ChainLedger.floorBlock && calls < maxCalls {
-        let to = m.oldest - 1, from = max(ChainLedger.floorBlock, to - chunk + 1); calls += 1
+    var m = memo(account)
+    var finder: URL?
+    var complete = false
+    if let latest = await ChainRPC.agreedHead(nodes: nodes) {   // a block both nodes have
+      var cur = m ?? Memo(newest: latest, oldest: latest + 1, data: nil, revoked: false, block: 0, li: 0)
+      var calls = 0
+      func take(_ e: Event) {
+        guard (e.block, e.li) > (cur.block, cur.li) || (cur.data == nil && !cur.revoked) else { return }
+        if e.revoked {
+          guard cur.data == nil || cur.data?.lowercased() == e.data.lowercased() else { return }
+          cur.data = e.data; cur.revoked = true
+        } else { cur.data = e.data; cur.revoked = false }
+        cur.block = e.block; cur.li = e.li; cur.blockConfirmed = nil
+      }
+      var failed = false
+      // 1) new blocks since the last read (oldest first so the cursor never skips a gap).
+      while cur.newest < latest && calls < maxCalls {
+        let from = cur.newest + 1, to = min(latest, from + chunk - 1); calls += 1
         let r = await events(account, from: from, to: to)
-        guard r.ok else { break }
-        m.oldest = from
-        if let e = r.best { take(e); break }
+        guard r.ok else { failed = true; break }
+        if let e = r.best { take(e); finder = r.node }
+        cur.newest = to
+      }
+      // 2) nothing found yet: walk back (newest first) until an event or the floor.
+      if !failed && cur.data == nil && !cur.revoked {
+        while cur.oldest > ChainLedger.floorBlock && calls < maxCalls {
+          let to = cur.oldest - 1, from = max(ChainLedger.floorBlock, to - chunk + 1); calls += 1
+          let r = await events(account, from: from, to: to)
+          guard r.ok else { failed = true; break }
+          cur.oldest = from
+          if let e = r.best { take(e); finder = r.node; break }
+        }
+      }
+      m = cur; save(cur, account)
+      complete = !failed && (cur.data != nil || cur.oldest <= ChainLedger.floorBlock)
+    }
+    guard var cur = m else { return Read(caps: .unreadable) }
+    guard let d = cur.data else {
+      // Searched all the way to the floor (one node) and saw no permission for this wallet: really never set.
+      return Read(caps: complete && cur.oldest <= ChainLedger.floorBlock ? .unset : .unreadable)
+    }
+    if cur.blockConfirmed != true {
+      switch await blockCheck(cur, account: account, finder: finder) {
+      case .some(true): cur.blockConfirmed = true; save(cur, account)
+      case .some(false): save(nil, account); return Read(caps: .unreadable)   // a second node does not see it: forget it, search again next time
+      case .none: return Read(caps: .unreadable)
       }
     }
-    save(m, account)
-    if let r = fromMemo(m, account) { return r }
-    // Scanned all the way to the floor and never saw a permission for this wallet: really never set.
-    return Read(caps: m.oldest <= ChainLedger.floorBlock ? .unset : .unreadable)
-  }
-
-  static func fromMemo(_ m: Memo?, _ account: String) -> Read? {
-    guard let m else { return nil }
-    if m.revoked { return Read(caps: .unset) }
-    guard let d = m.data else { return nil }
+    guard let valid = await validNow(d) else { return Read(caps: .unreadable) }
+    if cur.revoked { return Read(caps: valid ? .unreadable : .unset) }
+    guard valid else { return Read(caps: .unset) }   // approved once, no longer in force on chain (revoked)
     return pick([d], account: account)
   }
+
 }

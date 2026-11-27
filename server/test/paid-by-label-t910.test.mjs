@@ -2,7 +2,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {decodeFunctionData,parseAbi,getAddress} from 'viem';
 import {createPhoneEnrollment} from '../src/v5/phone-signer.mjs';
 import {createOnboardSponsor,callsHash,ENROLL_PREFIX} from '../src/v5/onboard-sponsor.mjs';
-const W='0x5e4c116dd45edc2dbed826be8b97a72499d03fc8',O='0x1da2d5293bd418ab06d16890f17711302c7e74f6',FEE='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+const W='0x5e4c116dd45edc2dbed826be8b97a72499d03fc8',O='0x1da2d5293bd418ab06d16890f17711302c7e74f6',FEE='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 const X='0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296',Y='0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';   // P-256 generator (valid point)
 const A=parseAbi(['function execute(address,uint256,bytes)','function transfer(address,uint256) returns (bool)']);
 const mkPub=(wal,own)=>({readContract:async({functionName,args})=>functionName==='balanceOf'?(String(args[0]).toLowerCase()===W.toLowerCase()?wal:own):functionName==='latestRoundData'?[0n,300000000000n,0n,BigInt(Math.floor(Date.now()/1e3)),0n]:functionName==='nextOwnerIndex'?0n:false,

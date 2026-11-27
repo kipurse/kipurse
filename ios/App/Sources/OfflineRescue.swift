@@ -23,22 +23,42 @@ enum LedgerCache {
     return SecItemAdd(add as CFDictionary, nil) == errSecSuccess ? k : nil
   }
   struct Saved: Codable { let at: Date; let raw: JSONValue }
+  /// t1286 (decision 157): one encrypted copy PER WALLET ADDRESS (records, AI payments, this month's spend), so [zh] and
+  /// signing back in to the SAME wallet shows them at once. Another wallet never reads it (its own slot + CacheGuard).
+  static func slot(_ w: String) -> URL {
+    let h = SHA256.hash(data: Data(w.lowercased().utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+    return file.deletingLastPathComponent().appendingPathComponent("kp-ledger." + h + ".cache")
+  }
+  static func target(_ s: WalletState) -> URL {
+    let w = s.wallet ?? Operator.wallet
+    return CoinbaseIdentity.isAddress(w) ? slot(w) : file
+  }
   static func save(_ s: WalletState) {
     guard FeatureSwitch.ledgerCache.on, !DemoGuard.active, let k = key(create: true), let d = try? JSONEncoder().encode(Saved(at: Date(), raw: s.raw)),
           let box = try? AES.GCM.seal(d, using: k).combined else { return }
-    try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try? box.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    let f = target(s)
+    try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? box.write(to: f, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+  }
+  static func read(_ f: URL, _ k: SymmetricKey) -> (Date, WalletState)? {
+    guard let d = try? Data(contentsOf: f), let b = try? AES.GCM.SealedBox(combined: d),
+          let p = try? AES.GCM.open(b, using: k), let s = try? JSONDecoder().decode(Saved.self, from: p) else { return nil }
+    return (s.at, WalletState(s.raw))
   }
   static func load() -> (Date, WalletState)? {
-    guard FeatureSwitch.ledgerCache.on, let k = key(create: false), let d = try? Data(contentsOf: file), let b = try? AES.GCM.SealedBox(combined: d),
-          let p = try? AES.GCM.open(b, using: k), let s = try? JSONDecoder().decode(Saved.self, from: p) else { return nil }
-    let ws = WalletState(s.raw)
+    guard FeatureSwitch.ledgerCache.on, let k = key(create: false) else { return nil }
+    let w = Operator.wallet
+    let found = (CoinbaseIdentity.isAddress(w) ? read(slot(w), k) : nil) ?? read(file, k)
+    guard let (at, ws) = found else { return nil }
     // t1238: never show another wallet's cached home (moved wallet / signed in to a different account)
-    guard CacheGuard.usable(cachedWallet: ws.wallet, current: Operator.wallet) else { return nil }
-    return (s.at, ws)
+    guard CacheGuard.usable(cachedWallet: ws.wallet, current: w) else { return nil }
+    return (at, ws)
   }
+  /// Everything, every wallet ([zh] / a followed wallet move).
   static func wipe() {
     try? FileManager.default.removeItem(at: file)
+    let dir = file.deletingLastPathComponent()
+    for f in (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] where f.lastPathComponent.hasPrefix("kp-ledger.") && f.pathExtension == "cache" { try? FileManager.default.removeItem(at: f) }
     SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: account] as CFDictionary)
   }
 }

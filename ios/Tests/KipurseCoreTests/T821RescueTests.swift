@@ -56,9 +56,11 @@ final class T821RescueTests: XCTestCase {
   }
   func testNodeOrder() {
     let n = ChainRPC.nodes.map(\.host!)
-    XCTAssertTrue(n.contains("base-rpc.publicnode.com") && n.contains("base.llamarpc.com"))
+    // t1282 (decision 156, owner t1283): four free keyless providers, publicnode (the only 50,000-block log scanner) first; the
+    // rate-limited mainnet.base.org and the dead base.llamarpc.com are gone.
+    XCTAssertEqual(n, ["base-rpc.publicnode.com", "base.drpc.org", "base-public.nodies.app", "base-mainnet.public.blastapi.io"])
     XCTAssertEqual(Set(n).count, n.count)
-    XCTAssertLessThan(n.firstIndex(of: "base-rpc.publicnode.com")!, n.firstIndex(of: "base.llamarpc.com")!)
+    XCTAssertFalse(n.contains("mainnet.base.org") || n.contains("base.llamarpc.com"))
   }
   func testSwitchesDefaultOn() { for f in FeatureSwitch.allCases { XCTAssertTrue(f.on, f.rawValue) } }
 }

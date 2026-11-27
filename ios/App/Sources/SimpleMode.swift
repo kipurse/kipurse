@@ -16,7 +16,7 @@ struct SimpleHome: View {
           Button { Task { await m.revealBalance() } } label: {
             VStack(spacing: 6) {
               Text(T("余额", "Balance")).font(.title2.bold())
-              Text(m.balanceRevealed ? AnswerRules.format(s.balance) : BalanceMask.dots).font(.system(size: 56, weight: .bold)).lineLimit(1).minimumScaleFactor(0.4).accessibilityIdentifier("simple.balance.amount")
+              Text(m.balanceRevealed ? (s.balanceKnown ? AnswerRules.format(s.balance) : T("加载中", "Loading")) : BalanceMask.dots).font(.system(size: 56, weight: .bold)).lineLimit(1).minimumScaleFactor(0.4).accessibilityIdentifier("simple.balance.amount")
               Text(T(Beginner.currencyZh, Beginner.currencyEn)).font(.title3).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, minHeight: 170).background(Brand.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KP.Radius.card))
           }.buttonStyle(.plain).accessibilityIdentifier("simple.balance")

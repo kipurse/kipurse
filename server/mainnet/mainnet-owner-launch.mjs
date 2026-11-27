@@ -21,7 +21,7 @@ const {createRegistry,createIndex,resolveTenant,sha256,followMoved}=await import
 const {createNewWalletOnboarding}=await import(G+'src/v5/onboard-new.mjs');const {NO_CEILING}=await import(G+'src/v5/phone-signer.mjs');const {createTenantCache,createMcpPool,createAgentRouter,readRaw,readCapped}=await import(G+'src/v5/router.mjs');
 const {createAnomalyGuard,guardEngine,pauseMsOf}=await import(G+'src/v5/anomaly.mjs');const {createPush,apnsConfigFromEnv}=await import(G+'src/v5/push.mjs');const {pushTokenList,registerPushToken}=await import(G+'src/v5/push-tokens.mjs');const {createOwnerWithdraw}=await import(G+'src/v5/owner-withdraw.mjs');const {createExecutorKeyring}=await import(G+'src/v5/executor-keys.mjs');const {plainStore,tenantStore,loadDataKey}=await import(G+'src/v5/at-rest.mjs');const {createRateLimiter,kvKey}=await import(G+'src/v5/store.mjs');
 const rawBody=req=>readRaw(req);const MCP_MAX_BODY=65536;   // t1275: = router cap (src/v5/router.mjs)
-const {operatorConstants}=await import(G+'src/v5/operator-constants.mjs');
+const {operatorConstants,assertFeeToUsable}=await import(G+'src/v5/operator-constants.mjs');
 // t1270: no built-in operator values in the open-source build: set "operatorConstants" {feeTo, paymasters, ownerPaymasters}
 // in mainnet-trustflow.config.json (docs/ARCHITECTURE_LAYERS.md). Missing feeTo -> the launcher refuses to start.
 const OPERATOR_DEFAULTS=Object.freeze({});
@@ -35,7 +35,8 @@ export async function startMainnet({overrides={},stateFile=join(DATA,'runtime-st
   const {createPurchaseGate}=await import(G+'src/v5/purchase-gate.mjs');const CBV_PUBS=String(process.env.KIPURSE_CBV_RPCS??'https://mainnet.base.org,https://base-rpc.publicnode.com').split(',').filter(Boolean).map(u=>createPublicClient({transport:http(u,{timeout:8000})}));
   const PGATE=overrides.purchaseGate??createPurchaseGate({check:o=>checkVerifiedMulti(CBV_PUBS,o,{log:x=>console.log(JSON.stringify({t:'cbv_buy',...x}))}),log:(k,v)=>OBS.log(k,v)});
   const X=JSON.parse(fs.readFileSync(join(CONF,'mainnet-trustflow.config.json')));
-  const OP=operatorConstants(X.operatorConstants,OPERATOR_DEFAULTS);   // t1270: official fee address + ledger paymasters (operator config)
+  const OP=operatorConstants(X.operatorConstants,OPERATOR_DEFAULTS);
+  assertFeeToUsable(process.env.KIPURSE_WITHDRAW_FEE_TO,'KIPURSE_WITHDRAW_FEE_TO');   // t1346: the old placeholder / ops account can never come back through env   // t1270: official fee address + ledger paymasters (operator config)
   /* t1197 (decision 92): NEW wallets open on the V5.3 suite (mainnet/v53-suite.json, checked on chain at start); the owner's wallet 0x5150 and every
      wallet registered before have no `suite` in their record and stay on V5.2 (X.adapter / X.trust) exactly as before. */
   const V53FILE=(()=>{try{return JSON.parse(fs.readFileSync(new URL('./v53-suite.json',import.meta.url)));}catch{return null;}})();

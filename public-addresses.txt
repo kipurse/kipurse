@@ -43,7 +43,8 @@
 0x28c91ce8ee453afa81202bdb94a4d630d8e53ed1  # publicly leaked signer key address (refused by plan51)
 
 ## Deployed Kipurse contracts and the official fee address (public protocol constants)
-0xf14ef5dc4723245866c22c749a0a84afceba0dd9  # Kipurse official fee address (dues slot / wallet-paid fees checked by the phone; operator value, see docs/ARCHITECTURE_LAYERS.md)
+0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd  # Kipurse official fee address since t1346u: company Safe "Blessbridge Treasury" on Base (2-of-3; dues slot / wallet-paid fees checked by the phone; operator value, see docs/ARCHITECTURE_LAYERS.md)
+0xf14ef5dc4723245866c22c749a0a84afceba0dd9  # RETIRED fee address (open-source placeholder, never paid again; listed so the phone and server can refuse it and read old records)
 0x79e052e601adb6762965b4af75e6896891eb10f5  # V5.1 order verifier (Base Sepolia)
 0x05320bed08309f66316f7d73e2d0be110400fbb2  # V5.2 adapter
 0x65d2ce04da7ace81e7c4ab08712509282745ec84  # V5.2 trust
@@ -98,6 +99,7 @@
 0xfd0bf71f60660e2f608ed56e1659c450eb113120  # seen in server/kit/rescue/rescue.js, server/kit/static/app.js +15
 
 ## Synthetic addresses in tests, fixtures, demos and examples (made up, derived from synthetic inputs, or created on a local fork; no real person)
+0xea304e4a74abc3a4cc4ec621452c1e4896c14e27  # synthetic V5.5 vault of the synthetic V5.5 wallet (KipurseV55.vault); seen in ios/Tests/KipurseCoreTests/T1286RecordsKeptTests.swift
 0x5e4c116dd45edc2dbed826be8b97a72499d03fc8  # Kipurse test wallet of the t1128 enrollment fixtures (also the sample in scripts/cbv-check.mjs)
 0x7ab3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5  # seen in ios/App/Sources/AppModel.swift
 0x896e3fa0b1c2d4e5f60718293a4b5c6d7e8fa83f  # seen in ios/App/Sources/AppModel.swift
@@ -107,7 +109,7 @@
 0x5a17c3e9c3e9c3e9c3e9c3e9c3e9c3e9c3e9b04d  # seen in ios/Tests/KipurseCoreTests/AddressTrustTests.swift, ios/Tests/KipurseCoreTests/OnboardTests.swift +1
 0x452f678f6e588069d1aef38d3d519567aa1014a4  # seen in ios/Tests/KipurseCoreTests/BatchVectors.swift, ios/Tests/KipurseCoreTests/VaultCheckTests.swift +1
 0x03dc700add9a8d629e4cf211eac8916e6b12fb38  # seen in ios/Tests/KipurseCoreTests/BatchVectors.swift, server/test/vectors/batch-verify.json
-0xfc0e68572cdba016c1c90a45e1792f3fe0ee345b  # seen in ios/Tests/KipurseCoreTests/KipurseCoreTests.swift, server/test/t1120-withdraw-wallet-fee.test.mjs
+0xfc0e68572cdba016c1c90a45e1792f3fe0ee345b  # RETIRED old ops account (refused as a fee address since t1346u); seen in ios/Tests/KipurseCoreTests/KipurseCoreTests.swift, server/test/t1120-withdraw-wallet-fee.test.mjs
 0x3444aa8ed2716e0f60483e02dec8edab7b2e94d3  # seen in ios/Tests/KipurseCoreTests/LifeLedgerTests.swift, server/sdk/examples/agent.ts +1
 0x515010c2e41f98cddd76b819ee69dc832c0939b6  # seen in ios/Tests/KipurseCoreTests/SignHostTests.swift, ios/Tests/KipurseCoreTests/T1036ShellBalanceTests.swift +16
 0x4242b022a8296cb18b0e0b1cb9879c518170a718  # seen in ios/Tests/KipurseCoreTests/T1036ShellBalanceTests.swift, ios/Tests/KipurseCoreTests/T1037ChainLedgerTests.swift +16

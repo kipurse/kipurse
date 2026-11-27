@@ -10,7 +10,7 @@ import {selfCall,assertNoTopLevelOwnerCall} from './owner-selfcall.mjs';import {
 /** t767: new wallets set the vault's fee slot to Kipurse's ops account so legacy dues (pre-t1022 onboarding gas, failed-op debt) are repaid from AI payments
  *  without another signature. Cap per operation = 0.05 USDC (= the onboarding worst case the sponsor counts, and the network-fee cap). Only
  *  for apps that say they can check it (features:['dues_slot']); older apps get the batch they already know. */
-export const DUES_SLOT={to:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',maxPerOp:50_000n};
+export const DUES_SLOT={to:'0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd',maxPerOp:50_000n};
 export const DUES_SLOT_NOTE={zh:'开户手续费按实时报价，在这次确认里从你的 Coinbase 钱包余额扣，Kipurse 不出这笔钱。',en:'Opening fee is the actual network cost, taken from your Coinbase wallet balance in this confirmation. Kipurse does not pay it.'};import {clientOf,limiter,ttlCache} from './ratelimit.mjs';import {publicError} from './onboard.mjs';
 export const CB_FACTORY='0xBA5ED110eFDBa3D005bfC882d75358ACBbB85842';
 const FACT=parseAbi(['function createAccount(bytes[] owners,uint256 nonce) payable returns (address)','function getAddress(bytes[] owners,uint256 nonce) view returns (address)']);

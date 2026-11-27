@@ -9,7 +9,7 @@ const W='0x515010c2e41F98CdDd76B819EE69DC832c0939B6',T='0x65d2ce04da7ace81e7c4ab
 const live={gasPriceWei:5_000_000n,ethUsd8:300_000_000_000n};
 const A=parseAbi(['function execute(address target,uint256 value,bytes data)','function setPaused(bool v)','function transfer(address,uint256) returns (bool)']);
 test('resume calls: fee leg to the official fee address + wallet.execute(trust, setPaused(false)); checker refuses everything else',()=>{
-  assert.equal(RESUME_FEE_TO,'0xf14ef5dc4723245866c22c749a0a84afceba0dd9');assert.equal(RESUME_FEE_CAP,10_000n);assert.equal(RESUME_FEE_FROM,'kipurse_wallet_fee');
+  assert.equal(RESUME_FEE_TO,'0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd');assert.equal(RESUME_FEE_CAP,10_000n);assert.equal(RESUME_FEE_FROM,'kipurse_wallet_fee');
   const c=resumeCalls({wallet:W,trust:T,fee:5_000n});assert.equal(c.length,2);assert.equal(checkResumeCalls(c,{wallet:W,trust:T}),5_000n);
   const d=decodeFunctionData({abi:A,data:c[1].data});assert.equal(d.functionName,'execute');assert.equal(d.args[0].toLowerCase(),T);assert.equal(d.args[1],0n);
   assert.deepEqual(decodeFunctionData({abi:A,data:d.args[2]}),{functionName:'setPaused',args:[false]});

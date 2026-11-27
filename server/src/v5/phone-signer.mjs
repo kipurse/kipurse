@@ -8,6 +8,7 @@ import {clientOf,limiter} from './ratelimit.mjs';
 import {langOf,X} from './i18n.mjs';import {createPublicKey,randomBytes} from 'node:crypto';import {P256} from 'ox';import fs from 'node:fs';
 import {encodeAbiParameters,encodeFunctionData,getAddress,keccak256,concat,pad,toHex,parseAbi,getContractAddress} from 'viem';
 import {ownAddrHtml} from './addr-display.mjs';import {selfCall,assertNoTopLevelOwnerCall} from './owner-selfcall.mjs';import {SEAT_VERSION,SEAT_ENROLL_GAS,setKeyCall,clearKeyCall,seatKey} from './key-seat.mjs';
+import {isRetiredFeeTo} from './operator-constants.mjs';   // t1346: retired fee addresses are refused everywhere
 export const DETERMINISTIC_DEPLOYER='0x4e59b44847b379578588920cA78FbF26c0B4956C';
 const ART=JSON.parse(fs.readFileSync(new URL('./phone-approver-artifact.json',import.meta.url)));
 // V2 = V1 scope + KIND_PAY (one owner-initiated payDirect approval). Selected per deployment; V1 stays the default.
@@ -57,7 +58,7 @@ export function phoneTrustWrapper(ownerIndex,m,r,s){const body=encodeAbiParamete
   const data=encodeAbiParameters([{type:'uint8'},{type:'bytes'},{type:'uint256'},{type:'uint256'}],[1,body,BigInt(r),BigInt(s)]);
   return encodeAbiParameters([{type:'tuple',components:[{name:'ownerIndex',type:'uint256'},{name:'signatureData',type:'bytes'}]}],[{ownerIndex:BigInt(ownerIndex),signatureData:data}]);}
 
-export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null,afterOpening='charge'}){
+export function createPhoneEnrollment({S,save,pub,wallet,trust,owner,chainId,base,caps,script,approverVersion='v1',token=BASE_USDC,feed=ETH_USD_FEED,sponsor=null,feeTo=null,afterOpening='charge'}){if(isRetiredFeeTo(feeTo))throw Error('phone enrollment: retired fee address (t1346)');
   // t1127 (owner, firm): Face ID is paid for ONCE, inside the opening batch. afterOpening='refuse' (mainnet) -> never build, quote or show a
   // separate fee-bearing enrollment after opening (no reinstall / new-phone / Settings fee). The first key from the opening batch stays free ('already').
   const refuseFee=afterOpening==='refuse';

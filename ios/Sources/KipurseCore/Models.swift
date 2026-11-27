@@ -9,14 +9,14 @@ public struct WalletState {
     var setup: [String: JSONValue] = ["active": .bool(true), "wallet": .string(wallet)]
     if let o = owner, !o.isEmpty { setup["owner"] = .string(o) }
     return WalletState(.object([
-      "mode": .string("MAIN"), "chainId": .number(8453), "balance": .string("0"), "reserve": .string("0"),
+      "mode": .string("MAIN"), "chainId": .number(8453), "balance": .string("0"), "balanceUnknown": .bool(true), "reserve": .string("0"),   // t1282: 0 is a placeholder, never shown
       "setup": .object(setup), "agents": .array([]), "purchases": .array([]), "ledger": .array([])
     ]))
   }
   /// t1036: same state with the on-chain USDC balance (no server session yet: shell / cached state must not stay at 0).
   public func withBalance(_ v: Int64) -> WalletState {
     guard case .object(var o) = raw else { return self }
-    o["balance"] = .string(String(v)); return WalletState(.object(o))
+    o["balance"] = .string(String(v)); o.removeValue(forKey: "balanceUnknown"); o.removeValue(forKey: "balanceCached"); return WalletState(.object(o))
   }
   /// t1157: the saved AI limits from the server's connect reply (same shape as state.everyday), so a stale cache never shows them as unset.
   public func withEveryday(_ v: JSONValue) -> WalletState {
@@ -35,6 +35,15 @@ public struct WalletState {
   public var wallet: String? { raw["setup"]?["wallet"]?.string }
   public var owner: String? { raw["setup"]?["owner"]?.string }
   public var balance: Int64 { raw["balance"]?.atomic ?? 0 }
+  /// t1282 (decision 156, owner card t1282s6035): false until a real balance was read (two agreeing nodes or the server). The wallet page
+  /// shows "[zh]" instead of the placeholder 0 while this is false.
+  public var balanceKnown: Bool { raw["balanceUnknown"]?.bool != true }
+  /// t1285 (decision 156): the last balance this phone saw for THIS wallet address, shown at once (with a loading spinner) until a fresh read.
+  public func withCachedBalance(_ v: Int64) -> WalletState {
+    guard case .object(var o) = raw else { return self }
+    o["balance"] = .string(String(v)); o.removeValue(forKey: "balanceUnknown"); o["balanceCached"] = .bool(true); return WalletState(.object(o))
+  }
+  public var balanceRefreshing: Bool { raw["balanceCached"]?.bool == true }
   public var quarantined: Int64 { raw["quarantined"]?.atomic ?? 0 }
   /// Gas reserve kept in the owner's own vault (pays network fees in USDC; returned on take-everything-back).
   public var reserve: Int64 { raw["reserve"]?.atomic ?? 0 }
@@ -99,4 +108,13 @@ public struct TrustRequest: Identifiable, Equatable, Hashable {
     requestedBy = j["requestedBy"]?.array.compactMap { $0.string } ?? []
   }
   public var chainLabel: String { chainId == 8453 ? "Base" : chainId == 84532 ? "Base Sepolia (TEST)" : chain }
+}
+
+/// t1285 (decision 156): last balance seen per wallet address (public on-chain number; no keys, no session). Kept across [zh] so the
+/// same wallet shows its balance at once after signing back in; removed with everything else by [zh] / logout's LocalWipe.
+public enum LastBalance {
+  public static var store: UserDefaults = .standard
+  static func key(_ w: String) -> String { "kp.lastbalance.v1." + w.lowercased() }
+  public static func save(_ w: String, _ v: Int64) { guard v >= 0, store.object(forKey: key(w)) as? Int64 != v else { return }; store.set(v, forKey: key(w)) }
+  public static func load(_ w: String) -> Int64? { (store.object(forKey: key(w)) as? NSNumber)?.int64Value }
 }

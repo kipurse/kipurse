@@ -14,6 +14,20 @@ final class T1281StrangerCapUITests: XCTestCase {
     XCTAssertTrue(e.isHittable, e.identifier)
   }
   private func any(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
+  /// t1252: flip the switch until it reads `want` (a single coordinate tap right after a scroll can land mid-animation and miss).
+  private func setSwitch(_ app: XCUIApplication, _ sw: XCUIElement, to want: String) {
+    for _ in 0..<4 where (sw.value as? String) != want {
+      reveal(app, sw); usleep(500_000)
+      // the row can sit half under the translucent navigation bar and still count as hittable: drag it down into open space first
+      let win = app.windows.firstMatch
+      if sw.frame.minY < win.frame.minY + win.frame.height * 0.3 {
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).press(forDuration: 0.05, thenDragTo: win.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        usleep(700_000)
+      }
+      sw.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap(); usleep(800_000)
+    }
+    XCTAssertEqual(sw.value as? String, want, sw.identifier)
+  }
   private func cjk(_ s: String) -> Bool { s.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) || (0x3000...0x303F).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) } }
   private func lang(_ l: String) -> [String] { ["-kp.lang", l, "-AppleLanguages", l == "zh" ? "(zh-Hans)" : "(en)", "-AppleLocale", l == "zh" ? "zh_CN" : "en_US"] }
 
@@ -32,7 +46,7 @@ final class T1281StrangerCapUITests: XCTestCase {
     if !zh { for t in [title.label, explain.label, same.label] { XCTAssertFalse(cjk(t), "Chinese in English UI: \(t)") } }
     shot(app, "\(shotName)-0-default")
     // the switch knob sits at the trailing edge of the row
-    same.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    setSwitch(app, same, to: "0")
     let single = any(app, "\(p).stranger.single"), daily = any(app, "\(p).stranger.daily")
     XCTAssertTrue(single.waitForExistence(timeout: 5)); XCTAssertTrue(daily.exists)
     XCTAssertEqual(same.value as? String, "0")
@@ -40,7 +54,7 @@ final class T1281StrangerCapUITests: XCTestCase {
     XCTAssertTrue(daily.staticTexts[zh ? "每天最多（含手续费）" : "Per day, at most (fees included)"].exists)
     if !zh { for q in [app.buttons, app.staticTexts] { for e in q.allElementsBoundByIndex where e.exists { XCTAssertFalse(cjk(e.label), "Chinese in English UI: \(e.label)") } } }
     reveal(app, single); shot(app, "\(shotName)-1-own")
-    reveal(app, same); same.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    setSwitch(app, same, to: "1")
     XCTAssertTrue(single.waitForNonExistence(timeout: 5)); XCTAssertFalse(daily.exists)
   }
 

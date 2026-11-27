@@ -72,7 +72,7 @@ export function buildMigrationPlanV5(o0){let o=o0;
       calls.push(call(token,'transfer',[getAddress(o.zeroReserve.vault),buf]));labels.push(`zero-reserve: ${usd(buf)} gas buffer into your own vault (yours, returned at exit)`);}
     const bf=o.zeroReserve.bundlerFee;if(bf){if(!o.zeroReserve.vault)throw Error('PLAN: zeroReserve.vault is required for a bundler fee');
       calls.push({to:getAddress(o.zeroReserve.vault),value:0n,data:encodeFunctionData({abi:parseAbi(['function setBundlerFee(address to,uint96 maxPerOp)']),functionName:'setBundlerFee',args:[getAddress(bf.to),BigInt(bf.maxPerOp)]})});
-      labels.push(getAddress(bf.to)==='0xf14ef5dc4723245866c22c749a0a84afceba0dd9'?`account-opening fee fronted by Kipurse: ${usd(BigInt(bf.maxPerOp))} taken once with your first AI payment, to the Kipurse ops account ${getAddress(bf.to)}`:`optional bundler fee: allow at most ${usd(BigInt(bf.maxPerOp))} per operation to the bundler operator ${getAddress(bf.to)} (you pay it; off unless you set it)`);}}
+      labels.push(getAddress(bf.to)==='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd'?`account-opening fee fronted by Kipurse: ${usd(BigInt(bf.maxPerOp))} taken once with your first AI payment, to the Kipurse ops account ${getAddress(bf.to)}`:`optional bundler fee: allow at most ${usd(BigInt(bf.maxPerOp))} per operation to the bundler operator ${getAddress(bf.to)} (you pay it; off unless you set it)`);}}
   if(o.registryOptOut){calls.push(call(trustC,'setRegistryOptOut',[true]));labels.push('opt out of the Kipurse merchant registry');}
   // t1185 (decision 85): owner-set daily number of on-chain operations of HIS vault (V5.3 vaults only; the wallet itself calls it, so only this
   // owner-signed batch can change it). 1..100000; 0 = back to the default (500).

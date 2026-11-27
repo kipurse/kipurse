@@ -41,7 +41,7 @@ struct WithdrawFlow: View {
         }
         if dest == .other { VStack(alignment: .leading, spacing: 8) { addressField($pasted); Text(L("只能是 Base 网络上的地址。转错地址钱拿不回来。")).font(.footnote).foregroundStyle(.secondary) }.card(padding: 14) }
         AmountPicker(title: L("提现多少？"), presets: ["1", "2", "5", L("全部")], unit: "USDC", value: Binding(get: { amount }, set: { amount = $0; quote = nil; err = "" })).card(padding: 18)
-        Text(L("钱包里有 \(AnswerRules.format(s.balance)) USDC")).font(.footnote).foregroundStyle(.secondary)
+        Text(s.balanceKnown ? L("钱包里有 \(AnswerRules.format(s.balance)) USDC") : T("余额加载中", "Balance loading")).font(.footnote).foregroundStyle(.secondary)   // t1282
         if !err.isEmpty { ErrorText(text: err) }
         if let q = quote {
           VStack(alignment: .leading, spacing: 8) {

@@ -1,11 +1,11 @@
 import Foundation
 /// t1022: the sponsor paymaster only covers this exact batch, which pays the full opening fee in USDC from the user's Base Account in the SAME confirmation (Kipurse pays nothing)
-/// (transfer to the ops account) and may also deposit into the Kipurse wallet. Never ETH. No dues. CDP erc20_usdc stays off
+/// (transfer to the Kipurse fee address = company Safe, t1346) and may also deposit into the Kipurse wallet. Never ETH. No dues. CDP erc20_usdc stays off
 /// (Coinbase console has no ERC-20 USDC gas option). Mirrors server src/v5/usdc-gas.mjs.
 public enum UsdcGas {
   public static let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
   public static let paymaster = "0x2faeb0760d4230ef2ac21496bb4f0b47d634fd4c" // CDP ERC-20 (unused while switch off)
-  public static let feeTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9" // Kipurse ops — same-tx repay
+  public static let feeTo = FeeAddress.company // t1346: company Safe (was 0xf14E…0Dd9) — same-tx repay
   public static let approveCap: UInt64 = 250_000
   /// Hard cap on same-tx repay (0.25 USDC). Actual fee comes from the server quote (t1026).
   public static let openingFeeCap: UInt64 = 250_000

@@ -29,6 +29,6 @@ final class EnrollWalletPaysT906Tests: XCTestCase {
   func testOtherFlowsStillOwnerOnly() {
     XCTAssertNotNil(RequestVerify.feeRefundProblem(feeCall(swapFee(calls("enroll"), to: RequestVerify.duesTo))!, wallet: wallet, owner: owner), "limits/setup refunds stay owner-only")
   }
-  func testSignSetIsV12() { XCTAssertEqual(SignHost.setPrefix, "/v12"); XCTAssertEqual(SignHost.previousPrefix, "/v11")   // t1139: kpshell.v11 keeps phone-enroll.v2 for /phone/enroll
-    XCTAssertEqual(SignHost.indexSHA256, "7edff9ce36a4ef6ddae3648ed0bf776d944bdf7cc4a205f66e5b2e22aea9c6f1") }
+  func testSignSetIsV12() { XCTAssertEqual(SignHost.setPrefix, "/v13"); XCTAssertEqual(SignHost.previousPrefix, "/v12")   // t1139: kpshell.v11 keeps phone-enroll.v2 for /phone/enroll
+    XCTAssertEqual(SignHost.indexSHA256, "ddde94acce2897aa2d8b4997680b2bbbea2a60f6f12aa83ea5e682cf488250a3") }
 }

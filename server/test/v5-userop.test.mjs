@@ -96,7 +96,7 @@ test('engine userop: owner-action gas is not billed to a payment while the vault
 
 // t766: Kipurse dues ride in the vault's owner-set fee slot, capped; marked paid only on success
 import {duesAmount} from '../src/v5/userop.mjs';
-const OPS='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+const OPS='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 test('dues amount: only to the ops account via the fee slot; capped by dues, maxBundlerFee, net cap, free balance after one op of gas',()=>{
   const b={due:30000n,feeTo:OPS,opsTo:OPS,maxFee:100000n,netCap:50000n,balance:200000n,reserved:0n,gasKeep:50000n};
   assert.equal(duesAmount(b),30000n);assert.equal(duesAmount({...b,feeTo:'0x'+'1'.repeat(40)}),0n,'slot not set to ops');assert.equal(duesAmount({...b,feeTo:'0x'+'0'.repeat(40)}),0n);

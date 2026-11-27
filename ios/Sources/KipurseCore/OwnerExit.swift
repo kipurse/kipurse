@@ -36,8 +36,8 @@ public enum OwnerExit {
     out.append((wallet, t)); return out
   }
   public enum PlanError: String, Error { case badShape, notOwner, wrongWallet, wrongAmount, notExpected, feeTooHigh, feeNotToKipurse }
-  /// t789: the only fee address a withdrawal may pay (Kipurse mainnet ops account, fixed; same constant as the server and page).
-  public static let withdrawFeeTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9"  // t1120: official Kipurse fee address (= UsdcGas.feeTo, server, page KPFEETO). Was stale 0xfc0E…345B
+  /// t789: the only fee address a withdrawal may pay (fixed; same constant as the server and page). t1346: the company Safe.
+  public static let withdrawFeeTo = FeeAddress.company  // t1120: official Kipurse fee address (= UsdcGas.feeTo, server, page KPFEETO). t1346: company Safe; 0xf14E…0Dd9 and 0xfc0E…345B retired
   /// t789: hard ceiling for the fee the wallet pays on a withdrawal: 0.25 USDC (250_000 units). Never raised.
   public static let maxWalletFee: UInt64 = 250_000
   /// t789 wallet-pays shape: [sweep?] + wallet pays `fee` USDC to the fixed fee address + the rest to the owner.

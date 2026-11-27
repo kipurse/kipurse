@@ -13,7 +13,8 @@ struct AlertItem: Identifiable { let id = UUID(); let title: String; let message
 @MainActor
 final class AppModel: ObservableObject {
   @Published var session: OwnerSession? = SessionVault.load()
-  @Published var state: WalletState? { didSet { if state != nil && demo == nil && phoneUnbound { phoneUnbound = false; Unbound.forget() } } }
+  @Published var state: WalletState? { didSet { if state != nil && demo == nil && phoneUnbound { phoneUnbound = false; Unbound.forget() }
+    if demo == nil, let s = state, s.balanceKnown, !s.balanceRefreshing, let w = s.wallet, CoinbaseIdentity.isAddress(w) { LastBalance.save(w, s.balance) } } }   // t1285
   /// Non-USDC coins found in the wallet (can't be used by the AI; the owner can send them back from the deposit page).
   @Published var stray: [StrayToken] = []
   /// No app lock: opening the app never asks for Face ID. Balances are hidden ("••••") until a tap + Face ID reveals them;
@@ -37,7 +38,8 @@ final class AppModel: ObservableObject {
   /// with the same Coinbase account reconnects with a free signature). No Face ID: nothing is moved or signed.
   func signOut() {
     poll?.cancel(); MainnetSession.clear(); SiriCredential.clear(); Operator.setWallet(nil)
-    LedgerCache.wipe(); resetWalletScopedState()   // t1238 / t1266: everything cached belongs to the wallet we are leaving
+    resetWalletScopedState()   // t1238 / t1266: wallet-scoped memory goes. t1286 (decision 157): the encrypted per-wallet copy (records, AI
+    // payments) is kept, so signing back in to the SAME wallet shows them at once; another wallet never reads it (own slot + CacheGuard).
     Unbound.forget(); phoneUnbound = false
     let d = UserDefaults.standard; for k in [CoinbaseIdentity.verifiedKey, CoinbaseIdentity.ownerKey] { d.removeObject(forKey: k) }
     if demo != nil { exitDemo() }
@@ -70,6 +72,7 @@ final class AppModel: ObservableObject {
     AllowanceStore.shared.resetWalletScoped()   // approvals, overall limits, agents, push hints (kp.pendingPushHints), held Face ID
     AIConnect.pendingAmounts = nil
     SignedLimitsStore.clear()   // t1275 (#2): the limits signed on this phone belong to the wallet we are leaving
+    ChainLedger.forgetAll(); SafetyCaps.forgetAll()   // t1282 (decision 156): a kept scan cursor hid every old movement after signing back in
     UserDefaults.standard.removeObject(forKey: "kp.pendingPushHints")
   }
   /// Any HTTP answer from the Kipurse server = up; a network failure = down. Never shows the raw system error.
@@ -147,6 +150,13 @@ final class AppModel: ObservableObject {
       UserDefaults.standard.removeObject(forKey: k) }; Operator.setWallet(nil) }
     if CommandLine.arguments.contains("-kpFreshInstall") || (CommandLine.arguments.contains("-kp.lang") && !CommandLine.arguments.contains("-kpKeepUnbound")) { Unbound.forget() }   // UI tests never leak the bind card into each other
     if let i = CommandLine.arguments.firstIndex(of: "-kpKnownWallet"), i + 1 < CommandLine.arguments.count { Unbound.remember(wallet: CommandLine.arguments[i + 1], path: nil) }   // t851: wallet known, no session yet
+    // t1282 (decision 156) live UI test, Debug only: exactly the [zh] → Sign in with Coinbase path (signOut, then what CoinbaseSignIn does:
+    // setWallet + identityVerified + enterWalletWithoutFaceID) on the REAL chain, no server session, no Face ID, nothing signed.
+    if let i = CommandLine.arguments.firstIndex(of: "-kpReloginWallet"), i + 1 < CommandLine.arguments.count, CoinbaseIdentity.isAddress(CommandLine.arguments[i + 1]) {
+      let w = CommandLine.arguments[i + 1]
+      signOut(); Operator.setWallet(w, owner: nil, path: "/t/" + w.lowercased()); UserDefaults.standard.set(true, forKey: CoinbaseIdentity.verifiedKey)
+      Task { @MainActor in await self.enterWalletWithoutFaceID() }
+    }
     if CommandLine.arguments.contains("-kpUnbound") { Unbound.remember(wallet: "0x2000000000000000000000000000000000000002", path: nil); phoneUnbound = true }
     if let i = CommandLine.arguments.firstIndex(of: "-kpUnboundWallet"), i + 1 < CommandLine.arguments.count { Unbound.remember(wallet: CommandLine.arguments[i + 1], path: nil); phoneUnbound = true }   // t789 live UI test: a real wallet's emergency page   // reinstall / new phone: bind card
     #endif
@@ -590,36 +600,54 @@ final class AppModel: ObservableObject {
   }
   /// t1279 (R15): a fresh server state as shown: its balance replaced by the last two-node agreed one of this wallet (if any yet).
   func agreedShown(_ s: WalletState) -> WalletState { agreedBalance.apply(to: s, wallet: Operator.wallet.isEmpty ? nil : Operator.wallet) }
+  /// t1282 (decision 156): one chain read at a time (pull-to-refresh during a long first records scan must not start a second one).
+  private var chainReading = false
   func chainBalanceFallback() async {
-    guard let s = state else { return }
+    guard let s = state, !chainReading else { return }
     let w = s.wallet.flatMap { CoinbaseIdentity.isAddress($0) ? $0 : nil }
       ?? (CoinbaseIdentity.isAddress(Operator.wallet) ? Operator.wallet : nil)
     guard let w else { return }
+    chainReading = true; defer { chainReading = false }
+    func sameWallet(_ n: WalletState) -> Bool { n.wallet == nil || n.wallet?.lowercased() == w.lowercased() }
+    // t1285 (decision 156): 0) show at once: all nodes in parallel (primary CDP Node + free backups), the first valid answer wins.
+    if let cur = state, sameWallet(cur), !cur.balanceKnown || cur.balanceRefreshing, let v = await VaultCheck.usdcBalanceFast(w),
+       let now = state, sameWallet(now), !now.balanceKnown || now.balanceRefreshing {
+      let n = now.withBalance(v); state = n; LedgerCache.save(n); AuthLog.note("balance", "fast")
+    }
     let b = await VaultCheck.usdcBalanceAgreed(w)   // t1278 (A7): two agreeing public nodes (no Face ID); nil = failed / disagreed
     agreedBalance.record(b, wallet: w)   // t1279 (R15): nil keeps the last two-node agreed balance (never the server's number)
-    // t1129: [zh] = every real movement. Always merge new on-chain movements (withdraw + its fee, fee-only wallet actions,
-    // deposits, payments) into what is shown, one row per tx, balances recomputed from the live balance. Before this, a cached
-    // list that already had one row was never read again, and the 27 h look-back was ~3 h on today's Base.
-    var ledgerRows: [JSONValue]? = nil
-    if let end = agreedBalance.ledgerEnd(chain: b, wallet: w) {   // t1279 (R15): rows only from an agreed balance, never the server's
-      ledgerRows = await ChainLedger.update(wallet: w, owner: state?.owner, existing: state?.raw["ledger"]?.array ?? [], endingBalance: end)
+    // t1282: 1) the balance is shown as soon as it is read (it used to wait for the records and limits reads; until then "[zh]").
+    if var next = state, sameWallet(next), let v = agreedBalance.value(for: w), next.balance != v || !next.balanceKnown || next.balanceRefreshing {
+      next = next.withBalance(v); state = next; LedgerCache.save(next)
     }
-    // t1278 (A7): the chain's caps (two-node agreed SafetyCaps.read) win over the server's for AILimitGate / firstConnectProblem; re-read every
-    // refresh (cheap: new blocks only). An unreadable chain read keeps the last good value (the server's only until the chain answers).
+    // 2) t1278 (A7) / t1282: the chain's caps (one-node find, two-node isValid confirm) win over the server's. A failed read with no
+    // earlier value shows "[zh]" instead of "[zh]" forever.
     SafetyCaps.rpc = GasCheck.rpc
-    let capsRead: SafetyCaps.Read? = await SafetyCaps.read(account: w)
-    guard var next = state else { return }
-    let sameWallet = next.wallet == nil || next.wallet?.lowercased() == w.lowercased()
-    guard sameWallet else { return }
-    var changed = false
-    if let v = agreedBalance.value(for: w), next.balance != v { next = next.withBalance(v); changed = true }   // t1279 (R15): this read, else the last agreed
-    if let rows = ledgerRows, rows != (next.raw["ledger"]?.array ?? []) { next = next.withLedger(rows); changed = true }
-    if let r = capsRead {
-      let upd = CapsSource.merged(next, chain: r)   // t1278 (A7): chain wins; unreadable keeps the last good value
-      if upd.raw != next.raw { next = upd; changed = true }
+    let capsRead: SafetyCaps.Read = await SafetyCaps.read(account: w)
+    if let cur = state, sameWallet(cur) {
+      let upd = CapsSource.merged(cur, chain: capsRead)
+      if upd.raw != cur.raw { state = upd; LedgerCache.save(upd) }
     }
-    guard changed else { return }
-    state = next; LedgerCache.save(state!)
+    // 3) t1129: [zh] = every real movement, merged one row per tx, balances recomputed from the live balance.
+    // t1282: bounded rounds until the scan reaches the floor block (2026-10-12), each round shown as soon as it is read.
+    // Runs on its own (never holds up the 5 s approvals polling); one records scan at a time.
+    guard let end = agreedBalance.ledgerEnd(chain: b, wallet: w) else { return }   // t1279 (R15): rows only from an agreed balance
+    guard !ledgerScanning else { return }
+    ledgerScanning = true
+    Task { @MainActor in defer { ledgerScanning = false }; await ledgerRounds(wallet: w, endingBalance: end) }
+  }
+  private var ledgerScanning = false
+  private func ledgerRounds(wallet w: String, endingBalance end: Int64) async {
+    func sameWallet(_ n: WalletState) -> Bool { n.wallet == nil || n.wallet?.lowercased() == w.lowercased() }
+    for round in 0..<ChainLedger.maxRounds {
+      guard let cur = state, sameWallet(cur) else { return }
+      let before = ChainLedger.cursor(w)
+      guard let rows = await ChainLedger.update(wallet: w, owner: cur.owner, existing: cur.raw["ledger"]?.array ?? [], endingBalance: end) else { AuthLog.note("ledger", "round=\(round) read failed"); break }
+      if let now = state, sameWallet(now), rows != (now.raw["ledger"]?.array ?? []) { let n = now.withLedger(rows); state = n; LedgerCache.save(n) }
+      AuthLog.note("ledger", "round=\(round) rows=\(rows.count) complete=\(ChainLedger.complete(wallet: w))")   // t1286: steps + counts only
+      if ChainLedger.complete(wallet: w) || (round > 0 && ChainLedger.cursor(w)?.oldest == before?.oldest) { break }   // done, or a node limit: resume next refresh
+      try? await Task.sleep(nanoseconds: 500_000_000)   // gentle on the free nodes
+    }
   }
   /// t1253 (decision 122): after an owner-signed V5.4 -> V5.5 move, switch to the new wallet ONLY when the chain itself confirms it is this owner's
   /// V5.5 wallet holding THIS phone's key (MoveFollow; the server can never swap the address). At most every 10 minutes.
@@ -702,11 +730,15 @@ final class AppModel: ObservableObject {
       state = agreedShown(s); mainError = nil; siriSync(s); startPolling(); return
     }
     if let (_, cached) = LedgerCache.load() {
-      state = cached; Task { await refresh() }; return
+      // t1286: this wallet's last records + AI spend at once; the balance in it shows with "[zh]" until a fresh read.
+      state = cached.balanceKnown ? cached.withCachedBalance(LastBalance.load(cached.wallet ?? Operator.wallet) ?? cached.balance) : cached
+      Task { await refresh() }; return
     }
     let w = !Operator.wallet.isEmpty ? Operator.wallet : (Unbound.wallet ?? "")
     if !w.isEmpty {
-      state = WalletState.shell(wallet: w, owner: Operator.ownerAccount)
+      var sh = WalletState.shell(wallet: w, owner: Operator.ownerAccount)
+      if let v = LastBalance.load(w) { sh = sh.withCachedBalance(v) }   // t1285: this wallet's last balance at once, spinner until fresh
+      state = sh
       Task { await refresh() }
       return
     }

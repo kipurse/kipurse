@@ -21,7 +21,7 @@ final class T1139ResumeTests: XCTestCase {
     XCTAssertLessThan(rep.fee ?? .max, RequestVerify.limitsFeeCapAtomic)
     XCTAssertEqual(BatchVerify.commitment(chainId: 8453, from: f.owner, calls: rep.calls), f.vh, "the App commits to exactly the batch the page sends")
     let u = try XCTUnwrap(BatchVerify.committedURL(try XCTUnwrap(rep.url), chainId: 8453, from: f.owner, calls: rep.calls))
-    XCTAssertEqual(u.host, SignHost.host); XCTAssertEqual(u.path, "/v12/t/\(f.wallet.lowercased())/safety/resume")
+    XCTAssertEqual(u.host, SignHost.host); XCTAssertEqual(u.path, "/v13/t/\(f.wallet.lowercased())/safety/resume")
     XCTAssertTrue(u.absoluteString.contains("vh=" + f.vh), u.absoluteString)
   }
   func testTamperedRepliesAreRefusedBeforeAnyPageOpens() throws {
@@ -34,7 +34,7 @@ final class T1139ResumeTests: XCTestCase {
     let z56 = String(repeating: "0", count: 56)
     refused("setPaused(true)") { setCall(&$0, 1, "data", String(d1.dropLast(57)) + "1" + z56) }
     refused("another contract") { setCall(&$0, 1, "data", d1.replacingOccurrences(of: "65d2ce04da7ace81e7c4ab08712509282745ec84", with: String(repeating: "1", count: 40))) }
-    refused("fee to someone else") { setCall(&$0, 0, "data", d0.replacingOccurrences(of: "f14ef5dc4723245866c22c749a0a84afceba0dd9", with: String(repeating: "2", count: 40))) }
+    refused("fee to someone else") { setCall(&$0, 0, "data", d0.replacingOccurrences(of: "82ecf6e2f76ee100e4676dabe193bca6bcab64fd", with: String(repeating: "2", count: 40))) }
     refused("fee above the cap") { setCall(&$0, 0, "data", String(d0.dropLast(56 + 64)) + String(repeating: "0", count: 60) + "2710" + z56) }
     refused("fee differs from the quote") { var fe = $0["fee"] as! [String: Any]; fe["usdc"] = String(Int(fe["usdc"] as! String)! + 1); $0["fee"] = fe }
     refused("limits sponsor route (lw-)") { $0["pm"] = ($0["pm"] as! String).replacingOccurrences(of: "id=ur-", with: "id=lw-") }
@@ -62,9 +62,9 @@ final class T1139ResumeTests: XCTestCase {
   func testSignSetV12RoutesResumeOnly() {
     let w = "0x527b741eb13732322eb7a9547029f8645970dce4"
     let u = SignHost.route(URL(string: "https://pay.kipurse.com/t/\(w)/safety/resume?plan=0c634fb1625b4cb17fc12c94")!)
-    XCTAssertEqual(u.host, SignHost.host); XCTAssertEqual(u.path, "/v12/t/\(w)/safety/resume")
-    XCTAssertTrue(SignHost.moved.contains("/safety/resume")); XCTAssertEqual(SignHost.setPrefix, "/v12"); XCTAssertEqual(SignHost.previousPrefix, "/v11")
-    XCTAssertEqual(SignHost.indexSHA256, "7edff9ce36a4ef6ddae3648ed0bf776d944bdf7cc4a205f66e5b2e22aea9c6f1")
+    XCTAssertEqual(u.host, SignHost.host); XCTAssertEqual(u.path, "/v13/t/\(w)/safety/resume")
+    XCTAssertTrue(SignHost.moved.contains("/safety/resume")); XCTAssertEqual(SignHost.setPrefix, "/v13"); XCTAssertEqual(SignHost.previousPrefix, "/v12")
+    XCTAssertEqual(SignHost.indexSHA256, "ddde94acce2897aa2d8b4997680b2bbbea2a60f6f12aa83ea5e682cf488250a3")
     for p in ["safety/status", "safety/stop", "safety/holds"] { let s = URL(string: "https://pay.kipurse.com/t/\(w)/\(p)")!; XCTAssertEqual(SignHost.route(s), s) }
   }
   func testNotResumedYetTextIsItsOwn() {

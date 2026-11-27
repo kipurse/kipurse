@@ -6,7 +6,7 @@ const plan=loadV53Plan(new URL('../mainnet/v53-deploy-plan.json',import.meta.url
 const SRC=fs.readFileSync(new URL('../owner-sign/consent/deploy-v53.js',import.meta.url),'utf8');const B=fs.readFileSync(new URL('../owner-sign/static/deploy-v53.js',import.meta.url),'utf8');
 test('link fragment: two fixed commitments for the owner (step 1, step 2); stable values',()=>{const f=deployV53Fragment(plan,O);
   assert.match(f,/^vh1=[0-9a-f]{64}&vh2=[0-9a-f]{64}$/);
-  assert.equal(f,'vh1=1e5d2386c84c4c3906733d86a95389c308b2d1ad1daf7999447b67429fa83ba3&vh2=189ee120cd4405ac522bc281be107d5b33305971fbeee7de68695a2c431b4ee2');});
+  assert.equal(f,'vh1=082b273abc5067e2ae06bdd2867ca72d2b68963b598eac2dab8efc3dd6151256&vh2=5f5b7aaf97b5a4e863156ee9e3647f2f8623bd7e197eba0bfcac8d49e4c20334'/* t1346: fee leg -> company Safe (was vh1=e48edaf3…&vh2=28c631cd… with 0xf14E…) */);});
 test('each step batch is small enough for the bundler: one deploy + one fee leg (no batch carries both deploys)',()=>{
   for(const k of [1,2]){const C=deployV53Calls(plan,k);assert.equal(C.length,2);assert.equal(C.filter(c=>c.to.toLowerCase()==='0x4e59b44847b379578588920ca78fbf26c0b4956c').length,1);}});
 test('script: needs both link commitments, points the KPVH guard at the current step, one send per tap, no loop / auto retry',()=>{

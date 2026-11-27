@@ -28,7 +28,7 @@ test('old path still 402s for a missing Base float and still appends the refund'
   const b=await call(on.L,'/owner/limits/prepare',{single:'1',daily:'5',term:'20'});
   assert.equal(b.code,200);assert.equal(b.j.calls.length,2);assert.equal(b.j.calls[1].data,'0xrefund');assert.equal(n,1);assert.equal(b.j.feeFrom,undefined);});
 // t1123: the t1105 relay (wallet -> owner, approve Pimlico) is replaced by the t752 withdraw shape: wallet -> official fee address, cap change.
-const WF={feeTo:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',available:()=>true,register:async id=>'https://x/onboard/new/paymaster?id=lw-'+id};
+const WF={feeTo:'0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd',available:()=>true,register:async id=>'https://x/onboard/new/paymaster?id=lw-'+id};
 const change34={to:W,value:'0x0',data:'0x34fcd5be'+'0'.repeat(64)};
 test('new path (t1123): wallet -> official fee address F, cap change, from the owner, existing sponsor; no Pimlico, nothing to the owner',async()=>{
   let sponsored=0,refunded=0;
@@ -38,7 +38,7 @@ test('new path (t1123): wallet -> official fee address F, cap change, from the o
   assert.equal(r.code,200);assert.equal(r.j.feeFrom,'kipurse_wallet_fee');assert.equal(r.j.from,O);assert.equal(r.j.wallet,W);assert.equal(r.j.fee.canPayUSDC,false);
   assert.equal(r.j.calls.length,2);assert.equal(r.j.sponsored,false);assert.match(r.j.pm,/^https:\/\/x\/onboard\/new\/paymaster\?id=lw-/);
   assert.equal(sponsored,0);assert.equal(refunded,0);assert.deepEqual(r.j.calls[1],change34);
-  assert.equal(r.j.calls[0].to,W);assert.match(r.j.calls[0].data.toLowerCase(),/a9059cbb0{24}f14ef5dc4723245866c22c749a0a84afceba0dd9/);
+  assert.equal(r.j.calls[0].to,W);assert.match(r.j.calls[0].data.toLowerCase(),/a9059cbb0{24}82ecf6e2f76ee100e4676dabe193bca6bcab64fd/);
   assert.doesNotMatch(JSON.stringify(r.j.calls).toLowerCase(),/6666666666667849c56f2850848ce1c4da65c68b|095ea7b3/);
   const again=await call(L,'/owner/limits/prepare',{plan:r.j.id});
   assert.equal(again.j.from,O);assert.equal(again.j.feeFrom,'kipurse_wallet_fee');assert.deepEqual(again.j.calls,r.j.calls);

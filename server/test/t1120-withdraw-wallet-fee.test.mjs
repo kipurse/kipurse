@@ -5,7 +5,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {createOwnerWithdraw,checkWalletPaysCalls,checkWithdrawCalls,withdrawCallsWalletPays,WITHDRAW_MAX_WALLET_FEE,WITHDRAW_WALLET_ABI,WITHDRAW_ERC20_ABI} from '../src/v5/owner-withdraw.mjs';
 import {decodeFunctionData} from 'viem';
 const W='0x1000000000000000000000000000000000000004',O='0x2000000000000000000000000000000000000002',X='0x6666666666666666666666666666666666666666',T='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',F='0xc0dedd749573f2e967a4ba53190c27ffbc2f8b31';
-const FEE='0xf14EF5Dc4723245866c22C749A0A84AFCebA0Dd9';   // the current official server fee address (mainnet-owner-launch default)
+const FEE='0x82ecF6e2F76eE100E4676dabe193bca6bcab64fD';   // the current official server fee address (mainnet-owner-launch default)
 const mk=({bal={[W]:12_340_000n,[O]:0n},walletPays}={})=>{const st={bal};const reg=[];
   const wp=walletPays===undefined?{available:()=>true,register:async(id,a)=>{reg.push({id,...a});return 'https://pay.example/onboard/new/paymaster?id=wd-'+id;}}:walletPays;
   const pub={readContract:async({functionName,args})=>functionName==='isOwnerAddress'?true:functionName==='balanceOf'?(st.bal[args[0]]??0n):[0n,300000000000n,0n,0n,0n],getCode:async()=>'0x',estimateGas:async()=>60000n,getGasPrice:async()=>10_000_000n};
@@ -77,5 +77,10 @@ test('t1120 sign page guard accepts the server-built wallet-pays batch for the 1
   const {M}=mk();const app=(await call(M,'POST','/owner/withdraw/prepare',{amount:'1000000'})).j;const w=(await call(M,'POST','/owner/withdraw/prepare',{feeFrom:'wallet',plan:app.id})).j;
   assert.ok(await G.kpVH(send(w.calls)),'#vh was for the 1-call owner plan; the wallet-pays batch passes kpVHWP');
   await assert.rejects(G.kpVH(send(w.calls,X)),'signer must receive the rest');
-  await assert.rejects(G.kpVH(send(withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:1_000_000n,fee:11_336n,feeTo:'0xfc0E68572cDba016c1c90A45E1792f3fE0EE345B'}))),'old /v9 address is no longer accepted');});
+  // t1346: the server builder refuses the retired fee addresses outright; a batch that still pays one (hand-made) is refused by the page
+  for(const old of ['0xfc0E68572cDba016c1c90A45E1792f3fE0EE345B','0xf14EF5Dc4723245866c22C749A0A84AFCebA0Dd9']){
+    assert.throws(()=>withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:1_000_000n,fee:11_336n,feeTo:old}),e=>e.code==='fee_retired_address');
+    const ok=withdrawCallsWalletPays({wallet:W,owner:O,token:T,amount:1_000_000n,fee:11_336n,feeTo:'0x82ecF6e2F76eE100E4676dabe193bca6bcab64fD'});
+    const bad=ok.map(c=>({...c,data:c.data.toLowerCase().split('82ecf6e2f76ee100e4676dabe193bca6bcab64fd').join(old.slice(2).toLowerCase())}));
+    assert.notDeepEqual(bad,ok);await assert.rejects(G.kpVH(send(bad)),'old fee address is no longer accepted');}});
 test('t1120 /workspace sign asset equals the server static script byte for byte (when present)',()=>{const p='/workspace/t1120/sign/withdraw.v4.js';if(!fs.existsSync(p))return;assert.ok(fs.readFileSync(p).equals(fs.readFileSync('owner-sign/static/withdraw.js')));});

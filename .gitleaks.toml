@@ -16,6 +16,8 @@ regexes = [
   '''amplitudeApiKey:"c66737ad47ec354ced777935b0af822e"''',
   # Purchase keys are keccak hashes of order data, not credentials (recorded fork-test replies).
   '''(?:onchainPurchaseKey|purchaseKey|purchase_key)"?\s*[:=]\s*"?(?:0x)?[0-9a-f]{64}''',
+  # UserDefaults key names in a Swift test ("forKey:" trips the generic rule), not credentials.
+  '''kp\.(?:chainledger\.cursor|safetycaps\.memo)\.v[0-9]\.0xabc''',
   # A contract-artifact lookup in the V5.5 deploy plan (file name + contract name), not a key.
   '''^KipurseKeySeatV2\.sol','KipurseKeySeatV2'$''',
 ]

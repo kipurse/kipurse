@@ -3,10 +3,11 @@
 // One row per (tx, account) with signed delta, short Chinese reason and the resulting balance. Opening balance = current - sum(deltas),
 // so no archive reads are needed. Scans incrementally and caches to a JSON file; never sends anything.
 import fs from 'node:fs';import {parseAbiItem,getAddress} from 'viem';
+import {RETIRED_FEE_TO} from './operator-constants.mjs';   // t1346: past fees to the retired fee addresses stay classified as fees (read only)
 const T=parseAbiItem('event Transfer(address indexed from,address indexed to,uint256 value)');
 const lc=a=>String(a).toLowerCase();const usd=a=>{const n=BigInt(a),s=n<0n?'-':'',m=n<0n?-n:n,w=m/1000000n,f=(m%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return s+(f?`${w}.${f}`:`${w}`);};
 /** transfers: [{tx,block,t,li,from,to,value(bigint)}] -> rows (oldest first) for wallet + vault. names: {lowercase addr: 'label'}. */
-export function classify(transfers,{wallet,vault,paymasters=[],names={},owner=null,ownerPaymasters=[],feeTo=null}){const W=lc(wallet),V=lc(vault),PM=new Set(paymasters.map(lc)),O=owner?lc(owner):null,OPM=new Set(ownerPaymasters.map(lc)),FEE=feeTo?lc(feeTo):null;const by=new Map();
+export function classify(transfers,{wallet,vault,paymasters=[],names={},owner=null,ownerPaymasters=[],feeTo=null}){const W=lc(wallet),V=lc(vault),PM=new Set(paymasters.map(lc)),O=owner?lc(owner):null,OPM=new Set(ownerPaymasters.map(lc)),FEE=feeTo?new Set([lc(feeTo),...RETIRED_FEE_TO]):null/* t1346: history still shows fees paid to the retired addresses as fees */;const by=new Map();
   for(const x of [...transfers].sort((a,b)=>a.block-b.block||a.li-b.li)){if(!by.has(x.tx))by.set(x.tx,[]);by.get(x.tx).push(x);}
   const rows=[];const nm=a=>names[lc(a)]??(lc(a).slice(0,6)+'…'+lc(a).slice(-4));
   for(const [tx,xs] of by){const t=xs[0].t,block=xs[0].block;const d=acc=>xs.reduce((s,x)=>s+(lc(x.to)===acc?x.value:0n)-(lc(x.from)===acc?x.value:0n),0n);
@@ -16,7 +17,7 @@ export function classify(transfers,{wallet,vault,paymasters=[],names={},owner=nu
       if(wd>0n){kind='deposit';const src=xs.find(x=>lc(x.to)===W);zh=`充值（来自 ${nm(src.from)}）`;}
       else if(paid>0n){kind='payment';const over=-wd-paid;zh=`AI 付款 ${usd(paid)} 给 ${nm(payee[0].to)}`+(over>0n?`（含手续费 ${usd(over)}）`:'');}
       else{/* t1129: split the wallet's own USDC network fee (official fee address) from the amount that really left to someone. */
-        const outs=xs.filter(x=>lc(x.from)===W&&lc(x.to)!==W&&lc(x.to)!==V);const fee=FEE?outs.filter(x=>lc(x.to)===FEE).reduce((s,x)=>s+x.value,0n):0n;const main=outs.filter(x=>!FEE||lc(x.to)!==FEE);const sent=main.reduce((s,x)=>s+x.value,0n);
+        const outs=xs.filter(x=>lc(x.from)===W&&lc(x.to)!==W&&lc(x.to)!==V);const fee=FEE?outs.filter(x=>FEE.has(lc(x.to))).reduce((s,x)=>s+x.value,0n):0n;const main=outs.filter(x=>!FEE||!FEE.has(lc(x.to)));const sent=main.reduce((s,x)=>s+x.value,0n);
         if(fee>0n&&sent===0n){kind='walletfee';zh=`手续费 ${usd(fee)}（钱包操作，用 USDC 付）`;rows.push({tx,block,t,account:'wallet',kind,delta:wd.toString(),zh,detail:{fee:fee.toString()}});}
         else{const dst=main[0]??xs.find(x=>lc(x.from)===W);kind='withdraw';zh=`转出到 ${nm(dst.to)}`+(fee>0n?` ${usd(sent)}，手续费 ${usd(fee)}`:'');rows.push({tx,block,t,account:'wallet',kind,delta:wd.toString(),zh,detail:fee>0n?{sent:sent.toString(),fee:fee.toString()}:undefined});}}
       if(kind!=='walletfee'&&kind!=='withdraw')rows.push({tx,block,t,account:'wallet',kind,delta:wd.toString(),zh,detail:paid>0n?{paid:paid.toString(),overhead:(-wd-paid).toString()}:undefined});}

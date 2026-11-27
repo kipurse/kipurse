@@ -69,7 +69,7 @@ function seatWorld({key=[0n,0n]}={}){
       if(functionName==='nextOwnerIndex')return 3n;if(functionName==='ownerAtIndex')return [pad(OWNER),pad(SEAT),pad(SPM)][Number(args[0])].toLowerCase();if(functionName==='isOwnerAddress')return [OWNER,SEAT,SPM].map(getAddress).includes(getAddress(args[0]));return 0n;}};
   const S={phone:{pending:{},active:key[0]?{approver:SEAT,index:1,x:'0x'+key[0].toString(16).padStart(64,'0'),y:'0x'+key[1].toString(16).padStart(64,'0'),version:SEAT_VERSION}:null,seat:SEAT}};
   const ph=createPhoneEnrollment({S,save:()=>{},pub,wallet:W,trust:TRUST,owner:OWNER,chainId:8453,base:()=>'https://x',caps:()=>({single:1n,daily:1n}),script:()=>'',approverVersion:'v3',afterOpening:'wallet',
-    feeTo:'0xf14ef5dc4723245866c22c749a0a84afceba0dd9',sponsor:{available:()=>true,register:async()=>'https://x/onboard/new/paymaster?id=1'}});
+    feeTo:'0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd',sponsor:{available:()=>true,register:async()=>'https://x/onboard/new/paymaster?id=1'}});
   return {ph,S,W,SEAT,setKey:(x,y)=>{k={x:BigInt(x),y:BigInt(y)};}};}
 
 test('KEY SEAT new phone: ONE wallet.execute(seat, setKey) + wallet-pays fee leg; no owner change; Coinbase rule passes; confirm reads the seat',async()=>{

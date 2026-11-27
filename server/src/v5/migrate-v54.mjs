@@ -23,7 +23,7 @@ export const migrateV54On=(env=process.env)=>String(env.KIPURSE_MIGRATE_V54??'')
 export const DETERMINISTIC_DEPLOYER='0x4e59b44847b379578588920cA78FbF26c0B4956C';
 export const SPM='0xf85210B21cC50302F477BA56686d2019dC9b67Ad';
 export const USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-export const FEE_TO='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+export const FEE_TO='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 export const ADAPTER_V54='0x99D8dFEC40023F53F6e451f9afFF7Efc223B7Aaa';
 export const TRUST_V54=getContractAddress({from:ADAPTER_V54,nonce:1n});            // created by the adapter's constructor (first CREATE)
 export const VAULT_FACTORY='0x34d9Bdc9E10815fB6913AF5BC0DAad7E53dbD57D';

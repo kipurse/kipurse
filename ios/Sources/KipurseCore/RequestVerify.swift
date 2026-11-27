@@ -54,8 +54,8 @@ public enum RequestVerify {
   /// One wallet call: wallet.executeBatch([...]) whose inner calls may ONLY be revoke/approve on the Spend Permission Manager and
   /// registerPermission on the Kipurse adapter, all for THIS wallet, with exactly the caps the user picked.
   /// t767: Kipurse ops account and per-op cap for legacy dues (pre-t1022 onboarding gas; vault fee slot). Fixed here, never from the server.
-  /// t1123: the official Kipurse fee address (= server DUES_SLOT / withdraw feeTo / OwnerExit.withdrawFeeTo / UsdcGas.feeTo). Was the stale 0xfc0E…345B.
-  public static let duesTo = "0xf14ef5dc4723245866c22c749a0a84afceba0dd9", duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
+  /// t1123: the official Kipurse fee address (= server DUES_SLOT / withdraw feeTo / OwnerExit.withdrawFeeTo / UsdcGas.feeTo). Was the stale 0xfc0E…345B. t1346: company Safe 0x82ec…64fD (0xf14E…0Dd9 retired).
+  public static let duesTo = FeeAddress.company, duesMaxPerOp: UInt64 = 50_000, selSetBundlerFee = "f039b127"
   public static func limitsBatch(calls inCalls: [[String: Any]], wallet: String, chainId: Int, choice: Choice, currentExecutor: String?, adapter: String = PhoneTrust.mainnetAdapter, owner: String? = nil, vault: String? = nil, now: Date = Date(), walletPays: Bool = false, requireRevoke: Bool = false) -> Result {
     var res = Result(); func bad(_ s: String) { res.problems.append(s) }
     // t147: the retired third-party ERC-20 paymaster (Pimlico) shape is never signed. Later changes use limitsReply (Kipurse sponsor route).
@@ -81,7 +81,7 @@ public enum RequestVerify {
       if sel == selSetBundlerFee {
         if i != n - 1 || dues > 0 { bad("fee-slot step in an unexpected place") }
         if vault == nil || lc(target) != lc(vault!) { bad("fee-slot step targets something other than your vault") }
-        if inner.count != 68 || lc(ir.addr(0) ?? "") != duesTo { bad("fee-slot step pays someone other than Kipurse's ops account") }
+        if inner.count != 68 || lc(ir.addr(0) ?? "") != duesTo { bad("fee-slot step pays someone other than Kipurse's fee address") }
         if let m = ir.dec(32), let mv = UInt64(m), mv <= duesMaxPerOp, mv > 0 {} else { bad("fee-slot cap is above 0.05 USDC") }
         dues += 1; res.notes.append("account-opening fee fronted by Kipurse: 0.05 USDC, taken once with the first AI payment"); continue
       }

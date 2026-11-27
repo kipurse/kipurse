@@ -2,6 +2,7 @@
 // paymaster (ERC-7677 context {erc20: USDC}). The paymaster pulls USDC from the signer's Base Account (approve in the SAME batch, one confirmation)
 // and pays the chain itself. Kipurse holds no ETH, fronts nothing, nets $0. Never an ETH path; if CDP refuses, nothing is sent (fail closed).
 import {encodeFunctionData,decodeFunctionData,parseAbi,getAddress} from 'viem';
+import {isRetiredFeeTo} from './operator-constants.mjs';   // t1346: retired fee addresses are refused everywhere
 export const USDC_BASE='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 /** CDP ERC-20 paymaster on Base (EntryPoint v0.6 = Coinbase Smart Wallet / Base Account; checked on a Base fork 2026-11-04). */
 export const CDP_ERC20_PAYMASTER='0x2FAEB0760D4230Ef2aC21496Bb4F0b47D634FD4c';
@@ -16,8 +17,8 @@ export function approveCall(cap=USDC_GAS_APPROVE_CAP){if(BigInt(cap)<=0n||BigInt
   return {to:USDC_BASE,value:'0x0',data:encodeFunctionData({abi:A,functionName:'approve',args:[CDP_ERC20_PAYMASTER,BigInt(cap)]})};}
 export function depositCall(wallet,amount){const a=BigInt(amount);if(a<=0n)throw Object.assign(Error('deposit amount'),{code:'deposit_amount'});
   return {to:USDC_BASE,value:'0x0',data:encodeFunctionData({abi:A,functionName:'transfer',args:[getAddress(wallet),a]})};}
-/** t1022 fee address = Kipurse ops account (same as DUES_SLOT / withdraw feeTo). Same-tx repay pays here. */
-export const KIPURSE_FEE_TO='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+/** t1022 fee address (same as DUES_SLOT / withdraw feeTo). t1346: the company Safe 0x82ec…64fD (was the placeholder 0xf14E…0Dd9). Same-tx repay pays here. */
+export const KIPURSE_FEE_TO='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 /** t1026: opening fee = actual network cost in USDC (gas*price + L1), + safety buffer, hard-capped. Not a fixed 0.05. */
 export const OPENING_GAS=2_300_000n;                 // same envelope as onboard.mjs ONBOARD_GAS (new wallet + vault)
 /** t1086: first phone key (approver deploy + addOwnerAddress) rides in that same opening batch.
@@ -53,7 +54,7 @@ export function vaultSeedNote(amount=OPENING_VAULT_SEED){const a=fmtOpeningFeeUS
           en:`Plus ${a} USDC into your wallet's fee reserve to cover network fees for AI payments. It is still your money and comes back when you withdraw.`};}
 /** A USDC call is allowed as: approve(CDP, <=cap), transfer(feeTo, <=cap) [same-tx repay], transfer(this wallet, >0) [deposit],
  *  or (t1185 decision 86) transfer(this wallet's vault, 0.10..0.20) [vault seed]. */
-export function usdcCallProblem(c,{wallet,vault,feeTo=KIPURSE_FEE_TO}){if(lc(c?.to)!==lc(USDC_BASE))return 'not_usdc';if(BigInt(c.value??0)!==0n)return 'value';
+export function usdcCallProblem(c,{wallet,vault,feeTo=KIPURSE_FEE_TO}){if(lc(c?.to)!==lc(USDC_BASE))return 'not_usdc';if(isRetiredFeeTo(feeTo))return 'retired_fee_address';if(BigInt(c.value??0)!==0n)return 'value';
   let d;try{d=decodeFunctionData({abi:A,data:c.data});}catch{return 'usdc_call';}
   if(d.functionName==='approve')return lc(d.args[0])===lc(CDP_ERC20_PAYMASTER)&&d.args[1]>0n&&d.args[1]<=USDC_GAS_APPROVE_CAP?null:'approve';
   if(d.functionName==='transfer'){

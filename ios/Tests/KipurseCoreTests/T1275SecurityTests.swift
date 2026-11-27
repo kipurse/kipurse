@@ -84,14 +84,29 @@ final class T1275SecurityTests: XCTestCase {
     let one = await ChainRPC.agreedHead(); XCTAssertNil(one, "one node alone is not enough")
   }
   func testSafetyCapsScanNeedsTwoNodes() async {
-    ChainRPC.transport = { _, m, _ in if m == "eth_blockNumber" { return "0x" + String(56_750_000, radix: 16) }; throw URLError(.badServerResponse) }
-    // one node invents a permission event, the others see none -> unreadable, never a cap to celebrate
+    // t1282 (decision 156, owner card t1282s6035): the log scan may come from ONE node, but a cap is only shown after a second, different
+    // node shows the same log in that block and two nodes agree on isValid. Here node 0 invents a real-looking approval for the
+    // wallet and every other node sees none -> unreadable, never a cap to celebrate, and the invented event is forgotten.
+    let acct = "0x515010c2e41f98cddd76b819ee69dc832c0939b6"
+    let fake = "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000515010c2e41f98cddd76b819ee69dc832c0939b600000000000000000000000005320bed08309f66316f7d73e2d0be110400fbb2000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda02913000000000000000000000000000000000000000000000000000000174876e8000000000000000000000000000000000000000000000000000000000001e13380000000000000000000000000000000000000000000000000000000006af66209000000000000000000000000000000000000000000000000000000006cd79589000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000180000000000000000000000000ec477db93a09327b986acf016143d44ab06f3f590000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000002540be400000000000000000000000000000000000000000000000000000000174876e80000000000000000000000000000000000000000000000000000000000000186a00000000000000000000000000000000000000000000000000000000000030e0800000000000000000000000000000000000000000000000000000000001e848000000000000000000000000000000000000000000000000000000000004c5ec800000000000000000000000026c707ccbd569624cf31f5c574d4fdf7e3f2399800000000000000000000000000000000000000000000000000000000000003e8000000000000000000000000000000000000000000000000000000000000c350"
+    ChainRPC.transport = { _, m, _ in
+      if m == "eth_blockNumber" { return "0x" + String(56_750_000, radix: 16) }
+      if m == "eth_call" { return "0x" + String(repeating: "0", count: 63) + "1" }   // even a "valid" answer must not rescue it
+      throw URLError(.badServerResponse) }
+    ChainRPC.anyTransport = { url, m, _ in
+      guard m == "eth_getLogs" else { throw URLError(.badServerResponse) }
+      return url == ChainRPC.nodes[0] ? [["topics": [SafetyCaps.eventTopic], "data": fake, "blockNumber": "0x3614a0d", "logIndex": "0x1"]] as [Any] : [] as [Any]
+    }
+    let r = await SafetyCaps.read(account: acct)
+    XCTAssertEqual(r.caps, .unreadable)
+    XCTAssertNil(SafetyCaps.memo(acct), "the unconfirmed event is not kept")
+    // t1275 original case kept: an event that is not this wallet's never becomes a cap.
     ChainRPC.anyTransport = { url, m, _ in
       guard m == "eth_getLogs" else { throw URLError(.badServerResponse) }
       return url == ChainRPC.nodes[0] ? [["topics": [SafetyCaps.eventTopic], "data": "0x" + String(repeating: "0", count: 64), "blockNumber": "0x3614a0d", "logIndex": "0x1"]] as [Any] : [] as [Any]
     }
-    let r = await SafetyCaps.read(account: "0x" + String(repeating: "5", count: 40))
-    XCTAssertEqual(r.caps, .unreadable)
+    let r2 = await SafetyCaps.read(account: "0x" + String(repeating: "5", count: 40))
+    if case .ready = r2.caps { XCTFail("never a cap from another wallet's / malformed log") }
   }
   func testSuiteDetectUsesTwoNodes() async {
     ChainRPC.transport = { url, _, _ in url == ChainRPC.nodes[0] ? "0x6080" : "0x" }   // one node says the V5.3 vault has code, the other says no

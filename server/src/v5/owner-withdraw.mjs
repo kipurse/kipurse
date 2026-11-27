@@ -7,6 +7,7 @@
 import {createSanctions} from './sanctions.mjs';
 import {langOf,X} from './i18n.mjs';import {randomBytes} from 'node:crypto';
 import {encodeFunctionData,decodeFunctionData,getAddress,parseAbi} from 'viem';
+import {isRetiredFeeTo} from './operator-constants.mjs';   // t1346: retired fee addresses are refused everywhere
 const J=x=>JSON.stringify(x,(k,v)=>typeof v==='bigint'?v.toString():v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=a=>{const n=BigInt(a),w=n/1000000n,f=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
@@ -28,12 +29,12 @@ export function withdrawCalls({wallet,owner,token,amount,vault=null}){const a=Bi
 export const WITHDRAW_FEE_TRANSFER_GAS=40_000n;export const WITHDRAW_MAX_WALLET_FEE=250_000n; // 0.25 USDC hard ceiling = sponsor per-op cap (same constant in the page script)
 /** t763: fee >= real cost. Realistic gas of this op (measured 248,864) x1.2 = 300k, charged with 1.4x price headroom; the sponsor re-checks at 1.1x. */
 export const WITHDRAW_REAL_GAS=300_000n;export const WITHDRAW_PRICE_HEADROOM_PCT=140n;
-export function withdrawCallsWalletPays({wallet,owner,token,amount,fee,feeTo,vault=null}){const a=BigInt(amount),f=BigInt(fee);if(f<=0n||f>WITHDRAW_MAX_WALLET_FEE||a<=f)throw Object.assign(Error('fee'),{code:'fee'});
+export function withdrawCallsWalletPays({wallet,owner,token,amount,fee,feeTo,vault=null}){if(isRetiredFeeTo(feeTo))throw Object.assign(Error('retired fee address'),{code:'fee_retired_address'});const a=BigInt(amount),f=BigInt(fee);if(f<=0n||f>WITHDRAW_MAX_WALLET_FEE||a<=f)throw Object.assign(Error('fee'),{code:'fee'});
   const ex=(t,d)=>({to:getAddress(wallet),value:'0x0',data:encodeFunctionData({abi:WITHDRAW_WALLET_ABI,functionName:'execute',args:[getAddress(t),0n,d]})});
   const tr=(to,n)=>ex(token,encodeFunctionData({abi:WITHDRAW_ERC20_ABI,functionName:'transfer',args:[getAddress(to),n]}));
   return [...(vault?[ex(vault,encodeFunctionData({abi:WITHDRAW_VAULT_ABI,functionName:'sweep'}))]:[]),tr(feeTo,f),tr(owner,a-f)];}
 /** Independent check for the wallet-pays shape: only the owner and the fixed fee address, fee <= ceiling. -> null | reason */
-export function checkWalletPaysCalls(calls,{wallet,owner,token,feeTo,vault=null}){if(!feeTo)return 'no_fee_address';
+export function checkWalletPaysCalls(calls,{wallet,owner,token,feeTo,vault=null}){if(!feeTo)return 'no_fee_address';if(isRetiredFeeTo(feeTo))return 'fee_retired_address';
   if(!Array.isArray(calls)||calls.length!==(vault?3:2))return 'shape';const dec=c=>{if(getAddress(c.to)!==getAddress(wallet)||BigInt(c.value??0)!==0n)return null;try{const o=decodeFunctionData({abi:WITHDRAW_WALLET_ABI,data:c.data});return o.functionName==='execute'&&o.args[1]===0n?o:null;}catch{return null;}};
   const xs=calls.map(dec);if(xs.some(x=>!x))return 'wrong_target';const off=vault?1:0;
   if(vault){if(getAddress(xs[0].args[0])!==getAddress(vault))return 'not_sweep';try{if(decodeFunctionData({abi:WITHDRAW_VAULT_ABI,data:xs[0].args[2]}).functionName!=='sweep')return 'not_sweep';}catch{return 'not_sweep';}}
@@ -53,6 +54,7 @@ export function checkWithdrawCalls(calls,{wallet,owner,token,vault=null}){
   if(getAddress(i.args[0])!==getAddress(owner))return 'destination_not_owner';return null;}
 export function createOwnerWithdraw({pub,wallet,owner,token,feed,vault=null,chainId=8453,script,now=()=>Date.now(),pollMs=3000,pollTries=60,sanctions,feeTo=null,walletPays=null}){
   // walletPays: {available:()=>bool, register:async(planId,{owner,wallet,calls,reimburse})=>paymasterUrl|null}; feeTo: fixed fee address. Both or nothing.
+  if(isRetiredFeeTo(feeTo))throw Error('owner-withdraw: retired fee address (t1346)');
   const WP=feeTo&&walletPays?{to:getAddress(feeTo),...walletPays}:null;
   // Withdrawal ALWAYS goes to the owner's own Base Account; refused only if that exact address is on the OFAC SDN list.
   const SC=sanctions??createSanctions({pub:chainId===8453?pub:null,chainId});

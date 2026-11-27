@@ -21,7 +21,7 @@ struct BalanceIntent: AppIntent {
   static var description = IntentDescription("Read the AI wallet's USDC balance (read-only).")
   func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog { await SiriSeen.mark();
     let st = try await ownerAPI().state()
-    let txt = T("Kipurse 余额 \(AnswerRules.format(st.balance)) USDC", "Kipurse balance \(AnswerRules.format(st.balance)) USDC") + (st.approvals.isEmpty ? "" : T("，有 \(st.approvals.count) 件事等你批准", ", \(st.approvals.count) waiting for your approval"))
+    let txt = (st.balanceKnown ? T("Kipurse 余额 \(AnswerRules.format(st.balance)) USDC", "Kipurse balance \(AnswerRules.format(st.balance)) USDC") : T("Kipurse 余额还在加载，请稍后再问", "Kipurse is still loading your balance. Ask again in a moment."))   // t1282: never a placeholder 0 + (st.approvals.isEmpty ? "" : T("，有 \(st.approvals.count) 件事等你批准", ", \(st.approvals.count) waiting for your approval"))
     return .result(value: txt, dialog: IntentDialog(stringLiteral: txt))
   }
 }

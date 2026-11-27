@@ -8,6 +8,7 @@
 // server has read isPaused(wallet) == false on chain.
 import {parseAbi,encodeFunctionData,getAddress} from 'viem';
 import {BASE_USDC,LIMITS_WALLET_FEE_CAP,LIMITS_OFFICIAL_FEE_TO,limitsWalletFee} from './limits-fee.mjs';
+import {isRetiredFeeTo} from './operator-constants.mjs';   // t1346: retired fee addresses are refused everywhere
 export const RESUME_FEE_FROM='kipurse_wallet_fee';
 export const RESUME_FEE_TO=LIMITS_OFFICIAL_FEE_TO;
 export const RESUME_FEE_CAP=LIMITS_WALLET_FEE_CAP;
@@ -24,14 +25,14 @@ export function unpauseCall({wallet,trust}){return {to:getAddress(wallet),value:
 /** Live quote: same formula, floor and cap as the wallet-pays limits fee (decision 63). callGas = estimate of the unpause call. */
 export function resumeFee({callGas,gasPriceWei,ethUsd8,walletUSDC,cap=RESUME_FEE_CAP}){return limitsWalletFee({callGas:callGas??RESUME_CALL_GAS,gasPriceWei,ethUsd8,walletUSDC,cap});}
 /** The two calls. Refuses anything else (fee outside (0, cap), bad parties). */
-export function resumeCalls({wallet,trust,feeTo=RESUME_FEE_TO,fee,cap=RESUME_FEE_CAP}){const f=BigInt(fee);
+export function resumeCalls({wallet,trust,feeTo=RESUME_FEE_TO,fee,cap=RESUME_FEE_CAP}){if(isRetiredFeeTo(feeTo))throw Object.assign(Error('retired fee address'),{code:'fee_parties'});const f=BigInt(fee);
   if(f<=0n||f>=BigInt(cap))throw Object.assign(Error('fee cap'),{code:'fee_above_cap'});
   for(const a of [wallet,trust,feeTo])if(!/^0x[0-9a-fA-F]{40}$/.test(String(a)))throw Object.assign(Error('address'),{code:'fee_parties'});
   if(new Set([lc(wallet),lc(trust),lc(feeTo)]).size!==3)throw Object.assign(Error('fee parties'),{code:'fee_parties'});
   const fc={to:getAddress(wallet),value:'0x0',data:encodeFunctionData({abi:ABI,functionName:'execute',args:[getAddress(BASE_USDC),0n,encodeFunctionData({abi:ABI,functionName:'transfer',args:[getAddress(feeTo),f]})]})};
   return [fc,unpauseCall({wallet,trust})];}
 /** Same rule the App (RequestVerify.resumeReply) and the page (kpResumeOK) enforce. Returns F or null. */
-export function checkResumeCalls(calls,{wallet,trust,feeTo=RESUME_FEE_TO,cap=RESUME_FEE_CAP}){try{
+export function checkResumeCalls(calls,{wallet,trust,feeTo=RESUME_FEE_TO,cap=RESUME_FEE_CAP}){try{if(isRetiredFeeTo(feeTo))return null;
   if(!Array.isArray(calls)||calls.length!==2)return null;const W=lc(wallet).replace(/^0x/,''),T=lc(trust).replace(/^0x/,''),FT=lc(feeTo).replace(/^0x/,'');
   if(![W,T,FT].every(x=>/^[0-9a-f]{40}$/.test(x))||new Set([W,T,FT]).size!==3)return null;
   const pad=x=>x.padStart(64,'0');const d0=lc(calls[0].data).replace(/^0x/,'');

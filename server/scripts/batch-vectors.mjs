@@ -38,7 +38,7 @@ const T={
   revoke_owner:[c(W,wf('removeOwnerAtIndex',[0n,pad(OWNER)]))],
 };
 // t767: same setup with the dues slot (vault.setBundlerFee(Kipurse ops, 0.05)) as the last inner call, + tampered variants
-const VAULT='0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc',OPS='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+const VAULT='0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc',OPS='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 const plD=(bf)=>buildMigrationPlanV5({chainId:8453,wallet:W,owner:OWNER,adapter:ADAPTER,trust:TRUST,token:USDC,manager:SPM,executor:EXEC,guardian:'0x0000000000000000000000000000000000000000',registry:'0x0000000000000000000000000000000000000000',headroom:false,
   maxFeePpm:'3000',maxNetworkFee:'50000',fee:{ppm:'1000'},stated:{single:ch.single,daily:ch.daily,term:ch.term,openSingle:'100000',openDaily:'1000000',verifiedSingle:ch.single,verifiedDaily:ch.daily},
   start:now-60,end:now-60+ch.days*86400,salt:7n,revoke:[],zeroReserve:{vault:bf.vault??VAULT,buffer:0,bundlerFee:{to:bf.to,maxPerOp:bf.max}}});

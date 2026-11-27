@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Real network-fee estimate for one AI-limits change (owner's Base Account -> wallet.executeBatch), in USDC at actual cost (0% markup).
 import {PRINCIPLES} from './principles.mjs';import {L1_ALLOWANCE_WEI} from './phone-signer.mjs';import {parseAbi,encodeFunctionData,getAddress} from 'viem';
+import {isRetiredFeeTo} from './operator-constants.mjs';   // t1346: retired fee addresses are refused everywhere
 /** Gas of the wallet batch when the node can't estimate it (measured on a Base fork, test/fork/limits-gas-fork.e2e.mjs). */
 export const LIMITS_CALL_GAS=200_000n; // fork: 172,308 (first) and 198,638 (later, incl. the USDC gas charge)
 /** ERC-4337 overhead for a Base Account (7702) user op: verification + pre-verification + paymaster. */
@@ -36,8 +37,8 @@ export function limitsChangeFee({callGas,gasPriceWei,ethUsd8,payerUSDC=null,wall
  *  no transfer to the owner, no sub-account, no ETH. */
 const lc=a=>String(a??'').toLowerCase();
 export const LIMITS_WALLET_FEE_FROM='kipurse_wallet_fee';
-/** Official Kipurse fee address (= withdraw / phone-enroll feeTo, App OwnerExit.withdrawFeeTo / RequestVerify.duesTo). */
-export const LIMITS_OFFICIAL_FEE_TO='0xf14ef5dc4723245866c22c749a0a84afceba0dd9';
+/** Official Kipurse fee address (= withdraw / phone-enroll feeTo, App OwnerExit.withdrawFeeTo / RequestVerify.duesTo). t1346: company Safe. */
+export const LIMITS_OFFICIAL_FEE_TO='0x82ecf6e2f76ee100e4676dabe193bca6bcab64fd';
 /** Extra gas of the wallet -> fee address USDC leg (wallet.execute + transfer). Same constant as the withdraw fee leg. */
 export const LIMITS_FEE_TRANSFER_GAS=40_000n;
 /** The sponsor re-checks before final paymaster data: fee >= 300k gas x price x 1.1 (onboard-sponsor WITHDRAW_REAL_GAS, 'underpaid').
@@ -54,14 +55,14 @@ export function limitsWalletFee({callGas,gasPriceWei,ethUsd8,walletUSDC,cap=LIMI
   const reason=usdc>=limit?'fee_above_cap':w===null||w<usdc?'wallet_low':null;
   return {gas,gasPriceWei:gp,wei,usdc,walletUSDC:w,fromWallet:true,walletPays:true,canPayUSDC:false,reason,cap:limit,token:'USDC'};}
 /** wallet.execute(USDC, 0, transfer(feeTo, F)) + the cap change. Refuses anything else. */
-export function limitsWalletFeeCalls({wallet,feeTo,fee,changeCall}){const f=BigInt(fee);
+export function limitsWalletFeeCalls({wallet,feeTo,fee,changeCall}){if(isRetiredFeeTo(feeTo))throw Object.assign(Error('retired fee address'),{code:'fee_parties'});const f=BigInt(fee);
   if(f<=0n||f>=LIMITS_WALLET_FEE_CAP)throw Object.assign(Error('fee cap'),{code:'fee_above_cap'});
   if(!/^0x[0-9a-fA-F]{40}$/.test(String(wallet))||!/^0x[0-9a-fA-F]{40}$/.test(String(feeTo))||lc(wallet)===lc(feeTo))throw Object.assign(Error('fee parties'),{code:'fee_parties'});
   if(!changeCall||lc(changeCall.to)!==lc(wallet)||BigInt(changeCall.value??0)!==0n||!lc(changeCall.data).startsWith('0x34fcd5be'))throw Object.assign(Error('change call'),{code:'limits_change'});
   const fc={to:getAddress(wallet),value:'0x0',data:encodeFunctionData({abi:FT_ABI,functionName:'execute',args:[getAddress(BASE_USDC),0n,encodeFunctionData({abi:FT_ABI,functionName:'transfer',args:[getAddress(feeTo),f]})]})};
   return [fc,{to:getAddress(wallet),value:'0x0',data:changeCall.data}];}
 /** Same rule the App (RequestVerify.limitsPrepared, wallet-fee branch) enforces. Returns F or null. */
-export function checkLimitsWalletFeeCalls(calls,{wallet,feeTo,cap=LIMITS_WALLET_FEE_CAP}){try{
+export function checkLimitsWalletFeeCalls(calls,{wallet,feeTo,cap=LIMITS_WALLET_FEE_CAP}){try{if(isRetiredFeeTo(feeTo))return null;
   if(!Array.isArray(calls)||calls.length!==2)return null;const [t,ch]=calls;const W=lc(wallet).replace(/^0x/,''),FT=lc(feeTo).replace(/^0x/,'');
   if(!/^[0-9a-f]{40}$/.test(W)||!/^[0-9a-f]{40}$/.test(FT)||W===FT)return null;
   const pad=x=>x.padStart(64,'0');const d0=lc(t.data).replace(/^0x/,'');

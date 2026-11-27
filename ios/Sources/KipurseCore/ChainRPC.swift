@@ -1,12 +1,23 @@
 import Foundation
 
-/// t821: the phone reads Base directly from public nodes, never through Kipurse. Primary first (Info.plist KipurseChainRPC,
-/// else mainnet.base.org), then two independent public backups. A failing / slow node is skipped (5 s).
+/// t821: the phone reads Base directly from public nodes, never through Kipurse. Operator node first (Info.plist KipurseChainRPC,
+/// empty in normal builds), then four independent free, keyless public nodes. A failing / slow node is skipped (5 s).
+/// t1282 (decision 156, owner t1283 / t1284): mainnet.base.org (429 on every eth_getLogs) and base.llamarpc.com (525, down) removed.
+/// Tested 2026-11-25 from the owner's network: each 10/10 balance reads (7.721351 USDC), 10/10 heads, 5/5 one-block logs, ~0.25 s.
+/// Only publicnode scans 50,000-block ranges (dRPC max 100, Nodies max 50, Bware single block), so it is first; the others
+/// confirm (two-node eth_call, one-block log check). Coinbase CDP's node is a later step (needs a free client key from the owner).
 public enum ChainRPC {
-  public static let backups = [URL(string: "https://base-rpc.publicnode.com")!, URL(string: "https://base.llamarpc.com")!]
+  public static let publicNodes = [URL(string: "https://base-rpc.publicnode.com")!,          // Allnodes
+                                   URL(string: "https://base.drpc.org")!,                      // dRPC
+                                   URL(string: "https://base-public.nodies.app")!,             // Nodies
+                                   URL(string: "https://base-mainnet.public.blastapi.io")!]    // Bware Labs
+  public static var backups: [URL] { Array(publicNodes.dropFirst()) }
+  /// t1285 (decision 156): the PRIMARY node is Coinbase CDP Node (Base mainnet), supplied at build time as KIPURSE_CHAIN_RPC in the
+  /// gitignored Config/Local.xcconfig (-> Info.plist KipurseChainRPC -> GasCheck.rpc). The free nodes are backups, asked in parallel.
+  public static var primary: URL? { GasCheck.rpc }
   public static var nodes: [URL] {
-    var out = [GasCheck.rpc ?? VaultCheck.publicRPC]
-    for b in [VaultCheck.publicRPC] + backups where !out.contains(b) { out.append(b) }
+    var out: [URL] = primary.map { [$0] } ?? []
+    for b in publicNodes where !out.contains(b) { out.append(b) }
     return out
   }
   public typealias Transport = (URL, String, [Any]) async throws -> String
@@ -75,16 +86,38 @@ public enum ChainRPC {
   }
   /// t1275: the newest block BOTH of the first two answering nodes have (the lower of their two heads). nil = can't confirm.
   public static func agreedHead(nodes: [URL] = nodes) async -> Int64? {
-    var first: Int64?
-    for n in nodes {
-      guard let h = try? await transport(n, "eth_blockNumber", []), h.hasPrefix("0x"), let v = Int64(String(h.dropFirst(2)), radix: 16), v > 0 else { continue }
-      if let f = first { return min(f, v) }
-      first = v
+    // t1285: asked in parallel; the first two nodes that answer decide (the lower head: a block both have).
+    await withTaskGroup(of: Int64?.self) { g in
+      for n in nodes { g.addTask { guard let h = try? await transport(n, "eth_blockNumber", []), h.hasPrefix("0x"), let v = Int64(String(h.dropFirst(2)), radix: 16), v > 0 else { return nil }; return v } }
+      var first: Int64?
+      for await v in g { guard let v else { continue }; if let f = first { g.cancelAll(); return min(f, v) }; first = v }
+      return nil
     }
-    return nil
   }
+
+  /// t1285 (decision 156): every node at once; the FIRST valid answer wins (the balance shows as fast as the fastest node answers,
+  /// a slow / rate-limited / down node never holds it up). `valid` rejects empty / malformed answers. nil = no node answered.
+  public static func race(_ method: String, _ params: [Any], nodes: [URL] = nodes, valid: @escaping @Sendable (String) -> Bool = { $0.hasPrefix("0x") && $0.count > 2 }) async -> String? {
+    let paramsBox = ParamsBox(params)
+    return await withTaskGroup(of: String?.self) { g in
+      for n in nodes { g.addTask { guard let v = try? await transport(n, method, paramsBox.params), valid(v) else { return nil }; return v } }
+      for await v in g { if let v { g.cancelAll(); return v } }
+      return nil
+    }
+  }
+  /// t1285: all nodes at once; returns as soon as TWO different nodes gave the same answer (nil = no two agreed).
+  public static func agreedFast(_ method: String, _ params: [Any], nodes: [URL] = nodes) async -> String? {
+    let paramsBox = ParamsBox(params)
+    return await withTaskGroup(of: String?.self) { g in
+      for n in nodes { g.addTask { try? await transport(n, method, paramsBox.params) } }
+      var seen: [String: Int] = [:]
+      for await v in g { guard let v else { continue }; let k = v.lowercased(); seen[k, default: 0] += 1; if seen[k]! >= 2 { g.cancelAll(); return v } }
+      return nil
+    }
+  }
+  final class ParamsBox: @unchecked Sendable { let params: [Any]; init(_ p: [Any]) { params = p } }
   public static func ethCall(_ to: String, _ data: String, agreed two: Bool = false) async -> String? {
     let p: [Any] = [["to": to, "data": data], "latest"]
-    return two ? await agreed("eth_call", p) : try? await call("eth_call", p)
+    return two ? await agreedFast("eth_call", p) : try? await call("eth_call", p)   // t1285: parallel, first two agreeing
   }
 }

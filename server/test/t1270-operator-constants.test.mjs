@@ -15,4 +15,4 @@ test('launcher wiring: fee address and paymasters only through operatorConstants
   assert.match(L,/const OP=operatorConstants\(X\.operatorConstants,OPERATOR_DEFAULTS\)/);
   assert.match(L,/paymasters:OP\.paymasters,/);assert.match(L,/ownerPaymasters:OP\.ownerPaymasters,feeTo:OP\.feeTo/);assert.match(L,/cfg\.dues=\{to:OP\.feeTo,/);
   const body=L.replace(/\/\/ OPERATOR_DEFAULTS:BEGIN[\s\S]*?\/\/ OPERATOR_DEFAULTS:END/,'');
-  assert.doesNotMatch(body,/0xf14ef5dc/i);assert.doesNotMatch(body,/0x28da22dc/i);assert.doesNotMatch(body,/0xc0de9762/i);});
+  assert.doesNotMatch(body,/0xf14ef5dc/i);assert.doesNotMatch(body,/0x82ecf6e2/i);assert.doesNotMatch(body,/0x28da22dc/i);assert.doesNotMatch(body,/0xc0de9762/i);});

@@ -24,7 +24,7 @@ const guard=hash=>{const ctx={location:{hash},document:{documentElement:{lang:'e
 test('deploy batch: deployer + 0.15 USDC fee from the owner; no ETH value; the link commitment admits exactly this batch from the owner',async()=>{
   const C=deployV54Calls(plan);assert.equal(C.length,2);assert.equal(getAddress(C[0].to),getAddress(DEPLOYER));assert.equal(getAddress(C[1].to),getAddress(USDC_BASE));
   assert.equal(C[1].data.toLowerCase(),feeData(150000n));assert.equal(DEPLOY_V54_FEE_USDC,150000n);assert.ok(C.every(c=>BigInt(c.value)===0n));
-  const vh=deployV54Commitment(plan,O);assert.equal(vh,'92d0277a1e36c0c4e268424e5e48cb62f317a6561cf709da5bbc4d45e218c302');assert.equal(deployV54Fragment(plan,O),'vh='+vh);
+  const vh=deployV54Commitment(plan,O);assert.equal(vh,'6ab15bc4af8fb8fb125fc383dbc50d98a32886c9d81afb8e8d254fcdada5aeca'/* t1346: fee leg -> company Safe (was d4205b52… with 0xf14E…) */);assert.equal(deployV54Fragment(plan,O),'vh='+vh);
   const req=(calls,from=O)=>({method:'wallet_sendCalls',params:[{version:'2.0.0',chainId:'0x2105',from:from.toLowerCase(),atomicRequired:true,calls,capabilities:{}}]});
   const g=guard('#vh='+vh);assert.ok(await g(req(C)));await assert.rejects(g(req([C[0],{...C[1],data:feeData(1000000n)}])),/not exactly/);
   await assert.rejects(g(req([C[0]])),/not exactly/);await assert.rejects(g(req(C,OTHER)),/not exactly/);});

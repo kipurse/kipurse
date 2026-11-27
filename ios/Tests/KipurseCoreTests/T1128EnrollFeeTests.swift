@@ -18,7 +18,7 @@ final class T1128EnrollFeeTests: XCTestCase {
   func testAppCommitmentMatchesLivePageCanon() {
     let r = fx["walletPays"]!
     let u = BatchVerify.committedURL(URL(string: "https://sign.kipurse.com/v11/phone/enroll?id=x")!, chainId: 8453, from: r["owner"] as! String, calls: r["calls"] as! [[String: Any]])
-    XCTAssertEqual(u?.fragment, "vh=3b7ebb325a92a00843ce51baa4ce1e97fee0d94d529dcd2a108a33899733d117")
+    XCTAssertEqual(u?.fragment, "vh=1175e675aef43b68d28ac887265434d59715412eddb854916e358f94cbc4446c")  // t1346: fee leg -> company Safe; phone-enroll.v2.js (kept in /v13) accepts this value (pagesim)
   }
   func testOwnerFrontedShapeIsRefused() {
     XCTAssertNotNil(EnrollFee.problem(fx["ownerFronted"]!, owner: owner))
